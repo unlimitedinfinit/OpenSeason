@@ -81,7 +81,18 @@
         Unlock Vault
       </button>
 
-      <p class="text-xs text-center text-muted-foreground mt-4">
+      <div class="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-md text-xs text-yellow-600 dark:text-yellow-500">
+        <p class="font-bold flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/></svg>
+          WARNING: NO RECOVERY
+        </p>
+        <p class="mt-1 opacity-90">
+          If you lose this password, your data is lost forever. 
+          Open Season uses zero-knowledge encryption. We cannot reset it for you.
+        </p>
+      </div>
+
+      <p class="text-xs text-center text-muted-foreground mt-2">
         Key is held in RAM only. Zeroized on exit.
       </p>
     </div>

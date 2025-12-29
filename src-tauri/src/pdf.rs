@@ -125,7 +125,15 @@ pub fn compile_report(
     // 1. Create Typst Template String
     let template = format!(
         r#"
-#set page(paper: "us-letter", margin: 1in)
+#set page(
+  paper: "us-letter", 
+  margin: 1in,
+  footer: align(center)[
+    #text(fill: red, size: 8pt, weight: "bold")[
+      THIS IS A USER-GENERATED DOCUMENT CREATED BY OPEN SEASON. IT IS NOT LEGAL ADVICE. CONSULT AN ATTORNEY BEFORE USE.
+    ]
+  ]
+)
 #set text(font: "Arial", size: 11pt)
 
 #align(center)[

@@ -8,14 +8,35 @@ use crate::usaspending::{self, AwardSummary};
 use crate::db::HuntDatabase;
 use crate::pdf;
 
+use tauri::{AppHandle, Manager}; // Added Manager for path access if needed, or just AppHandle methods in v2
+
+// Helper for standard storage path
+fn get_vault_root(app: &AppHandle) -> Result<PathBuf, String> {
+    // Tauri v2: app.path().app_local_data_dir() typically resolves to:
+    // Windows: C:\Users\User\AppData\Local\com.openseason.app
+    // Linux: /home/user/.local/share/com.openseason.app
+    // macOS: /Users/User/Library/Application Support/com.openseason.app
+    let root = app.path().app_local_data_dir()
+        .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
+    
+    let vaults = root.join("vaults");
+    fs::create_dir_all(&vaults).map_err(|e| e.to_string())?;
+    Ok(vaults)
+}
+
 #[tauri::command]
-pub fn save_disclosure_cmd(hunt_id: String, target: String, count: usize, value: f64) -> Result<String, String> {
+pub fn save_disclosure_cmd(
+    app: AppHandle,
+    hunt_id: String, 
+    target: String, 
+    count: usize, 
+    value: f64
+) -> Result<String, String> {
     let pdf_bytes = pdf::compile_report(&target, count, value)?;
     
-    let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE"))
-        .map_err(|_| "No Home".to_string())?;
-    
-    let hunt_dir = PathBuf::from(&home).join(".open-season").join("hunts").join(&hunt_id);
+    let vaults_root = get_vault_root(&app)?;
+    let hunt_dir = vaults_root.join(&hunt_id);
+
     if !hunt_dir.exists() {
         return Err("Hunt not found".to_string());
     }
@@ -29,10 +50,6 @@ pub fn save_disclosure_cmd(hunt_id: String, target: String, count: usize, value:
 
 #[tauri::command]
 pub async fn verify_target_cmd(name: String) -> Result<Vec<AwardSummary>, String> {
-    // Perform blocking IO on a blocking thread to avoid freezing async runtime if using async, 
-    // but here we used blocking reqwest. Ideally use async reqwest or spawn_blocking.
-    // Since we are in an async command, we should use spawn_blocking.
-    
     tauri::async_runtime::spawn_blocking(move || {
         usaspending::check_target(&name)
     }).await.map_err(|e| e.to_string())?
@@ -40,11 +57,9 @@ pub async fn verify_target_cmd(name: String) -> Result<Vec<AwardSummary>, String
 
 
 #[tauri::command]
-pub fn export_hunt_cmd(hunt_id: String, target_path: String) -> Result<(), String> {
-    let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE"))
-        .map_err(|_| "No Home".to_string())?;
-    
-    let hunt_path = PathBuf::from(&home).join(".open-season").join("hunts").join(&hunt_id);
+pub fn export_hunt_cmd(app: AppHandle, hunt_id: String, target_path: String) -> Result<(), String> {
+    let vaults_root = get_vault_root(&app)?;
+    let hunt_path = vaults_root.join(&hunt_id);
     let output_path = PathBuf::from(&target_path);
 
     if !hunt_path.exists() {
@@ -55,12 +70,9 @@ pub fn export_hunt_cmd(hunt_id: String, target_path: String) -> Result<(), Strin
 }
 
 #[tauri::command]
-pub fn import_hunt_cmd(osb_path: String) -> Result<String, String> {
-    let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE"))
-        .map_err(|_| "No Home".to_string())?;
-    
-    let vaults_root = PathBuf::from(&home).join(".open-season").join("hunts");
-    fs::create_dir_all(&vaults_root).map_err(|e| e.to_string())?; // Ensure root exists
+pub fn import_hunt_cmd(app: AppHandle, osb_path: String) -> Result<String, String> {
+    let vaults_root = get_vault_root(&app)?;
+    // Ensure root exists (handled by get_vault_root)
 
     let input_path = PathBuf::from(&osb_path);
     
@@ -80,20 +92,20 @@ pub struct HuntMetadata {
 
 // --- Auth / Key Management ---
 
+// --- Auth / Key Management ---
+
 #[tauri::command]
-pub fn get_salt() -> Result<String, String> {
-    let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE"))
-        .map_err(|_| "Could not find Home directory".to_string())?;
+pub fn get_salt(app: AppHandle) -> Result<String, String> {
+    let root = app.path().app_local_data_dir()
+        .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
     
-    let path = PathBuf::from(home).join(".open-season").join("chk.dat"); 
+    fs::create_dir_all(&root).map_err(|e| e.to_string())?;
+    let path = root.join("master_salt.bin"); 
 
     if path.exists() {
         fs::read_to_string(&path).map_err(|e| e.to_string())
     } else {
         let salt = crypto::generate_salt();
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        }
         fs::write(&path, &salt).map_err(|e| e.to_string())?;
         Ok(salt)
     }
@@ -122,28 +134,43 @@ pub fn is_locked(state: State<'_, AppState>) -> Result<bool, String> {
 }
 
 #[tauri::command]
-pub fn list_hunts() -> Result<Vec<HuntMetadata>, String> {
-    let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE"))
-        .map_err(|_| "No Home".to_string())?;
-    let hunts_dir = PathBuf::from(home).join(".open-season").join("hunts");
+pub fn list_hunts(app: AppHandle) -> Result<Vec<HuntMetadata>, String> {
+    let vaults_root = get_vault_root(&app)?;
     
-    if !hunts_dir.exists() {
+    if !vaults_root.exists() {
         return Ok(Vec::new());
     }
 
     let mut hunts = Vec::new();
-    let entries = fs::read_dir(hunts_dir).map_err(|e| e.to_string())?;
+    let entries = fs::read_dir(vaults_root).map_err(|e| e.to_string())?;
 
     for entry in entries {
         let entry = entry.map_err(|e| e.to_string())?;
         if entry.path().is_dir() {
-            let name = entry.file_name().into_string().unwrap_or_default();
-            // In a real app, read metadata.json for pretty name.
-            // For MVP, directory name is the ID/Name.
+            let id = entry.file_name().into_string().unwrap_or_default();
+            let mut name = id.clone();
+            
+            // Try to read name from metadata.db if possible, or just use ID for now.
+            // For MVP + speed, we'll try to look for a specific simple metadata file if DB is too heavy, 
+            // but prompt asked for metadata.db. 
+            // Let's rely on just ID for now or basic DB check if we had a lightweight way.
+            // Actually, let's try to query the DB for the name.
+            let db_path = entry.path().join("metadata.db");
+            if db_path.exists() {
+                 if let Ok(conn) = rusqlite::Connection::open(&db_path) {
+                     let mut stmt = conn.prepare("SELECT name FROM info LIMIT 1").ok();
+                     if let Some(mut s) = stmt {
+                         if let Ok(n) = s.query_row([], |row| row.get(0)) {
+                             name = n;
+                         }
+                     }
+                 }
+            }
+
             hunts.push(HuntMetadata {
-                id: name.clone(),
+                id,
                 name,
-                created: "Unknown".to_string(), // Placeholder
+                created: "Unknown".to_string(), // Placeholder or read from DB
             });
         }
     }
@@ -151,29 +178,53 @@ pub fn list_hunts() -> Result<Vec<HuntMetadata>, String> {
 }
 
 #[tauri::command]
-pub fn create_hunt(name: String, state: State<'_, AppState>) -> Result<String, String> {
-    // Ensure unlocked
+pub fn create_new_hunt(app: AppHandle, name: String, state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    use uuid::Uuid;
+     // Ensure unlocked
     if state.get_key().is_none() {
         return Err("Vault Locked".to_string());
     }
 
-    let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE"))
-        .map_err(|_| "No Home".to_string())?;
+    let uuid = Uuid::new_v4();
+    let vaults_root = get_vault_root(&app)?;
+    let hunt_dir = vaults_root.join(uuid.to_string());
+
+    fs::create_dir_all(&hunt_dir.join("evidence"))
+        .map_err(|e| format!("Failed to create dir: {}", e))?;
+
+    // Create and init metadata.db
+    let db_path = hunt_dir.join("metadata.db");
+    let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
     
-    // Sanitize name for path safety
-    let safe_name = name.replace(|c: char| !c.is_alphanumeric() && c != '-', "_");
-    let hunt_dir = PathBuf::from(home).join(".open-season").join("hunts").join(&safe_name);
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS info (name TEXT, created_at TEXT, status TEXT)", 
+        []
+    ).map_err(|e| e.to_string())?;
+    
+    let created_at = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "INSERT INTO info (name, created_at, status) VALUES (?1, ?2, 'Draft')",
+        [&name, &created_at]
+    ).map_err(|e| e.to_string())?;
 
-    if hunt_dir.exists() {
-        return Err("Hunt already exists".to_string());
-    }
-
-    fs::create_dir_all(&hunt_dir).map_err(|e| e.to_string())?;
-
-    // Initialize DB
-    let db_path = hunt_dir.join("hunt.db");
-    let _db = HuntDatabase::open(&db_path).map_err(|e| e.to_string())?;
-
-    Ok(safe_name)
+    Ok(serde_json::json!({
+        "id": uuid.to_string(),
+        "name": name,
+        "created_at": created_at
+    }))
 }
+
+#[tauri::command]
+pub fn update_hunt(app: AppHandle, hunt_id: String, name: String) -> Result<(), String> {
+    let vaults_root = get_vault_root(&app)?;
+    let hunt_dir = vaults_root.join(&hunt_id);
+    let db_path = hunt_dir.join("metadata.db");
+    
+    let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
+    conn.execute("UPDATE info SET name = ?1", [&name]).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// Deprecated or kept for compatibility if needed, but create_new_hunt supersedes it.
+// We'll remove the old create_hunt to avoid confusion.
 

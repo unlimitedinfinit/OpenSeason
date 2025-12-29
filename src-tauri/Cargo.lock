@@ -3452,6 +3452,7 @@ dependencies = [
  "tauri-plugin-opener",
  "typst",
  "typst-pdf",
+ "uuid",
  "walkdir",
  "zeroize",
  "zip",
