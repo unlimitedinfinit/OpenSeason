@@ -1,0 +1,43 @@
+{
+    "identifier": "main-capability",
+    "description": "Main capability for Open Season",
+    "local": true,
+    "windows": [
+        "main"
+    ],
+    "permissions": [
+        "core:default",
+        {
+            "identifier": "fs:allow-read-text-file",
+            "allow": [
+                {
+                    "path": "$HOME/.open-season/**"
+                }
+            ]
+        },
+        {
+            "identifier": "fs:allow-write-file",
+            "allow": [
+                {
+                    "path": "$HOME/.open-season/**"
+                }
+            ]
+        },
+        {
+            "identifier": "fs:allow-create",
+            "allow": [
+                {
+                    "path": "$HOME/.open-season/**"
+                }
+            ]
+        },
+        {
+            "identifier": "fs:allow-exists",
+            "allow": [
+                {
+                    "path": "$HOME/.open-season/**"
+                }
+            ]
+        }
+    ]
+}
