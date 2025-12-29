@@ -26,35 +26,46 @@ pub struct MinimalWorld {
 
 impl MinimalWorld {
     pub fn new(source_text: String) -> Self {
-        // Load fonts. For MVP, we need at least one font.
-        // We will try to find system fonts or fallback to a hardcoded logic?
-        // Actually, let's look for standard fonts in the OS assets or just empty for now 
-        // and hope Typst has a fallback (it usually doesn't, it panics or fails without fonts).
-        // CRITICAL: We need fonts.
-        // Solution: use `typst-assets` crate if available? No.
-        // We will scan a system directory `C:/Windows/Fonts/arial.ttf` on Windows.
-        
+        // Cross-platform font loading
         let mut fonts = Vec::new();
-        let font_paths = [
+        
+        // Potential system font locations
+        let font_search_paths = [
+            // Windows
             "C:\\Windows\\Fonts\\arial.ttf",
             "C:\\Windows\\Fonts\\calibri.ttf",
-            "C:\\Windows\\Fonts\\seguiemj.ttf", // Emoji
+            "C:\\Windows\\Fonts\\seguiemj.ttf",
+            // macOS
+            "/Library/Fonts/Arial.ttf",
+            "/System/Library/Fonts/Helvetica.ttc",
+            "/System/Library/Fonts/Supplemental/Arial.ttf",
+            // Linux (Debian/Ubuntu/Fedora common paths)
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/gnu-free/FreeSans.ttf"
         ];
 
-        for path in font_paths {
+        let mut found_any = false;
+
+        for path in font_search_paths {
              if let Ok(data) = std::fs::read(path) {
                  let buffer = Bytes::from(data);
                  for index in 0..Font::count(&buffer) {
                      if let Some(font) = Font::new(buffer.clone(), index) {
                          fonts.push(font);
+                         found_any = true;
                      }
                  }
              }
         }
-        
-        // If no fonts found (e.g. non-Windows or restricted), this will result in poor output or error.
-        // But prompt says Windows OS.
 
+        // If we really can't find any fonts, Typst will likely panic or render squares.
+        // In a real production build, we would embed a font via `include_bytes!`.
+        if !found_any {
+            eprintln!("WARNING: No system fonts found. PDF generation may fail.");
+        }
+        
+        // ... rest of implementation matches previous logic
         let book = FontBook::from_fonts(&fonts);
         let library = Library::builder().build();
 
