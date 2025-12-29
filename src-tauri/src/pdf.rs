@@ -1,24 +1,18 @@
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
-use typst::diag::{FileError, FileResult};
+use std::path::PathBuf;
+use typst::diag::{FileError, FileResult, SourceResult};
 use typst::foundations::{Bytes, Datetime, Smart};
 use typst::syntax::{FileId, Source, VirtualPath};
 use typst::text::{Font, FontBook};
 use typst::Library;
 use typst::World;
-use typst_pdf;
+use typst::utils::LazyHash; // Typst 0.12 wrapper
+use typst_pdf::{PdfOptions, PdfStandards};
+use chrono::{Datelike, Timelike};
 
-// A minimal world that holds a single source file in memory.
-// For the MVP, we won't support external imports or images in the Typst code yet,
-// or we will map them via buffer if needed.
-// Note: This implementation assumes we are using standard fonts embedded or available.
-// Actually, Typst needs fonts. We should embed a default font or load from system.
-// For robustness, we will try to load system fonts or use a basic embedded byte array if possible,
-// but for this environment, we'll try to load standard fonts.
-
+// MinimalWorld Implementation
 pub struct MinimalWorld {
-    library: Prehashed<Library>,
-    book: Prehashed<FontBook>,
+    library: LazyHash<Library>,
+    book: LazyHash<FontBook>,
     fonts: Vec<Font>,
     source: Source,
     now: Datetime,
@@ -29,7 +23,6 @@ impl MinimalWorld {
         // Cross-platform font loading
         let mut fonts = Vec::new();
         
-        // Potential system font locations
         let font_search_paths = [
             // Windows
             "C:\\Windows\\Fonts\\arial.ttf",
@@ -39,7 +32,7 @@ impl MinimalWorld {
             "/Library/Fonts/Arial.ttf",
             "/System/Library/Fonts/Helvetica.ttc",
             "/System/Library/Fonts/Supplemental/Arial.ttf",
-            // Linux (Debian/Ubuntu/Fedora common paths)
+            // Linux
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
             "/usr/share/fonts/gnu-free/FreeSans.ttf"
@@ -50,44 +43,52 @@ impl MinimalWorld {
         for path in font_search_paths {
              if let Ok(data) = std::fs::read(path) {
                  let buffer = Bytes::from(data);
-                 for index in 0..Font::count(&buffer) {
-                     if let Some(font) = Font::new(buffer.clone(), index) {
-                         fonts.push(font);
-                         found_any = true;
+                 for index in 0..10 {
+                     match Font::new(buffer.clone(), index) {
+                         Some(font) => {
+                             fonts.push(font);
+                             found_any = true;
+                         },
+                         None => break,
                      }
                  }
              }
         }
 
-        // If we really can't find any fonts, Typst will likely panic or render squares.
-        // In a real production build, we would embed a font via `include_bytes!`.
         if !found_any {
             eprintln!("WARNING: No system fonts found. PDF generation may fail.");
         }
         
-        // ... rest of implementation matches previous logic
         let book = FontBook::from_fonts(&fonts);
         let library = Library::builder().build();
+        
+        // Construct Datetime from Chrono
+        let now_chrono = chrono::Local::now();
+        let now = Datetime::from_ymd_hms(
+            now_chrono.year(),
+            now_chrono.month() as u8,
+            now_chrono.day() as u8,
+            now_chrono.hour() as u8,
+            now_chrono.minute() as u8,
+            now_chrono.second() as u8,
+        ).unwrap_or(Datetime::from_ymd(1970, 1, 1).unwrap());
 
         Self {
-            library: Prehashed::new(library),
-            book: Prehashed::new(book),
+            library: LazyHash::new(library),
+            book: LazyHash::new(book),
             fonts,
             source: Source::detached(source_text),
-            now: Datetime::now(),
+            now,
         }
     }
 }
 
-// Prehashed wrapper (mocking typical Typst pattern for caching)
-use comemo::Prehashed;
-
 impl World for MinimalWorld {
-    fn library(&self) -> &Prehashed<Library> {
+    fn library(&self) -> &LazyHash<Library> {
         &self.library
     }
 
-    fn book(&self) -> &Prehashed<FontBook> {
+    fn book(&self) -> &LazyHash<FontBook> {
         &self.book
     }
 
@@ -151,21 +152,13 @@ Relator submits this disclosure statement pursuant to 31 U.S.C. 3730(b)(2). The 
 = III. Evidence Log
 The Relator has secured {count} distinct pieces of evidence, including encrypted documents and data snapshots.
 
-#table(
-  columns: (auto, 1fr),
-  inset: 10pt,
-  align: horizon,
-  [*ID*], [*Description*],
-  [001], [Primary Contract Vehicle Audit],
-  [002], [Communication Log: Billing Irregularities],
-  [...], [Additional Encrypted Assets in Bundle]
-)
+#table(columns: (auto, 1fr), inset: 10pt, align: horizon, [*ID*], [*Description*], [001], [Primary Contract Vehicle Audit], [002], [Communication Log: Billing Irregularities], [...], [Additional Encrypted Assets in Bundle])
 
 #v(2fr)
 _Generated by Open Season Toolkit_
 "#,
         target = target_name,
-        date = Datetime::now().display(),
+        date = chrono::Local::now().format("%Y-%m-%d"),
         count = evidence_count,
         value = total_value
     );
@@ -173,11 +166,25 @@ _Generated by Open Season Toolkit_
     // 2. Initialize World
     let world = MinimalWorld::new(template);
 
-    // 3. Compile
-    match typst::compile(&world) {
+    // 3. Compile (No tracer in 0.12)
+    // The result is Warned<SourceResult<Document>>. We need .output which is SourceResult<Document>.
+    let warned = typst::compile(&world);
+    
+    match warned.output {
         Ok(document) => {
-            let options = typst_pdf::PdfOptions::default();
-            typst_pdf::pdf(&document, &options).map_err(|e| e.to_string())
+            let options = PdfOptions {
+                ident: Smart::Auto,
+                timestamp: Some(world.now),
+                page_ranges: None,
+                standards: PdfStandards::default(),
+                // 'tagged' field removed in 0.12? User says so.
+            };
+            
+            // Typst PDF 0.12 signature: pdf(&Document, &PdfOptions) -> SourceResult<Vec<u8>>
+            match typst_pdf::pdf(&document, &options) {
+                Ok(bytes) => Ok(bytes),
+                Err(errors) => Err(format!("PDF Generation Error: {:?}", errors))
+            }
         },
         Err(errors) => {
             let msg = errors.iter()

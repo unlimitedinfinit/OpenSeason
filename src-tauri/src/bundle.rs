@@ -1,14 +1,14 @@
 use std::fs::{self, File};
 use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use zip::{ZipArchive, ZipWriter};
-use zip::write::FileOptions;
+use zip::write::SimpleFileOptions;
 use walkdir::WalkDir;
 
 pub fn export_hunt(hunt_path: &Path, output_path: &Path) -> Result<(), String> {
     let file = File::create(output_path).map_err(|e| e.to_string())?;
     let mut zip = ZipWriter::new(file);
-    let options = FileOptions::default()
+    let options = SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated)
         .unix_permissions(0o755);
 

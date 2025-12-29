@@ -25,8 +25,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
 reqwest = { version = "0.12", features = ["json", "blocking"] }
-typst = "0.11"
-typst-pdf = "0.11"
+typst = "0.12"
+typst-pdf = "0.12"
 zip = "2.0"
 argon2 = "0.5"
 chacha20poly1305 = "0.10"
@@ -34,3 +34,5 @@ zeroize = "1.8"
 rand = "0.8"
 base64 = "0.22"
 walkdir = "2"
+comemo = "0.4"
+chrono = "0.4"

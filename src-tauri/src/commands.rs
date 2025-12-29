@@ -1,4 +1,11 @@
-// ... existing imports ...
+use std::fs;
+use std::path::PathBuf;
+use serde::{Serialize, Deserialize};
+use tauri::State;
+use crate::crypto::{self, AppState};
+use crate::bundle;
+use crate::usaspending::{self, AwardSummary};
+use crate::db::HuntDatabase;
 use crate::pdf;
 
 #[tauri::command]
@@ -71,7 +78,48 @@ pub struct HuntMetadata {
     created: String,
 }
 
-// ... existing get_salt, unlock_vault ... (keeping these, just adding below)
+// --- Auth / Key Management ---
+
+#[tauri::command]
+pub fn get_salt() -> Result<String, String> {
+    let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE"))
+        .map_err(|_| "Could not find Home directory".to_string())?;
+    
+    let path = PathBuf::from(home).join(".open-season").join("chk.dat"); 
+
+    if path.exists() {
+        fs::read_to_string(&path).map_err(|e| e.to_string())
+    } else {
+        let salt = crypto::generate_salt();
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        fs::write(&path, &salt).map_err(|e| e.to_string())?;
+        Ok(salt)
+    }
+}
+
+#[tauri::command]
+pub fn unlock_vault(
+    password: String, 
+    salt: String,
+    state: State<'_, AppState>
+) -> Result<bool, String> {
+    let session_key = crypto::derive_key(&password, &salt)?;
+    state.set_key(session_key);
+    Ok(true)
+}
+
+#[tauri::command]
+pub fn lock_vault(state: State<'_, AppState>) -> Result<(), String> {
+    state.clear_key();
+    Ok(())
+}
+
+#[tauri::command]
+pub fn is_locked(state: State<'_, AppState>) -> Result<bool, String> {
+    Ok(state.get_key().is_none())
+}
 
 #[tauri::command]
 pub fn list_hunts() -> Result<Vec<HuntMetadata>, String> {
