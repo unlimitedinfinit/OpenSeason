@@ -1,5 +1,36 @@
 // ... existing imports ...
-use crate::bundle; // Need to add to lib.rs mod
+use crate::pdf;
+
+#[tauri::command]
+pub fn save_disclosure_cmd(hunt_id: String, target: String, count: usize, value: f64) -> Result<String, String> {
+    let pdf_bytes = pdf::compile_report(&target, count, value)?;
+    
+    let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE"))
+        .map_err(|_| "No Home".to_string())?;
+    
+    let hunt_dir = PathBuf::from(&home).join(".open-season").join("hunts").join(&hunt_id);
+    if !hunt_dir.exists() {
+        return Err("Hunt not found".to_string());
+    }
+
+    let output_path = hunt_dir.join("disclosure_statement.pdf");
+    fs::write(&output_path, pdf_bytes).map_err(|e| e.to_string())?;
+    
+    Ok(output_path.to_string_lossy().into_owned())
+}
+
+
+#[tauri::command]
+pub async fn verify_target_cmd(name: String) -> Result<Vec<AwardSummary>, String> {
+    // Perform blocking IO on a blocking thread to avoid freezing async runtime if using async, 
+    // but here we used blocking reqwest. Ideally use async reqwest or spawn_blocking.
+    // Since we are in an async command, we should use spawn_blocking.
+    
+    tauri::async_runtime::spawn_blocking(move || {
+        usaspending::check_target(&name)
+    }).await.map_err(|e| e.to_string())?
+}
+
 
 #[tauri::command]
 pub fn export_hunt_cmd(hunt_id: String, target_path: String) -> Result<(), String> {

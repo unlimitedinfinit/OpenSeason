@@ -1,6 +1,7 @@
 <script lang="ts">
   import LegalAirlock from "$lib/components/LegalAirlock.svelte";
   import VaultLauncher from "$lib/components/VaultLauncher.svelte";
+  import HuntWizard from "$lib/components/HuntWizard.svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
 
@@ -10,8 +11,7 @@
   
   // Dashboard Data
   let hunts = $state<{id: string, name: string, created: string}[]>([]);
-  let newHuntName = $state("");
-  let createError = $state("");
+  let isWizardOpen = $state(false);
 
   async function loadHunts() {
     try {
@@ -27,6 +27,15 @@
 
   function handleVaultUnlocked() {
     currentState = "DASHBOARD";
+    loadHunts();
+  }
+
+  function toggleWizard() {
+    isWizardOpen = !isWizardOpen;
+  }
+  
+  function handleWizardComplete() {
+    isWizardOpen = false;
     loadHunts();
   }
 
@@ -51,6 +60,22 @@
       alert("Hunt Exported Successfully!");
     } catch (e) {
       alert("Export Failed: " + e);
+    }
+  }
+
+  async function generateReport(hunt: any) {
+    if (!confirm(`Generate Disclosure Statement for ${hunt.name}?`)) return;
+    try {
+      // Mock data for MVP since we don't have full evidence DB yet
+      const path = await invoke("save_disclosure_cmd", { 
+        huntId: hunt.id, 
+        target: hunt.name, 
+        count: 12, 
+        value: 1540000.0 
+      });
+      alert("Report Saved to Vault:\n" + path);
+    } catch (e) {
+      alert("Report Generation Failed: " + e);
     }
   }
 </script>
@@ -80,24 +105,18 @@
 
     <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <!-- New Hunt Card -->
-        <div class="p-6 bg-card border rounded-lg shadow-sm flex flex-col justify-center space-y-4 border-dashed border-primary/50">
-            <h3 class="font-semibold text-center">New Operation</h3>
-            <input 
-                bind:value={newHuntName}
-                placeholder="Target Name (e.g. Project X)" 
-                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                onkeydown={(e) => e.key === 'Enter' && createHunt()}
-            />
-            <button 
-                onclick={createHunt}
-                class="bg-primary text-primary-foreground px-4 py-2 rounded-md w-full"
-            >
-                Initialize Hunt
-            </button>
-            {#if createError}
-                <p class="text-xs text-destructive text-center">{createError}</p>
-            {/if}
-        </div>
+        <button 
+          onclick={toggleWizard}
+          class="p-6 bg-card border rounded-lg shadow-sm flex flex-col items-center justify-center space-y-4 border-dashed border-primary/50 hover:bg-accent/10 transition-colors"
+        >
+            <div class="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+              <span class="text-2xl text-primary font-light">+</span>
+            </div>
+            <div class="text-center">
+              <h3 class="font-semibold">New Operation</h3>
+              <p class="text-xs text-muted-foreground mt-1">Start verification process</p>
+            </div>
+        </button>
 
         <!-- Existing Hunts -->
         {#each hunts as hunt}
@@ -113,7 +132,15 @@
                     >
                         Export
                     </button>
-                    <button class="text-sm bg-secondary text-secondary-foreground px-3 py-1 rounded">Open Case</button>
+                    <div class="flex gap-2">
+                         <button 
+                            class="text-sm border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 px-3 py-1 rounded"
+                            onclick={(e) => { e.stopPropagation(); generateReport(hunt); }}
+                         >
+                            Report
+                         </button>
+                         <button class="text-sm bg-secondary text-secondary-foreground px-3 py-1 rounded">Open Case</button>
+                    </div>
                 </div>
             </div>
         {/each}

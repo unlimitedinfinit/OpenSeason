@@ -1,0 +1,179 @@
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use typst::diag::{FileError, FileResult};
+use typst::foundations::{Bytes, Datetime, Smart};
+use typst::syntax::{FileId, Source, VirtualPath};
+use typst::text::{Font, FontBook};
+use typst::Library;
+use typst::World;
+use typst_pdf;
+
+// A minimal world that holds a single source file in memory.
+// For the MVP, we won't support external imports or images in the Typst code yet,
+// or we will map them via buffer if needed.
+// Note: This implementation assumes we are using standard fonts embedded or available.
+// Actually, Typst needs fonts. We should embed a default font or load from system.
+// For robustness, we will try to load system fonts or use a basic embedded byte array if possible,
+// but for this environment, we'll try to load standard fonts.
+
+pub struct MinimalWorld {
+    library: Prehashed<Library>,
+    book: Prehashed<FontBook>,
+    fonts: Vec<Font>,
+    source: Source,
+    now: Datetime,
+}
+
+impl MinimalWorld {
+    pub fn new(source_text: String) -> Self {
+        // Load fonts. For MVP, we need at least one font.
+        // We will try to find system fonts or fallback to a hardcoded logic?
+        // Actually, let's look for standard fonts in the OS assets or just empty for now 
+        // and hope Typst has a fallback (it usually doesn't, it panics or fails without fonts).
+        // CRITICAL: We need fonts.
+        // Solution: use `typst-assets` crate if available? No.
+        // We will scan a system directory `C:/Windows/Fonts/arial.ttf` on Windows.
+        
+        let mut fonts = Vec::new();
+        let font_paths = [
+            "C:\\Windows\\Fonts\\arial.ttf",
+            "C:\\Windows\\Fonts\\calibri.ttf",
+            "C:\\Windows\\Fonts\\seguiemj.ttf", // Emoji
+        ];
+
+        for path in font_paths {
+             if let Ok(data) = std::fs::read(path) {
+                 let buffer = Bytes::from(data);
+                 for index in 0..Font::count(&buffer) {
+                     if let Some(font) = Font::new(buffer.clone(), index) {
+                         fonts.push(font);
+                     }
+                 }
+             }
+        }
+        
+        // If no fonts found (e.g. non-Windows or restricted), this will result in poor output or error.
+        // But prompt says Windows OS.
+
+        let book = FontBook::from_fonts(&fonts);
+        let library = Library::builder().build();
+
+        Self {
+            library: Prehashed::new(library),
+            book: Prehashed::new(book),
+            fonts,
+            source: Source::detached(source_text),
+            now: Datetime::now(),
+        }
+    }
+}
+
+// Prehashed wrapper (mocking typical Typst pattern for caching)
+use comemo::Prehashed;
+
+impl World for MinimalWorld {
+    fn library(&self) -> &Prehashed<Library> {
+        &self.library
+    }
+
+    fn book(&self) -> &Prehashed<FontBook> {
+        &self.book
+    }
+
+    fn main(&self) -> FileId {
+        self.source.id()
+    }
+
+    fn source(&self, id: FileId) -> FileResult<Source> {
+        if id == self.source.id() {
+            Ok(self.source.clone())
+        } else {
+            Err(FileError::NotFound(PathBuf::from(id.vpath().as_rooted_path())))
+        }
+    }
+
+    fn file(&self, _id: FileId) -> FileResult<Bytes> {
+        Err(FileError::NotFound(PathBuf::new()))
+    }
+
+    fn font(&self, index: usize) -> Option<Font> {
+        self.fonts.get(index).cloned()
+    }
+
+    fn today(&self, _offset: Option<i64>) -> Option<Datetime> {
+        Some(self.now)
+    }
+}
+
+pub fn compile_report(
+    target_name: &str, 
+    evidence_count: usize,
+    total_value: f64
+) -> Result<Vec<u8>, String> {
+    // 1. Create Typst Template String
+    let template = format!(
+        r#"
+#set page(paper: "us-letter", margin: 1in)
+#set text(font: "Arial", size: 11pt)
+
+#align(center)[
+  #text(size: 16pt, weight: "bold")[DISCLOSURE STATEMENT]
+  #v(0.5em)
+  #text(size: 12pt)[CONFIDENTIAL -- ATTORNEY WORK PRODUCT]
+]
+
+#v(2em)
+
+*TO:* United States Department of Justice\
+*FROM:* Relator (Anonymous)\
+*DATE:* {date}
+
+*RE:* Violations of the False Claims Act by {target}
+
+= I. Summary
+Relator submits this disclosure statement pursuant to 31 U.S.C. 3730(b)(2). The evidence enclosed herein demonstrates that {target} has knowingly presented false or fraudulent claims for payment to the United States Government.
+
+= II. Target Information
+- **Entity Name:** {target}
+- **Identified Contracts Value:** \${value}
+
+= III. Evidence Log
+The Relator has secured {count} distinct pieces of evidence, including encrypted documents and data snapshots.
+
+#table(
+  columns: (auto, 1fr),
+  inset: 10pt,
+  align: horizon,
+  [*ID*], [*Description*],
+  [001], [Primary Contract Vehicle Audit],
+  [002], [Communication Log: Billing Irregularities],
+  [...], [Additional Encrypted Assets in Bundle]
+)
+
+#v(2fr)
+_Generated by Open Season Toolkit_
+"#,
+        target = target_name,
+        date = Datetime::now().display(),
+        count = evidence_count,
+        value = total_value
+    );
+
+    // 2. Initialize World
+    let world = MinimalWorld::new(template);
+
+    // 3. Compile
+    match typst::compile(&world) {
+        Ok(document) => {
+            let options = typst_pdf::PdfOptions::default();
+            typst_pdf::pdf(&document, &options).map_err(|e| e.to_string())
+        },
+        Err(errors) => {
+            let msg = errors.iter()
+                .map(|e| e.message.to_string())
+                .collect::<Vec<_>>()
+                .join("\n");
+            Err(format!("Compilation Error: {}", msg))
+        }
+    }
+}

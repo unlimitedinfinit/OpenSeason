@@ -2,6 +2,8 @@ mod crypto;
 mod commands;
 mod db;
 mod bundle;
+mod usaspending;
+mod pdf;
 
 use crypto::AppState;
 
@@ -19,7 +21,9 @@ pub fn run() {
             commands::list_hunts,
             commands::create_hunt,
             commands::export_hunt_cmd,
-            commands::import_hunt_cmd
+            commands::import_hunt_cmd,
+            commands::verify_target_cmd,
+            commands::save_disclosure_cmd
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
