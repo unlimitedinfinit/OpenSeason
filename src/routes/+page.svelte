@@ -18,6 +18,22 @@
   let isHelpOpen = $state(false);
   let isCreating = $state(false);
 
+  async function checkLockStatus() {
+     try {
+        const locked = await invoke("is_locked");
+        if (!locked) {
+           currentState = "DASHBOARD";
+           loadHunts();
+        }
+     } catch(e) {
+        console.error("Lock check failed", e);
+     }
+  }
+
+  onMount(() => {
+     checkLockStatus();
+  });
+
   async function loadHunts() {
     try {
       hunts = await invoke("list_hunts");
@@ -68,6 +84,16 @@
     }
   }
 
+  async function deleteHunt(id: string) {
+    if (!confirm("Are you sure you want to PERMANENTLY delete this case? This action cannot be undone.")) return;
+    try {
+      await invoke("delete_hunt", { huntId: id });
+      await loadHunts();
+    } catch (e) {
+      alert("Delete Failed: " + e);
+    }
+  }
+
   async function generateReport(hunt: any) {
     if (!confirm(`Generate Disclosure Statement for ${hunt.name}?`)) return;
     try {
@@ -87,22 +113,17 @@
   async function startNewOperation() {
     if (isCreating) return;
     isCreating = true;
-    // alert("DEBUG: Clicked New Operation"); // Debug trigger
 
     try {
-      // alert("DEBUG: Invoking create_new_hunt...");
       const newHunt: any = await invoke('create_new_hunt', {
-        name: `Operation ${new Date().toLocaleDateString()}`
+        name: `New Operation ${new Date().toLocaleDateString()}`
       });
-
-      // alert("DEBUG: Created: " + JSON.stringify(newHunt));
       
       // Update local list
       hunts = [...hunts, newHunt];
       
-      // Navigate to hunt page
-      // alert("DEBUG: Navigating to " + `/hunt/${newHunt.id}`);
-      goto(`/hunt/${newHunt.id}`);
+      // Navigate to hunt page, triggering the wizard overlay in normal mode
+      goto(`/hunt/${newHunt.id}?wizard=true`);
     } catch (err) {
       console.error(err);
       alert(`Failed to create operation: ${err}`);
@@ -112,6 +133,24 @@
     } finally {
       isCreating = false;
     }
+  }
+
+  async function startDemo() {
+     if (isCreating) return;
+     isCreating = true;
+     try {
+        const demoName = "Feeding Our Future (Demo)";
+        // Create hunt
+        const newHunt: any = await invoke('create_new_hunt', { name: demoName });
+        // Update list
+        hunts = [...hunts, newHunt];
+        // Navigate with demo flag strictly
+        goto(`/hunt/${newHunt.id}?demo=true`);
+     } catch (err) {
+        alert("Demo Start Failed: " + err);
+     } finally {
+        isCreating = false;
+     }
   }
 </script>
 
@@ -204,20 +243,43 @@
             {/if}
         </button>
 
+        <!-- Demo Button -->
+        <button 
+           onclick={startDemo}
+           class="p-6 bg-muted/30 border border-transparent hover:border-blue-200 hover:bg-blue-50/50 rounded-lg flex flex-col items-center justify-center space-y-3 transition-all group"
+           disabled={isCreating}
+        >
+           <div class="h-10 w-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+           </div>
+           <div class="text-center">
+              <h3 class="font-semibold text-foreground/80">See Example Walkthrough</h3>
+              <p class="text-[10px] text-muted-foreground mt-1 max-w-[150px] leading-tight">"Feeding Our Future" Fraud Case Demo</p>
+           </div>
+        </button>
+
         <!-- Existing Hunts -->
         {#each hunts as hunt}
             <div class="p-6 bg-card border rounded-lg shadow-sm hover:border-primary/50 transition-colors cursor-pointer group relative">
                 <div class="flex justify-between items-start mb-2">
                     <h3 class="font-bold text-lg group-hover:text-primary transition-colors">{hunt.name}</h3>
-                    <span class="text-xs text-muted-foreground font-mono">ID: {hunt.id}</span>
                 </div>
                 <div class="mt-4 flex justify-between items-center">
-                    <button 
-                        class="text-xs text-muted-foreground hover:text-foreground underline z-10"
-                        onclick={(e) => { e.stopPropagation(); exportHunt(hunt.id); }}
-                    >
-                        Export
-                    </button>
+                    <div class="flex gap-2">
+                       <button 
+                           class="text-xs text-muted-foreground hover:text-foreground underline z-10"
+                           onclick={(e) => { e.stopPropagation(); exportHunt(hunt.id); }}
+                       >
+                           Export
+                       </button>
+                       <button 
+                           class="text-xs text-red-400 hover:text-red-600 underline z-10"
+                           onclick={(e) => { e.stopPropagation(); deleteHunt(hunt.id); }}
+                       >
+                           Delete
+                       </button>
+                    </div>
+
                     <div class="flex gap-2">
                          <button 
                             class="text-sm border border-red-200 text-red-700 bg-red-50 hover:bg-red-100 px-3 py-1 rounded"

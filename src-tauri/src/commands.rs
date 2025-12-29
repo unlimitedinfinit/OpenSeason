@@ -34,15 +34,24 @@ pub fn save_disclosure_cmd(
 ) -> Result<String, String> {
     let pdf_bytes = pdf::compile_report(&target, count, value)?;
     
+    // 1. Save to Vault (Archive)
     let vaults_root = get_vault_root(&app)?;
     let hunt_dir = vaults_root.join(&hunt_id);
-
     if !hunt_dir.exists() {
         return Err("Hunt not found".to_string());
     }
+    let vault_path = hunt_dir.join("disclosure_statement.pdf");
+    fs::write(&vault_path, &pdf_bytes).map_err(|e| e.to_string())?;
 
-    let output_path = hunt_dir.join("disclosure_statement.pdf");
-    fs::write(&output_path, pdf_bytes).map_err(|e| e.to_string())?;
+    // 2. Save to User Downloads (User Request)
+    let download_dir = app.path().download_dir()
+        .map_err(|e| e.to_string())?;
+    
+    let sanitized_target = target.replace(" ", "_").replace("/", "-");
+    let filename = format!("Disclosure_{}.pdf", sanitized_target);
+    let output_path = download_dir.join(&filename);
+    
+    fs::write(&output_path, &pdf_bytes).map_err(|e| e.to_string())?;
     
     Ok(output_path.to_string_lossy().into_owned())
 }
@@ -57,16 +66,41 @@ pub async fn verify_target_cmd(name: String) -> Result<Vec<AwardSummary>, String
 
 
 #[tauri::command]
-pub fn export_hunt_cmd(app: AppHandle, hunt_id: String, target_path: String) -> Result<(), String> {
+pub fn export_hunt_cmd(app: AppHandle, hunt_id: String, target_path: String) -> Result<String, String> {
     let vaults_root = get_vault_root(&app)?;
     let hunt_path = vaults_root.join(&hunt_id);
-    let output_path = PathBuf::from(&target_path);
 
     if !hunt_path.exists() {
         return Err("Hunt not found".to_string());
     }
 
-    bundle::export_hunt(&hunt_path, &output_path)
+    let output_path = if target_path == "DOWNLOADS" {
+        let download_dir = app.path().download_dir()
+            .map_err(|e| e.to_string())?;
+            
+        // Get hunt name from database for filename
+        let db_path = hunt_path.join("metadata.db");
+        let mut name = hunt_id.clone();
+        
+        if let Ok(conn) = rusqlite::Connection::open(&db_path) {
+             let mut stmt = conn.prepare("SELECT name FROM info LIMIT 1").ok();
+             if let Some(mut s) = stmt {
+                 if let Ok(n) = s.query_row([], |row| row.get(0)) {
+                     name = n;
+                 }
+             }
+        }
+        
+        let sanitized_name = name.replace(" ", "_").replace("/", "-");
+        let filename = format!("{}.osb", sanitized_name);
+        download_dir.join(filename)
+    } else {
+        PathBuf::from(&target_path)
+    };
+
+    bundle::export_hunt(&hunt_path, &output_path).map_err(|e| e.to_string())?;
+    
+    Ok(output_path.to_string_lossy().into_owned())
 }
 
 #[tauri::command]
@@ -215,16 +249,31 @@ pub fn create_new_hunt(app: AppHandle, name: String, state: State<'_, AppState>)
 }
 
 #[tauri::command]
-pub fn update_hunt(app: AppHandle, hunt_id: String, name: String) -> Result<(), String> {
-    let vaults_root = get_vault_root(&app)?;
-    let hunt_dir = vaults_root.join(&hunt_id);
-    let db_path = hunt_dir.join("metadata.db");
+pub async fn update_hunt(app: AppHandle, hunt_id: String, name: String) -> Result<(), String> {
+    let vault_path = get_vault_root(&app)?;
+    let db_path = vault_path.join(&hunt_id).join("metadata.db");
+
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
     
-    let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
-    conn.execute("UPDATE info SET name = ?1", [&name]).map_err(|e| e.to_string())?;
+    conn.execute(
+        "UPDATE info SET name = ?1",
+        rusqlite::params![name],
+    ).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_hunt(app: AppHandle, hunt_id: String) -> Result<(), String> {
+    let vault_path = get_vault_root(&app)?;
+    let hunt_path = vault_path.join(&hunt_id);
+
+    if hunt_path.exists() {
+        std::fs::remove_dir_all(hunt_path).map_err(|e| e.to_string())?;
+    }
+    
     Ok(())
 }
 
 // Deprecated or kept for compatibility if needed, but create_new_hunt supersedes it.
 // We'll remove the old create_hunt to avoid confusion.
-

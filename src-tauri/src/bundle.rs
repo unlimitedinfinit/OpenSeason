@@ -19,7 +19,6 @@ pub fn export_hunt(hunt_path: &Path, output_path: &Path) -> Result<(), String> {
         let entry = entry.map_err(|e| e.to_string())?;
         let path = entry.path();
         let name = path.strip_prefix(hunt_path).map_err(|e| e.to_string())?;
-
         // Stick to string representation for zip compatibility
         let name_str = name.to_str().ok_or("Invalid UTF-8 in path")?;
 

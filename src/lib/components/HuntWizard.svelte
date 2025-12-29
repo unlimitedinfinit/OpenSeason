@@ -1,25 +1,46 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
+  import { onMount } from "svelte";
 
-  let { onComplete, onCancel, huntId = null, initialName = "" } = $props();
+  let { onComplete, onCancel, huntId = null, initialName = "", demoMode = false } = $props();
 
   let step = $state(1);
-  let targetName = $state(initialName);
+  let targetName = $state(demoMode ? "Feeding Our Future" : initialName);
   let isVerifying = $state(false);
   let verificationResults = $state<any[]>([]);
   let error = $state("");
+  let mounted = false;
   
+  // Sync logic for Edit Mode:
+  // If initialName exists + not demo + step 1 + target is empty, sync it.
+  $effect(() => {
+     if (initialName && !demoMode && step === 1 && !targetName) {
+         targetName = initialName;
+     }
+  });
+
+  // Auto-run verify REMOVED per user request to restore proper flow.
+  // The wizard should always start at Step 1 for new operations.
+  onMount(() => {
+    mounted = true;
+  });
+
   async function handleVerify() {
     if (!targetName) return;
     isVerifying = true;
     error = "";
     try {
+      if (demoMode && targetName === "Feeding Our Future") {
+          // Force wait for effect
+          await new Promise(r => setTimeout(r, 1000));
+      }
+      console.log("Verifying target:", targetName);
       verificationResults = await invoke("verify_target_cmd", { name: targetName });
+      console.log("Results:", verificationResults);
       step = 2;
     } catch (e) {
+      console.error("Link Error:", e);
       error = "Verification Failed: " + e;
-      // Allow proceeding anyway? "Zero-Trust" might imply we don't trust the API either, but this is a tool.
-      // Let's allow manual override if API fails.
       step = 2;
     } finally {
       isVerifying = false;
@@ -29,134 +50,139 @@
   async function handleCreate() {
     try {
       if (huntId) {
-          // If we have an ID, we are just updating the target name of the existing draft
           await invoke("update_hunt", { huntId, name: targetName });
-      } else {
-          // Fallback if used without ID (shouldn't happen in new flow)
-          console.error("HuntWizard used without ID in new flow");
       }
-      onComplete();
+      // "Proceed" or "Continue Manually" just needs to close the wizard
+      onComplete(); 
     } catch (e) {
       error = "Operation Failed: " + e;
     }
   }
 </script>
 
-<div class="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
-  <div class="w-full max-w-3xl bg-card border rounded-lg shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
-    <div class="p-6 border-b">
-      <h2 class="text-2xl font-semibold">New Hunt Configuration</h2>
-      <p class="text-muted-foreground text-sm">Step {step}: {step === 1 ? "Identify Target" : "Confirm Intelligence"}</p>
-    </div>
+<div class="p-6 max-w-2xl mx-auto bg-card rounded-xl shadow-lg border relative">
+  <!-- Close Button -->
+  <button onclick={onCancel} class="absolute top-4 right-4 text-muted-foreground hover:text-foreground">
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+  </button>
 
-    <div class="p-6 flex-1 overflow-y-auto space-y-6">
-      {#if step === 1}
-        <div class="space-y-4">
-          <label for="target" class="block text-sm font-medium">Target Entity Name</label>
-          <input 
-             id="target" 
-             bind:value={targetName}
-             class="flex h-12 w-full rounded-md border border-input bg-background px-3 py-2 text-lg"
-             placeholder="e.g. Acme Defense Corp"
-             onkeydown={(e) => e.key === 'Enter' && handleVerify()}
-          />
-          <p class="text-sm text-muted-foreground">
-            We will cross-reference this against public spending data for contracts >$100k.
-          </p>
-          {#if error}
-            <p class="text-destructive text-sm">{error}</p>
-          {/if}
-        </div>
+  <div class="mb-6">
+      <h2 class="text-2xl font-bold tracking-tight">
+          {huntId ? "Edit Operation Details" : "New Operation"}
+      </h2>
+      <p class="text-muted-foreground">
+          {step === 1 ? "Identify the target entity for this Qui Tam action." : "Confirm federal nexus intelligence."}
+      </p>
+  </div>
+  
+  {#if error}
+      <div class="bg-destructive/10 text-destructive p-3 rounded-md mb-4 text-sm font-medium">
+          {error}
+      </div>
+  {/if}
 
-      {:else if step === 2}
-        <div class="space-y-4">
-          <div class="flex items-center justify-between">
-            <h3 class="text-lg font-medium">
-               {#if verificationResults.length > 0}
-                  <span class="text-green-600 flex items-center gap-2">
-                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                     High-value matches found!
-                  </span>
-               {:else}
-                  <span class="text-yellow-600 flex items-center gap-2">
-                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                     No direct matches
-                  </span>
-               {/if}
-            </h3>
-            <span class="text-xs bg-muted px-2 py-1 rounded">USASpending.gov</span>
+  {#if step === 1}
+      <div class="space-y-4">
+          <div class="space-y-2">
+              <label for="targetName" class="text-sm font-medium">Target Entity Name</label>
+              <input 
+                  id="targetName"
+                  type="text" 
+                  bind:value={targetName}
+                  placeholder="e.g. Acme Healthcare Services, LLC"
+                  class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  onkeydown={(e) => e.key === 'Enter' && handleVerify()}
+              />
+              <p class="text-xs text-muted-foreground">
+                  Use the exact legal name if known.
+              </p>
           </div>
           
-          {#if verificationResults.length > 0}
-             <div class="border rounded-md divide-y max-h-60 overflow-y-auto">
-                 {#each verificationResults as res}
-                   <div class="p-3 text-sm hover:bg-muted/50">
-                     <div class="flex justify-between">
-                       <span class="font-bold">{res.recipient_name}</span>
-                       <span class="font-mono text-green-600">${res.total_obligation.toLocaleString()}</span>
-                     </div>
-                     <p class="text-muted-foreground text-xs truncate">{res.description || "No description"}</p>
-                     <div class="text-xs text-muted-foreground mt-1">{res.awarding_agency} • {res.date_signed}</div>
-                   </div>
-                 {/each}
-             </div>
-             
-             <button
-               onclick={handleCreate}
-               class="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-md font-bold flex items-center justify-center gap-2"
-             >
-                Proceed to Wizard &rarr;
-             </button>
-
-          {:else}
-             <!-- No matches advisory -->
-             <div class="bg-yellow-500/10 border border-yellow-500/50 p-4 rounded-md text-sm text-yellow-600 dark:text-yellow-500 space-y-2">
-                <p class="font-bold">Advisory: No direct high-value matches found in USASpending.gov.</p>
-                <p>This does NOT mean the claim is invalid — many frauds involve:</p>
-                <ul class="list-disc pl-5 space-y-1 opacity-90">
-                   <li>Subcontractors or subsidiaries</li>
-                   <li>Grants, loans, or non-contract payments</li>
-                   <li>False certifications without a specific award</li>
-                   <li>Insider knowledge not yet public</li>
-                </ul>
-                <p class="pt-2 font-medium">Proceed manually if you have strong evidence of fraud.</p>
-             </div>
-
-             <div class="flex gap-3 pt-2">
-                <button
-                  onclick={handleCreate}
-                  class="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-md font-medium"
-                >
-                   Continue Manually
-                </button>
-                <button
-                  onclick={() => step = 1}
-                  class="flex-1 bg-muted hover:bg-muted/80 text-foreground py-2 rounded-md font-medium"
-                >
-                   Try Different Name
-                </button>
-             </div>
-          {/if}
-        </div>
-      {/if}
-    </div>
-
-    {#if step === 1}
-      <div class="p-6 border-t bg-muted/20 flex justify-between items-center">
-        <button onclick={onCancel} class="text-sm hover:underline">Cancel</button>
-        
-        <button
-          onclick={handleVerify}
-          disabled={isVerifying || !targetName}
-          class="bg-primary text-primary-foreground px-6 py-2 rounded-md font-medium disabled:opacity-50 flex items-center gap-2"
-        >
-          {#if isVerifying}
-            <span>Scouting...</span>
-          {:else}
-             Verify Target
-          {/if}
-        </button>
+          <div class="pt-4 flex justify-end">
+              <button 
+                  onclick={handleVerify} 
+                  disabled={!targetName || isVerifying}
+                  class="bg-primary text-primary-foreground hover:bg-primary/90 px-4 py-2 rounded-md font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+              >
+                  {#if isVerifying}
+                      <span class="animate-spin">⏳</span> Verifying...
+                  {:else}
+                      Verify Target against USASpending &rarr;
+                  {/if}
+              </button>
+          </div>
       </div>
-    {/if}
-  </div>
+
+  {:else if step === 2}
+      <div class="space-y-6">
+        
+        <!-- Case 1: Results Found -->
+        {#if verificationResults.length > 0}
+           <div class="bg-green-500/10 border border-green-500/30 p-4 rounded text-sm space-y-3">
+               <div class="flex items-center gap-2 text-green-700 font-bold text-lg">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                  High-value matches found!
+               </div>
+               <p class="text-muted-foreground">USASpending.gov returned records matching "{targetName}". This establishes a clear federal nexus.</p>
+               
+               <div class="bg-background border rounded-md divide-y max-h-60 overflow-y-auto mt-2">
+                    {#each verificationResults as res}
+                      <div class="p-3 text-sm hover:bg-muted/50">
+                        <div class="flex justify-between items-center mb-1">
+                          <span class="font-bold text-foreground">{res.recipient_name}</span>
+                          <span class="font-mono text-green-600 font-medium">${res.total_obligation?.toLocaleString() ?? '0'}</span>
+                        </div>
+                        <div class="text-[10px] uppercase tracking-wide text-muted-foreground mt-1 flex gap-2">
+                           <span>{res.awarding_agency}</span>
+                           <span>•</span>
+                           <span>{res.date_signed}</span>
+                        </div>
+                      </div>
+                    {/each}
+               </div>
+           </div>
+
+        <!-- Case 2: No Results -->
+        {:else}
+           <div class="bg-yellow-500/10 border-l-4 border-yellow-500 p-4 rounded text-sm text-yellow-700 dark:text-yellow-500 space-y-3">
+              <div class="flex items-center gap-2 font-bold text-lg">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                  No Direct Matches Found
+              </div>
+              <p>USASpending.gov did not return high-value contract matches for <strong>"{targetName}"</strong>.</p>
+              <div class="bg-background/50 p-3 rounded text-xs space-y-1 border border-yellow-500/20">
+                  <strong class="block text-foreground/80 mb-1">This is common because:</strong>
+                  <ul class="list-disc pl-4 space-y-0.5 opacity-90">
+                     <li>Entity might be a sub-contractor (not direct recipient)</li>
+                     <li>Grants/Loans might be under a different name or EIN</li>
+                     <li>Fraud may involve false certifications without formal award</li>
+                  </ul>
+              </div>
+              <p class="font-medium pt-2">Zero results does NOT invalidate your case. Proceed manually if you have evidence.</p>
+           </div>
+        {/if}
+
+        <!-- Action Buttons -->
+        <div class="flex gap-3 pt-4 border-t mt-4">
+           <button
+             type="button"
+             onclick={() => step = 1}
+             class="px-4 py-2 rounded-md font-medium text-muted-foreground hover:bg-muted transition-colors text-sm"
+           >
+              &larr; Back to Search
+           </button>
+           <button
+             type="button"
+             onclick={handleCreate}
+             class="flex-1 bg-primary text-primary-foreground hover:bg-primary/90 py-2 rounded-md font-bold shadow-sm transition-colors flex items-center justify-center gap-2"
+           >
+              {#if verificationResults.length > 0}
+                 Confirm & Proceed &rarr;
+              {:else}
+                 Continue Manually &rarr;
+              {/if}
+           </button>
+        </div>
+      </div>
+  {/if}
 </div>

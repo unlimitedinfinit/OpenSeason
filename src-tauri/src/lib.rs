@@ -21,6 +21,7 @@ pub fn run() {
             commands::list_hunts,
             commands::create_new_hunt,
             commands::update_hunt,
+            commands::delete_hunt,
             commands::export_hunt_cmd,
             commands::import_hunt_cmd,
             commands::verify_target_cmd,
