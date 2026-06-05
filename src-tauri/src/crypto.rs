@@ -86,3 +86,109 @@ pub fn decrypt_data(ciphertext: &[u8], nonce_bytes: &[u8], key: &SessionKey) -> 
 
     Ok(plaintext)
 }
+
+pub fn strip_jpeg_metadata(data: &[u8]) -> Vec<u8> {
+    if data.len() < 4 || data[0] != 0xFF || data[1] != 0xD8 {
+        return data.to_vec();
+    }
+
+    let mut output = Vec::with_capacity(data.len());
+    output.push(0xFF);
+    output.push(0xD8);
+
+    let mut i = 2;
+    while i < data.len() {
+        if i + 1 >= data.len() {
+            output.extend_from_slice(&data[i..]);
+            break;
+        }
+
+        if data[i] == 0xFF {
+            let marker = data[i + 1];
+            if marker == 0xD9 {
+                output.push(0xFF);
+                output.push(0xD9);
+                break;
+            }
+
+            if marker == 0x00 || (marker >= 0xD0 && marker <= 0xD7) {
+                output.push(0xFF);
+                output.push(marker);
+                i += 2;
+                continue;
+            }
+
+            if i + 3 >= data.len() {
+                output.extend_from_slice(&data[i..]);
+                break;
+            }
+
+            let len = ((data[i + 2] as usize) << 8) | (data[i + 3] as usize);
+            
+            if marker == 0xE1 || marker == 0xFE {
+                i += 2 + len;
+            } else {
+                if i + 2 + len <= data.len() {
+                    output.extend_from_slice(&data[i..i + 2 + len]);
+                    i += 2 + len;
+                } else {
+                    output.extend_from_slice(&data[i..]);
+                    break;
+                }
+            }
+        } else {
+            output.push(data[i]);
+            i += 1;
+        }
+    }
+
+    output
+}
+
+pub fn strip_png_metadata(data: &[u8]) -> Vec<u8> {
+    let png_signature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+    if data.len() < 8 || data[0..8] != png_signature {
+        return data.to_vec();
+    }
+
+    let mut output = Vec::with_capacity(data.len());
+    output.extend_from_slice(&png_signature);
+
+    let mut i = 8;
+    while i + 8 <= data.len() {
+        let length = ((data[i] as u32) << 24
+            | (data[i + 1] as u32) << 16
+            | (data[i + 2] as u32) << 8
+            | (data[i + 3] as u32)) as usize;
+        
+        let chunk_type = &data[i + 4..i + 8];
+
+        let is_metadata = chunk_type == b"eXIf" 
+            || chunk_type == b"tEXt" 
+            || chunk_type == b"zTXt" 
+            || chunk_type == b"iTXt";
+
+        let total_chunk_len = 4 + 4 + length + 4;
+        if i + total_chunk_len <= data.len() {
+            if !is_metadata {
+                output.extend_from_slice(&data[i..i + total_chunk_len]);
+            }
+            i += total_chunk_len;
+        } else {
+            output.extend_from_slice(&data[i..]);
+            break;
+        }
+    }
+
+    output
+}
+
+pub fn strip_metadata(data: &[u8]) -> Vec<u8> {
+    if data.len() >= 4 && data[0] == 0xFF && data[1] == 0xD8 {
+        strip_jpeg_metadata(data)
+    } else if data.len() >= 8 && data[0..8] == [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A] {
+        strip_png_metadata(data)
+    } else {
+        data.to_vec()
+    }
+}

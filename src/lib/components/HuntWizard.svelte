@@ -5,16 +5,17 @@
   let { onComplete, onCancel, huntId = null, initialName = "", demoMode = false } = $props();
 
   let step = $state(1);
-  let targetName = $state(demoMode ? "Feeding Our Future" : initialName);
+  let targetName = $state("");
   let isVerifying = $state(false);
   let verificationResults = $state<any[]>([]);
   let error = $state("");
   let mounted = false;
   
-  // Sync logic for Edit Mode:
-  // If initialName exists + not demo + step 1 + target is empty, sync it.
+  // Sync logic for Props/Edit Mode:
   $effect(() => {
-     if (initialName && !demoMode && step === 1 && !targetName) {
+     if (demoMode && !targetName) {
+         targetName = "Feeding Our Future";
+     } else if (initialName && !targetName) {
          targetName = initialName;
      }
   });

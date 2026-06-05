@@ -1,10 +1,29 @@
 <script lang="ts">
   import { fade, scale } from 'svelte/transition';
+  import { invoke } from "@tauri-apps/api/core";
   
   let { isOpen = $bindable(false) } = $props();
 
   function close() {
     isOpen = false;
+  }
+
+  async function triggerPurge() {
+    const confirmation = prompt(
+      "WARNING: This will permanently erase all local evidence, SQLite databases, and narrative logs across all operations.\n\nType 'PURGE' to confirm deletion:"
+    );
+    if (confirmation !== "PURGE") {
+      alert("Purge cancelled.");
+      return;
+    }
+    try {
+      await invoke("purge_vault_cache");
+      alert("All local vaults and evidence have been securely wiped from disk.");
+      close();
+      window.location.reload(); // reload app to reflect empty vault list
+    } catch (e) {
+      alert("Failed to purge vaults: " + e);
+    }
   }
 </script>
 
@@ -108,7 +127,7 @@
               <li><strong>Secure Counsel:</strong> Take these organized files to a qui tam attorney. (See resources below).</li>
               <li><strong>File & Serve Government:</strong> Your attorney will file the Complaint under seal and serve the Disclosure Statement on the U.S. Attorney + Attorney General via Certified Mail (Rule 4(i)).</li>
               <li><strong>Wait (The Seal):</strong> The case stays secret for 60+ days (often years) while DOJ investigates. Do not talk to the press.</li>
-            </ol>
+             </ol>
           </div>
         </section>
 
@@ -137,6 +156,46 @@
                 Federal Court Forms
                 <svg class="opacity-0 group-hover:opacity-100 transition-opacity" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
               </a>
+            </div>
+          </div>
+        </section>
+
+        <!-- Section 5 -->
+        <section>
+          <h3 class="text-xl font-semibold mb-3 flex items-center gap-2 text-destructive">
+            <span class="flex items-center justify-center w-8 h-8 rounded-full bg-destructive/10 text-destructive text-sm font-bold">5</span>
+            Data Hygiene & Secure Cache Purge
+          </h3>
+          <div class="ml-12 space-y-4">
+            <p class="text-muted-foreground">
+              Because Open Season is a zero-trust, 100% offline application, all case data, SQLite databases, and encrypted evidence are stored strictly on your local machine. No data is ever sent to the cloud.
+            </p>
+            
+            <div class="p-4 bg-muted/50 rounded-md border border-border space-y-2">
+              <strong class="block text-foreground text-sm font-mono">Local Vault Locations:</strong>
+              <ul class="list-disc pl-5 text-xs text-muted-foreground space-y-1 font-mono">
+                <li><strong>Windows:</strong> %LOCALAPPDATA%\com.openseason.app\vaults</li>
+                <li><strong>macOS:</strong> $HOME/Library/Application Support/com.openseason.app/vaults</li>
+                <li><strong>Linux:</strong> $HOME/.local/share/com.openseason.app/vaults</li>
+              </ul>
+              <p class="text-xs text-muted-foreground mt-2">
+                To manually purge evidence to comply with court directives, you may delete the <code>vaults</code> directory at these locations.
+              </p>
+            </div>
+
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 border border-destructive/20 bg-destructive/5 rounded-md gap-4">
+              <div class="space-y-1 flex-1">
+                <strong class="block text-destructive">Secure Vault Purge</strong>
+                <p class="text-xs text-muted-foreground">
+                  Permanently erase all local evidence, databases, and logs. This action is irreversible.
+                </p>
+              </div>
+              <button 
+                onclick={triggerPurge}
+                class="px-4 py-2 bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-md font-medium text-xs transition-colors shrink-0"
+              >
+                Purge Vault Cache
+              </button>
             </div>
           </div>
         </section>

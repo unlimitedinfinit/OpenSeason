@@ -37,3 +37,4 @@ walkdir = "2"
 comemo = "0.4"
 chrono = "0.4"
 uuid = { version = "1", features = ["v4", "serde"] }
+sha2 = "0.10"
