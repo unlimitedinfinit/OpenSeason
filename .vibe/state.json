@@ -1,0 +1,33 @@
+{
+  "project": "open-season",
+  "version": "0.1.0",
+  "health": "active",
+  "status": "prototype",
+  "last_audit": "2026-06-07T16:24:00.000Z",
+  "languages": {
+    "svelte": "5.0",
+    "typescript": "5.6",
+    "rust": "1.78"
+  },
+  "known_issues": [
+    "PDF report compilation uses hardcoded mock values for evidence count and case valuation in dashboard invokes",
+    "No warning is displayed if the user attempts to import an invalid or corrupted .osb file"
+  ],
+  "dependencies": [
+    "tauri",
+    "svelte",
+    "typst",
+    "rusqlite",
+    "chacha20poly1305",
+    "argon2",
+    "zeroize"
+  ],
+  "constraints": [
+    "Must be 100% local-first and run offline.",
+    "Zero cloud storage or syncing allowed.",
+    "Master password andderived session key must never touch disk and must be zeroed out on memory drop.",
+    "All uploaded image evidence must be metadata-scrubbed before encryption."
+  ],
+  "vibe_version": "1.0",
+  "vibe_updated": "2026-06-07T16:24:00.000Z"
+}
