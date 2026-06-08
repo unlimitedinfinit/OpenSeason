@@ -56,4 +56,15 @@
 - **Depends On**: Security of the RustCrypto crates.
 - **Threatened By**: Side-channel memory analysis or insecure key storage on disk.
 - **Related Decisions**: None.
-- **Revisit When**: If a newer NIST standard supersedes ChaCha20/Argon2.
+- **Revisit When:** If a newer NIST standard supersedes ChaCha20/Argon2.
+
+---
+
+## Why browser-native SVG displacement maps (GlassOS) instead of legacy CSS blurs or Chromium-only Canvas APIs?
+
+- **Context**: We want our interfaces (JustLegal and OpenSeason) to look state-of-the-art and "wow" the user at first glance. Standard CSS `backdrop-filter: blur()` is passive and doesn't bend light or distort shapes.
+- **Alternatives Considered**: Chromium-only SVG `backdrop-filter` or `HTML-in-Canvas` (which are flags-only and break on Safari/Firefox), or Canvas rendering of DOM nodes (which breaks accessibility and text selection).
+- **Tradeoffs**: Generating displacement maps at runtime requires rendering quadrant canvases (symmetry optimizations) and cache-bypassing dynamically generated filter IDs (which increases repaint calls but stays under the 60fps budget).
+- **Depends On**: SVG filter and Canvas API support.
+- **Threatened By**: Heavy layout repaint costs in legacy Safari engines.
+- **Revisit When**: CSS specifications adopt native light-refraction backdrop properties.

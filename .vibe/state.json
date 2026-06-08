@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "health": "active",
   "status": "prototype",
-  "last_audit": "2026-06-07T16:24:00.000Z",
+  "last_audit": "2026-06-08T02:10:00.000Z",
   "languages": {
     "svelte": "5.0",
     "typescript": "5.6",
@@ -29,5 +29,5 @@
     "All uploaded image evidence must be metadata-scrubbed before encryption."
   ],
   "vibe_version": "1.0",
-  "vibe_updated": "2026-06-07T16:24:00.000Z"
+  "vibe_updated": "2026-06-08T02:10:00.000Z"
 }
