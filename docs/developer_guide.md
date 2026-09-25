@@ -5,7 +5,7 @@
 | Tool | Version | Notes |
 |---|---|---|
 | Node.js | 18+ | `npm install --legacy-peer-deps` (Svelte 5 peers disagree with a few UI packages) |
-| Rust / Cargo | 1.75+ stable | [rustup.rs](https://rustup.rs) |
+| Rust / Cargo | 1.85+ stable (1.98 used in this run) | [rustup.rs](https://rustup.rs). Older 1.83 cannot parse some Tauri crates that use edition 2024. |
 | VS Build Tools | 2022 C++ | Windows only |
 | Xcode CLT | current | macOS only |
 

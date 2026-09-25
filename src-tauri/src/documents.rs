@@ -23,15 +23,6 @@ struct Para {
 }
 
 impl Para {
-    fn body(text: impl Into<String>, size: u32) -> Self {
-        Self {
-            text: text.into(),
-            bold: false,
-            center: false,
-            size_half_points: size,
-        }
-    }
-
     fn centered(text: impl Into<String>, size: u32, bold: bool) -> Self {
         Self {
             text: text.into(),
@@ -53,6 +44,7 @@ fn typst_escape(text: &str) -> String {
     text.replace('\\', "\\\\")
         .replace('#', "\\#")
         .replace('$', "\\$")
+        .replace('@', "\\@")
         .replace('[', "\\[")
         .replace(']', "\\]")
         .replace('*', "\\*")
@@ -297,7 +289,7 @@ fn build_typst_source(profile: &CaseProfile, rules: &CourtRules) -> String {
         r#"
 #set page(
   paper: "{paper}",
-  margin: ({top}in, {right}in, {bottom}in, {left}in),
+  margin: (top: {top}in, right: {right}in, bottom: {bottom}in, left: {left}in),
   footer: align(center)[
     #text(size: 8pt)[{notice}]
   ]
@@ -457,11 +449,7 @@ mod tests {
                 assert!(bytes.starts_with(b"%PDF"), "expected a PDF header");
                 assert!(paths.docx.exists());
             }
-            Err(e) => {
-                // Font availability varies by machine. The Word path is the
-                // hard contract; PDF is best-effort when a serif font exists.
-                eprintln!("PDF export skipped on this host: {}", e);
-            }
+            Err(e) => panic!("PDF export should work when a system font exists: {}", e),
         }
         let _ = fs::remove_dir_all(&dir);
     }

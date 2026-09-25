@@ -305,7 +305,8 @@ pub fn create_case_folder(
 
     ensure_case_layout(&case_dir)?;
     save_case(&case_dir, &profile)?;
-    Ok((case_dir, load_case(&case_dir)?))
+    let loaded = load_case(&case_dir)?;
+    Ok((case_dir, loaded))
 }
 
 pub fn resolve_case_dir(id_or_path: &str) -> PathBuf {

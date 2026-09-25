@@ -1,7 +1,7 @@
 use std::path::PathBuf;
-use typst::diag::{FileError, FileResult, SourceResult};
+use typst::diag::{FileError, FileResult};
 use typst::foundations::{Bytes, Datetime, Smart};
-use typst::syntax::{FileId, Source, VirtualPath};
+use typst::syntax::{FileId, Source};
 use typst::text::{Font, FontBook};
 use typst::Library;
 use typst::World;
