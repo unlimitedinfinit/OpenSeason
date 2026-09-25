@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Open Season",
+        "title": "OpenSeason",
         "width": 1024,
         "height": 768,
         "resizable": true,
@@ -35,6 +35,6 @@
     ],
     "copyright": "2024 Open Season Public Domain",
     "category": "Productivity",
-    "shortDescription": "Zero-Trust Fraud Hunting Toolkit"
+    "shortDescription": "Local legal document builder with Confidential mode"
   }
 }

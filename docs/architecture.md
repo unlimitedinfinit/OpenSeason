@@ -1,41 +1,71 @@
 # Architecture
 
+OpenSeason is one local engine with two front doors: a human wizard in the desktop window, and a command-line tool that a local AI can call. Both doors read the same case folder and the same Rust rules.
+
 ## Components
 
-### Svelte Frontend ("Hunter's UI")
-- **Responsibility**: Manages application layout state, captures user passwords, triggers wizards, processes file drag-and-drop events, and renders the Case details editor.
-- **Key Files**: `src/routes/+page.svelte`, `src/routes/hunt/[id]/+page.svelte`, `src/lib/components/`
-- **Depends On**: `@tauri-apps/api/core` for invoking IPC commands.
-- **Depended On By**: None.
+### Svelte frontend
 
-### Rust Backend ("The Armory")
-- **Responsibility**: Conducts encryption/decryption, metadata stripping, SQLite initialization, PDF report compilation, and ZIP compression.
-- **Key Files**: `src-tauri/src/commands.rs`, `crypto.rs`, `db.rs`, `bundle.rs`, `usaspending.rs`, `pdf.rs`
-- **Depends On**: `chacha20poly1305`, `argon2`, `zeroize`, `typst`, `rusqlite`
-- **Depended On By**: Svelte Frontend (via IPC handlers)
+- **Responsibility**: Home screen, case profile form, Notice of Appeal editor, Confidential vault UI (Legal Airlock, hunts, evidence).
+- **Key files**: `src/routes/+page.svelte`, `src/routes/case/`, `src/routes/confidential/`, `src/routes/hunt/`
+- **Depends on**: Tauri IPC (`invoke`)
 
-## Data Flow
+### Rust backend
 
-### 1. Cryptographic Key Derivation
-1. User enters master password in the UI launcher.
-2. UI invokes Tauri `unlock_vault`.
-3. Rust backend reads/generates the local vault salt.
-4. Password and salt are passed into the Argon2id key derivation function.
-5. The resulting 32-byte key is stored in the Tauri `AppState` state container (`Arc<Mutex<Option<SessionKey>>>`) in memory.
-6. Crucially, raw password string and intermediate bytes are scrubbed via `Zeroize`.
+- **Responsibility**: Case folders, mode enforcement, document assembly, vault crypto, optional USAspending lookup.
+- **Key files**: `src-tauri/src/case_profile.rs`, `sync.rs`, `documents.rs`, `court_rules.rs`, `case_commands.rs`, `crypto.rs`, `commands.rs`, `pdf.rs`
+- **Depends on**: `rusqlite`, `chacha20poly1305`, `argon2`, `typst`, `zip`
 
-### 2. Evidence Processing and Storage
-1. User drops a file (e.g. image) into the evidence uploader.
-2. UI invokes Tauri `add_hunt_evidence`.
-3. Rust backend reads file bytes, detects JPG/PNG, and strips EXIF and text metadata chunks.
-4. Rust backend retrieves the `SessionKey` from memory, generates a random 192-bit nonce, and encrypts the stripped bytes using XChaCha20Poly1305.
-5. The encrypted file is saved inside the case's folder on disk under `evidence/`.
-6. An entry including the file description, path, nonce, and computed SHA-256 hash is inserted into the hunt's isolated SQLite database.
+### CLI (`openseason`)
 
-## Local Storage Layout
-Open Season stores all data in the system's local application data directory under `vaults/`:
-- Windows: `C:\Users\<user>\AppData\Local\com.openseason.app\vaults\`
-- Each hunt gets its own sub-folder containing:
-  - `metadata.db` (Isolated SQLite database)
-  - `evidence/` (Directory with encrypted files)
-  - `disclosure_statement.pdf` (Compiled report)
+- **Responsibility**: Create, validate, export, seal, and hit the sync stub without opening the window.
+- **Key file**: `src-tauri/src/bin/openseason.rs`
+
+### Court rules data
+
+- **Responsibility**: Paper size, margins, font, line spacing. Not legal holdings.
+- **Key file**: `templates/court-rules/generic.json`
+
+## Modes
+
+```
+Standard case.json  -->  may call sync stub (returns not implemented)
+                    -->  can convert to Confidential (writes .sealed plus sealed_at)
+Confidential        -->  sync/backup/publish refused if .sealed exists
+                    -->  cannot become standard by editing case.json
+                    -->  local Word/PDF/.osb export still allowed
+```
+
+The UI is not the security boundary. `sync::request_sync_for_dir` checks the `.sealed` file first, then `case.json`. `save_case` refuses an unseal payload when that marker is present.
+
+Desktop seal checks the vault password against a verifier, then encrypts the whole vault tree (nested folders and root-level user files included). Only the app's own `{vault}/metadata.db` and `{vault}/court-rules/` stay readable. Documents is then emptied to the pointer files. CLI `case seal` only writes the marker. Hunt and case command ids must be UUIDs. Export will not write inside app data or the cases root, will not write a file named `.sealed`, and will not use a relative, UNC, or symlink target. Repeat downloads get a numeric suffix and are created with O_EXCL. Sealed vault delete, purge, evidence add/delete, and other hunt edits require the vault password. The desktop UI is one case dashboard. USAspending lookup and the disclosure statement are Confidential tools, not a second home screen.
+
+## Data flow: Notice of Appeal
+
+1. User (or CLI) creates a folder and writes `case.json`.
+2. `validate_case` checks required caption fields and leftover placeholders.
+3. `documents::export_notice_of_appeal` merges profile + user text.
+4. Word is written as Office Open XML (zip). PDF is compiled with Typst using the court-rules font list.
+5. Files land in `exports/`. Both copies include the review notice.
+
+## Data flow: Confidential vault (unchanged core)
+
+1. User passes the Legal Airlock and unlocks with a master password.
+2. Argon2id derives a 32-byte session key. An encrypted verifier next to `master_salt.bin` rejects a wrong password. The password itself is not stored.
+3. Evidence is scrubbed, hashed, encrypted, and indexed in `metadata.db`.
+4. Disclosure PDFs and `.osb` bundles stay on disk.
+
+## Storage
+
+| Kind | Location |
+|---|---|
+| Standard case | `Documents/JustLegal/Cases/{id}/` |
+| Confidential hunt | App local data `vaults/{id}/` |
+| Vault salt | App local data `master_salt.bin` |
+| Password verifier | App local data `master_verifier.bin` |
+
+Windows, macOS, and Linux resolve those roots through the `dirs` crate and Tauri path APIs. Paths are not hard-coded to one drive letter.
+
+## Sync (stub)
+
+`sync.rs` is the only place a future justlegal.me adapter should hook in. It currently returns `NotImplemented` for standard cases and `ConfidentialForbidden` for sealed ones. There is no HTTP client in this module.

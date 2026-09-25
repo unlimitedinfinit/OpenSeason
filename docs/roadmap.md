@@ -1,25 +1,31 @@
 # Roadmap
 
-## Current Milestone: MVP Stabilization
-**Goal**: Finalize core local-first features and fix the mock dashboard PDF parameters.
+## This run (foundation)
 
-- [ ] Connect Svelte dashboard PDF generation to pull actual SQLite database totals instead of hardcoded numbers.
-- [ ] Add file validation check during `.osb` imports to verify zip integrity.
-- [ ] Stabilize dev build on Windows and Mac operating systems.
+- [x] Audit OpenSeason and record that JustLegalAid source was not reachable
+- [x] Standard and Confidential modes enforced in Rust, with sync-refusal tests
+- [x] Portable case folder and fill-once `case.json`
+- [x] Notice of Appeal to Word and PDF
+- [x] `AGENTS.md` and `openseason` CLI
+- [x] Home screen with document types plus Confidential mode
+- [x] Remove debug leftovers (`api_debug.log`, `src-tauri/ok`)
 
-## Next Milestone: Security Hardening
-**Goal**: Increase protection against forensic memory inspection and local snooping.
+## Next run (planned)
 
-- [ ] Implement local SQLite database file-level encryption using SQLCipher (currently database files themselves are plaintext metadata, though files are encrypted).
-- [ ] Add a secure self-uninstall option to purge all local vaults instantly.
+These items are intentionally not built here:
 
-## Completed Milestones
+1. New-complaint intake interview
+2. Evidence intake that links each fact to a source file
+3. Jurisdiction finder
+4. Merit / readiness checklist
+5. Court packet and local-rules fetch into `court-rules/` (store source URL and date)
+6. Bundle output for a filing packet
+7. Opt-in shared court-rules library
+8. Real justlegal.me pull/publish for **standard** cases only, behind `sync::request_sync`
 
-### Core Architecture & Cryptography
-- **Completed**: 2026-06-05
-- **Goal**: Establish the zero-trust local-first workspace structure.
-- [x] Legal airlock block screen modal
-- [x] Argon2id Key Derivation and XChaCha20Poly1305 file encryption
-- [x] Multi-vault directories with SQLite indexing
-- [x] Typst compiler integrated for disclosure report builder
-- [x] EXIF/chunk metadata stripping from jpeg/png uploads
+## Still open from the old vault roadmap
+
+- [ ] Disclosure PDF should use live SQLite totals, not leftover mock values in one dashboard path
+- [ ] Stronger `.osb` integrity checks
+- [ ] Optional SQLCipher for `metadata.db`
+- [ ] Produce and smoke-test Windows `.msi` / `.exe` and macOS `.dmg` on real builder machines

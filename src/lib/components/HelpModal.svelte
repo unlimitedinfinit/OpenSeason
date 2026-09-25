@@ -10,19 +10,25 @@
 
   async function triggerPurge() {
     const confirmation = prompt(
-      "WARNING: This will permanently erase all local evidence, SQLite databases, and narrative logs across all operations.\n\nType 'PURGE' to confirm deletion:"
+      "This deletes unsealed local hunts only. Sealed Confidential vaults are often the only encrypted copy and are skipped unless you also type the vault password.\n\nType PURGE to delete unsealed hunts (sealed cases are kept):"
     );
     if (confirmation !== "PURGE") {
       alert("Purge cancelled.");
       return;
     }
+    const password = prompt(
+      "To also delete sealed Confidential vaults, enter the vault password. Leave empty to keep sealed cases."
+    );
     try {
-      await invoke("purge_vault_cache");
-      alert("All local vaults and evidence have been securely wiped from disk.");
+      const result = await invoke<string>("purge_vault_cache", {
+        password: password && password.length ? password : null,
+        includeSealed: !!(password && password.length),
+      });
+      alert(result);
       close();
-      window.location.reload(); // reload app to reflect empty vault list
+      window.location.reload();
     } catch (e) {
-      alert("Failed to purge vaults: " + e);
+      alert("Failed to delete hunts: " + e);
     }
   }
 </script>
@@ -83,7 +89,7 @@
           </h3>
           <ul class="list-disc pl-12 space-y-2 text-muted-foreground">
             <li><strong>The Goal:</strong> To organize evidence "with particularity" (Rule 9(b)) for a False Claims Act lawsuit.</li>
-            <li><strong>The Reward:</strong> 15–30% of recovered funds if successful (31 U.S.C. §§ 3729–3733).</li>
+            <li><strong>The Reward:</strong> 15 to 30% of recovered funds if successful (31 U.S.C. §§ 3729-3733).</li>
             <li><strong>The Risk:</strong> Public disclosure bars your reward. <em>Keep everything in this vault until filed under seal.</em></li>
           </ul>
         </section>
@@ -164,11 +170,11 @@
         <section>
           <h3 class="text-xl font-semibold mb-3 flex items-center gap-2 text-destructive">
             <span class="flex items-center justify-center w-8 h-8 rounded-full bg-destructive/10 text-destructive text-sm font-bold">5</span>
-            Data Hygiene & Secure Cache Purge
+            Data Hygiene & Delete Local Hunts
           </h3>
           <div class="ml-12 space-y-4">
             <p class="text-muted-foreground">
-              Because Open Season is a zero-trust, 100% offline application, all case data, SQLite databases, and encrypted evidence are stored strictly on your local machine. No data is ever sent to the cloud.
+              Case files stay on this computer. The only network call in this app is the optional USAspending lookup: it sends the target name you type to api.usaspending.gov and does not upload your vault, evidence, or case folder. Account sync, cloud backup, and publish are stubbed and refuse Confidential cases. There is no telemetry.
             </p>
             
             <div class="p-4 bg-muted/50 rounded-md border border-border space-y-2">
@@ -179,22 +185,22 @@
                 <li><strong>Linux:</strong> $HOME/.local/share/com.openseason.app/vaults</li>
               </ul>
               <p class="text-xs text-muted-foreground mt-2">
-                To manually purge evidence to comply with court directives, you may delete the <code>vaults</code> directory at these locations.
+                To delete evidence by hand, you may remove individual unsealed hunt folders. Do not delete a sealed vault folder unless you have a copy: that folder is often the only encrypted case.
               </p>
             </div>
 
             <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 border border-destructive/20 bg-destructive/5 rounded-md gap-4">
               <div class="space-y-1 flex-1">
-                <strong class="block text-destructive">Secure Vault Purge</strong>
+                <strong class="block text-destructive">Delete local hunts</strong>
                 <p class="text-xs text-muted-foreground">
-                  Permanently erase all local evidence, databases, and logs. This action is irreversible.
+                  Deletes unsealed hunts. Sealed Confidential vaults (often the only copy) are skipped unless you re-enter the vault password.
                 </p>
               </div>
               <button 
                 onclick={triggerPurge}
                 class="px-4 py-2 bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-md font-medium text-xs transition-colors shrink-0"
               >
-                Purge Vault Cache
+                Delete local hunts
               </button>
             </div>
           </div>
