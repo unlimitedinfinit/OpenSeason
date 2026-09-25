@@ -195,13 +195,13 @@ The preliminary factual counts and allegations compiled for the Qui Tam filing a
         complaint = if complaint_markup.is_empty() { "_No complaint narrative compiled._" } else { complaint_markup }
     );
 
-    // 2. Initialize World
-    let world = MinimalWorld::new(template);
+    compile_typst(template)
+}
 
-    // 3. Compile (No tracer in 0.12)
-    // The result is Warned<SourceResult<Document>>. We need .output which is SourceResult<Document>.
+pub fn compile_typst(source_text: String) -> Result<Vec<u8>, String> {
+    let world = MinimalWorld::new(source_text);
     let warned = typst::compile(&world);
-    
+
     match warned.output {
         Ok(document) => {
             let options = PdfOptions {
@@ -209,17 +209,16 @@ The preliminary factual counts and allegations compiled for the Qui Tam filing a
                 timestamp: Some(world.now),
                 page_ranges: None,
                 standards: PdfStandards::default(),
-                // 'tagged' field removed in 0.12? User says so.
             };
-            
-            // Typst PDF 0.12 signature: pdf(&Document, &PdfOptions) -> SourceResult<Vec<u8>>
+
             match typst_pdf::pdf(&document, &options) {
                 Ok(bytes) => Ok(bytes),
-                Err(errors) => Err(format!("PDF Generation Error: {:?}", errors))
+                Err(errors) => Err(format!("PDF Generation Error: {:?}", errors)),
             }
-        },
+        }
         Err(errors) => {
-            let msg = errors.iter()
+            let msg = errors
+                .iter()
                 .map(|e| e.message.to_string())
                 .collect::<Vec<_>>()
                 .join("\n");

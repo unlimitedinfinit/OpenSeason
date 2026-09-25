@@ -1,27 +1,22 @@
-# Executive Summary
+# Documentation
 
-## Overview
-Open Season is a local-first, zero-trust desktop workbench for False Claims Act investigations. It enables users to securely verify targets, strip metadata from evidence, document chronological events, and compile professional disclosure reports locally. By enforcing strict local-only execution and cryptographically protecting storage keys in memory, the application ensures whistleblower safety and protects the viability of legal claims.
+OpenSeason is a local desktop builder for self-represented filers. Confidential (Open Season) is the encrypted vault door of the same app.
 
-The project is currently in the MVP stabilization phase. The core cryptographic engines, SQLite multi-vault storage, metadata scrubbers, and Typst report compilers have been implemented in Rust and Svelte 5.
-
-## Documentation Map
+## Map
 
 | Document | Description |
 |---|---|
-| [topology.md](topology.md) | File and folder structure with descriptions |
-| [architecture.md](architecture.md) | Systems, components, and data flow |
-| [api.md](api.md) | API endpoints, request/response formats |
-| [issues.md](issues.md) | Open bugs, blockers, known problems |
-| [resolved.md](resolved.md) | Closed issues and their resolutions |
-| [roadmap.md](roadmap.md) | Milestones, priorities, what's next |
-| [developer_guide.md](developer_guide.md) | Setup, build, test, deploy instructions |
-| [troubleshooting.md](troubleshooting.md) | Common errors and how to fix them |
-| [glossary.md](glossary.md) | Project-specific terms defined |
-| [decisions/](decisions/) | Architecture decision records |
+| [AUDIT.md](AUDIT.md) | What works, what is stubbed, JustLegalAid access, sync verdict |
+| [cases.md](cases.md) | Case modes, folder layout, Notice of Appeal |
+| [architecture.md](architecture.md) | Systems and data flow |
+| [api.md](api.md) | Tauri commands and the CLI |
+| [roadmap.md](roadmap.md) | What this run finished and what is next |
+| [developer_guide.md](developer_guide.md) | Setup, test, build |
+| [topology.md](topology.md) | Folder tree |
+| [glossary.md](glossary.md) | Terms |
+| [../AGENTS.md](../AGENTS.md) | Rules for any AI using the case folder |
 
-## Quick Links
+## Quick links
 
-- **Current Milestone:** [see roadmap](roadmap.md)
-- **Active Blockers:** [see issues](issues.md)
-- **Semantic Layer:** [.vibe/](../.vibe/) — purpose, architecture intent, decisions rationale
+- **Current work:** foundation for a unified builder. See [roadmap.md](roadmap.md).
+- **Sync:** stub only. Confidential cases are refused in Rust. Details in [AUDIT.md](AUDIT.md).

@@ -61,6 +61,16 @@ impl HuntDatabase {
             )",
             [],
         )?;
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS info (
+                name TEXT,
+                created_at TEXT,
+                status TEXT,
+                mode TEXT DEFAULT 'confidential'
+            )",
+            [],
+        )?;
         
         Ok(Self { conn })
     }

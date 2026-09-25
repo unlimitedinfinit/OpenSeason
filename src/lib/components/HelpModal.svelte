@@ -83,7 +83,7 @@
           </h3>
           <ul class="list-disc pl-12 space-y-2 text-muted-foreground">
             <li><strong>The Goal:</strong> To organize evidence "with particularity" (Rule 9(b)) for a False Claims Act lawsuit.</li>
-            <li><strong>The Reward:</strong> 15–30% of recovered funds if successful (31 U.S.C. §§ 3729–3733).</li>
+            <li><strong>The Reward:</strong> 15 to 30% of recovered funds if successful (31 U.S.C. §§ 3729-3733).</li>
             <li><strong>The Risk:</strong> Public disclosure bars your reward. <em>Keep everything in this vault until filed under seal.</em></li>
           </ul>
         </section>

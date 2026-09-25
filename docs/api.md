@@ -1,134 +1,64 @@
 # API Reference
 
-## Base Connection
-Open Season does not run a web server. Svelte communicates with the Rust backend ("The Armory") using **Tauri IPC Invokes**.
+OpenSeason does not run a web server. The window talks to Rust through Tauri commands. The CLI calls the same library.
 
----
+## Case commands (new)
 
-## Tauri Invoke Commands
+### `get_cases_root`
 
-### `unlock_vault`
-Derive the master session encryption key from the user password.
+Returns the standard-case directory (`Documents/JustLegal/Cases`).
 
-- **Arguments**:
-  ```json
-  { "password": "user_passphrase" }
-  ```
-- **Returns**: `Result<(), String>` (throws error if key derivation fails)
+### `list_cases`
 
----
+Lists **standard** profiles found in that directory. Sealed stubs are omitted.
 
-### `lock_vault`
-Wipe the active session key from memory.
+### `create_case`
 
-- **Arguments**: None.
-- **Returns**: `Result<(), String>`
+Arguments: `{ "title": "Example v. Sample County Clerk", "documentKind": "notice_of_appeal" }`
 
----
+Creates the folder layout and a `case.json`. Mode is standard.
 
-### `is_locked`
-Check if the cryptographic vault is currently locked.
+### `get_case` / `save_case`
 
-- **Arguments**: None.
-- **Returns**: `boolean`
+Read or write `case.json` by case id (or a full folder path).
 
----
+Saving a sealed case as standard is rejected.
 
-### `list_hunts`
-Retrieve a list of all active operations stored in the local vaults folder.
+### `validate_case_cmd`
 
-- **Arguments**: None.
-- **Returns**:
-  ```json
-  [
-    {
-      "id": "vault_uuid",
-      "name": "Operation Name",
-      "created": "timestamp"
-    }
-  ]
-  ```
+Returns `{ "ok": true|false, "issues": [{ "field", "message" }] }`.
 
----
+### `export_notice_of_appeal_cmd`
 
-### `create_new_hunt`
-Initialize a new isolated vault directory and SQLite database.
+Validates, then writes `.docx` and `.pdf` under `exports/`. Fails if the case is incomplete.
 
-- **Arguments**:
-  ```json
-  { "name": "Operation Name" }
-  ```
-- **Returns**:
-  ```json
-  {
-    "id": "new_uuid",
-    "name": "Operation Name",
-    "created": "timestamp"
-  }
-  ```
+### `convert_case_to_confidential`
 
----
+Requires an unlocked vault. Copies the folder into `vaults/{id}/`, encrypts leftover evidence files, writes a `SEALED.txt` stub in the Documents copy, and sets `sealed_at`. Cannot be reversed.
 
-### `verify_target_cmd`
-Query the USAspending.gov public API to locate recipient contracts over $100k.
+### `sync_case_cmd`
 
-- **Arguments**:
-  ```json
-  { "name": "Contractor Name" }
-  ```
-- **Returns**:
-  ```json
-  [
-    {
-      "generated_internal_id": "award_id",
-      "date_signed": "YYYY-MM-DD",
-      "description": "Award Details description",
-      "total_obligation": 1500000.0,
-      "awarding_agency": "Agency Name",
-      "recipient_name": "Contractor Name"
-    }
-  ]
-  ```
+Arguments: `{ "caseId": "...", "action": "backup" | "publish" | "pull_account" }`
 
----
+Never uploads. Returns a structured refusal:
 
-### `save_disclosure_cmd`
-Compile the database records into a PDF Disclosure Statement using the Typst engine.
+- `confidential_forbidden` if the case is confidential or was ever sealed
+- `not_implemented` if the case is still standard
 
-- **Arguments**:
-  ```json
-  {
-    "huntId": "vault_uuid",
-    "target": "Contractor Name",
-    "count": 12,
-    "value": 1540000.0
-  }
-  ```
-- **Returns**: `String` (path to the generated PDF saved in the system Downloads directory)
+## Confidential vault commands (existing)
 
----
+Still available: `get_salt`, `unlock_vault`, `lock_vault`, `is_locked`, hunt CRUD, evidence, timeline, parties, complaint sections, `verify_target_cmd`, `save_disclosure_cmd`, `.osb` import/export, `purge_vault_cache`.
 
-### `export_hunt_cmd`
-Export a specific hunt vault (database + encrypted files) into a compressed `.osb` ZIP file.
+`create_new_hunt` now initializes the full SQLite schema (info, events, parties, evidence, complaint_sections).
 
-- **Arguments**:
-  ```json
-  {
-    "huntId": "vault_uuid",
-    "targetPath": "C:/path/to/backup.osb"
-  }
-  ```
-- **Returns**: `Result<String, String>`
+## CLI
 
----
+Binary name: `openseason`
 
-### `import_hunt_cmd`
-Unpack and import a `.osb` case ZIP bundle back into the local vaults database directory.
-
-- **Arguments**:
-  ```json
-  {
-    "osbPath": "C:/path/to/backup.osb"
-  }
-  ```
-- **Returns**: `Result<(), String>`
+```
+openseason case create --path DIR --title TEXT [--mode standard|confidential] [--kind notice_of_appeal]
+openseason case validate DIR
+openseason case seal DIR
+openseason export notice-of-appeal DIR [--out DIR]
+openseason sync DIR [--action backup|publish|pull]
+```

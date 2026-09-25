@@ -8,3 +8,10 @@ node_modules
 !.env.example
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Local debug leftovers
+api_debug.log
+src-tauri/ok
+*.osb
+*.jldb
+target/

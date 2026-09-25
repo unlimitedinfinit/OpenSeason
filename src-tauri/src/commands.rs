@@ -291,18 +291,13 @@ pub fn create_new_hunt(app: AppHandle, name: String, state: State<'_, AppState>)
     fs::create_dir_all(&hunt_dir.join("evidence"))
         .map_err(|e| format!("Failed to create dir: {}", e))?;
 
-    // Create and init metadata.db
+    // Create and init metadata.db, including events/parties/evidence tables.
     let db_path = hunt_dir.join("metadata.db");
-    let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
-    
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS info (name TEXT, created_at TEXT, status TEXT)", 
-        []
-    ).map_err(|e| e.to_string())?;
+    let db = HuntDatabase::open(&db_path).map_err(|e| e.to_string())?;
     
     let created_at = chrono::Utc::now().to_rfc3339();
-    conn.execute(
-        "INSERT INTO info (name, created_at, status) VALUES (?1, ?2, 'Draft')",
+    db.conn.execute(
+        "INSERT INTO info (name, created_at, status, mode) VALUES (?1, ?2, 'Draft', 'confidential')",
         [&name, &created_at]
     ).map_err(|e| e.to_string())?;
 
