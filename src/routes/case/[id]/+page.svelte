@@ -188,14 +188,17 @@
         const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
         if (profile.mode === "confidential") {
           const password = prompt("If this case is sealed, re-enter the vault password. Leave empty only for an unsealed Confidential case.");
-          await ipc("add_hunt_evidence_bytes", {
+          const result = await ipc<string>("add_hunt_evidence_bytes", {
             huntId: caseId,
             filename: file.name,
             fileBytes: bytes,
             description: desc,
             password: password && password.length ? password : null,
           });
-          status = `Encrypted exhibit stored in the vault: ${file.name}`;
+          status =
+            result === "already_present"
+              ? `This exhibit is already in the vault (same file contents). The existing sealed copy was not changed: ${file.name}`
+              : `Encrypted exhibit stored in the vault: ${file.name}`;
         } else {
           await ipc("add_case_evidence", {
             caseId,

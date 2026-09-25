@@ -644,7 +644,7 @@ pub fn add_hunt_evidence_bytes_at(
     password: Option<&str>,
     salt: Option<&str>,
     verifier: Option<&[u8]>,
-) -> Result<(), String> {
+) -> Result<String, String> {
     crate::sandbox::require_password_if_sealed(hunt_dir, password, salt, verifier)?;
 
     let scrubbed_bytes = crypto::strip_metadata(file_bytes);
@@ -670,7 +670,7 @@ pub fn add_hunt_evidence_bytes_at(
     // Content-addressed filename. A second add of the same bytes must never
     // overwrite or delete the existing .enc (often the only sealed copy).
     if enc_dest_path.exists() || already_logged {
-        return Ok(());
+        return Ok("already_present".to_string());
     }
 
     let (encrypted_bytes, nonce) = crypto::encrypt_data(&scrubbed_bytes, key)?;
@@ -682,7 +682,7 @@ pub fn add_hunt_evidence_bytes_at(
         Err(err)
             if err.to_lowercase().contains("already") || err.to_lowercase().contains("exists") =>
         {
-            return Ok(());
+            return Ok("already_present".to_string());
         }
         Err(err) => return Err(err),
     }
@@ -692,7 +692,7 @@ pub fn add_hunt_evidence_bytes_at(
         rusqlite::params![description, filename, nonce, hash_hex],
     )
     .map_err(|e| e.to_string())?;
-    Ok(())
+    Ok("added".to_string())
 }
 
 #[tauri::command]
@@ -703,7 +703,7 @@ pub fn add_hunt_evidence(
     file_path: String,
     description: String,
     password: Option<String>,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let key = state.get_key().ok_or("Vault Locked")?;
     sealed_guard(&app, &hunt_id, password.as_deref())?;
     let path = PathBuf::from(&file_path);
@@ -744,7 +744,7 @@ pub fn add_hunt_evidence_bytes(
     file_bytes: Vec<u8>,
     description: String,
     password: Option<String>,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let key = state.get_key().ok_or("Vault Locked")?;
     sealed_guard(&app, &hunt_id, password.as_deref())?;
     let hunt_dir = resolve_hunt_dir(&app, &hunt_id)?;
@@ -991,7 +991,7 @@ mod tests {
     #[test]
     fn sealed_evidence_add_allowed_with_correct_password() {
         let (dir, key, salt, verifier) = sealed_hunt_for_add("correct-add-password");
-        add_hunt_evidence_bytes_at(
+        let status = add_hunt_evidence_bytes_at(
             &dir,
             &key,
             "photo.jpg",
@@ -1002,6 +1002,7 @@ mod tests {
             Some(&verifier),
         )
         .unwrap();
+        assert_eq!(status, "added");
         let entries: Vec<_> = fs::read_dir(dir.join("evidence"))
             .unwrap()
             .filter_map(|e| e.ok())
@@ -1034,31 +1035,37 @@ mod tests {
     fn sealed_evidence_duplicate_hash_does_not_overwrite() {
         let (dir, key, salt, verifier) = sealed_hunt_for_add("correct-add-password");
         let payload = b"identical sealed exhibit bytes";
-        add_hunt_evidence_bytes_at(
-            &dir,
-            &key,
-            "photo.jpg",
-            payload,
-            "first add",
-            Some("correct-add-password"),
-            Some(&salt),
-            Some(&verifier),
-        )
-        .unwrap();
+        assert_eq!(
+            add_hunt_evidence_bytes_at(
+                &dir,
+                &key,
+                "photo.jpg",
+                payload,
+                "first add",
+                Some("correct-add-password"),
+                Some(&salt),
+                Some(&verifier),
+            )
+            .unwrap(),
+            "added"
+        );
         let enc = only_enc_file(&dir);
         let before = fs::read(&enc).unwrap();
         assert!(!before.is_empty());
-        add_hunt_evidence_bytes_at(
-            &dir,
-            &key,
-            "photo-copy.jpg",
-            payload,
-            "second add of the same bytes",
-            Some("correct-add-password"),
-            Some(&salt),
-            Some(&verifier),
-        )
-        .unwrap();
+        assert_eq!(
+            add_hunt_evidence_bytes_at(
+                &dir,
+                &key,
+                "photo-copy.jpg",
+                payload,
+                "second add of the same bytes",
+                Some("correct-add-password"),
+                Some(&salt),
+                Some(&verifier),
+            )
+            .unwrap(),
+            "already_present"
+        );
         assert_eq!(
             fs::read(&enc).unwrap(),
             before,
@@ -1077,10 +1084,16 @@ mod tests {
         let salt = crypto::generate_salt();
         let key = crypto::derive_key("unsealed-add-password", &salt).unwrap();
         let payload = b"same unsealed exhibit twice";
-        add_hunt_evidence_bytes_at(&dir, &key, "a.bin", payload, "one", None, None, None).unwrap();
+        assert_eq!(
+            add_hunt_evidence_bytes_at(&dir, &key, "a.bin", payload, "one", None, None, None).unwrap(),
+            "added"
+        );
         let enc = only_enc_file(&dir);
         let before = fs::read(&enc).unwrap();
-        add_hunt_evidence_bytes_at(&dir, &key, "b.bin", payload, "two", None, None, None).unwrap();
+        assert_eq!(
+            add_hunt_evidence_bytes_at(&dir, &key, "b.bin", payload, "two", None, None, None).unwrap(),
+            "already_present"
+        );
         assert_eq!(fs::read(&enc).unwrap(), before);
         assert_eq!(evidence_row_count(&dir), 1);
         let _ = fs::remove_dir_all(&dir);

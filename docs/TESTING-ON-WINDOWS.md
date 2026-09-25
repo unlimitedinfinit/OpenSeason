@@ -77,7 +77,7 @@ Work with fake names only (for example Jordan Example). Do not put real people, 
 - [ ] Older vault hunts appear as Confidential cases after unlock (same id).
 - [ ] Confidential tools (USAspending lookup, disclosure statement, `.osb` export) live on the case dashboard, not a second app home.
 - [ ] Adding evidence to a **sealed** Confidential case refuses without a password, refuses a wrong password, and accepts the correct password.
-- [ ] Adding the same exhibit file twice does not replace or delete the existing `.enc` (hash collision must be a no-op).
+- [ ] Adding the same exhibit file twice does not replace or delete the existing `.enc` (hash collision must be a no-op). The UI should say the sealed copy was not changed.
 - [ ] Convert to Confidential on a Standard case asks for the vault password again and then seals.
 
 ### Import / open

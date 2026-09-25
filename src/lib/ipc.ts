@@ -206,7 +206,25 @@ async function mockInvoke<T>(cmd: string, args: Record<string, unknown> = {}): P
       saveStore(store);
       return found as T;
     }
-    case "add_hunt_evidence_bytes":
+    case "add_hunt_evidence_bytes": {
+      const id = String(args.huntId || "");
+      const found = store.cases.find((c) => c.id === id);
+      if (found?.sealed_at && !String(args.password || "").length) {
+        throw "This case is sealed. Re-enter the vault password before adding evidence.";
+      }
+      const name = String(args.filename || "exhibit.bin");
+      store.artifacts[id] = store.artifacts[id] || [];
+      if (store.artifacts[id].some((a) => a.kind === "evidence" && a.name === name)) {
+        return "already_present" as T;
+      }
+      store.artifacts[id].push({
+        kind: "evidence",
+        name,
+        path: `vaults/${id}/evidence/${name}`,
+      });
+      saveStore(store);
+      return "added" as T;
+    }
     case "add_hunt_event":
     case "delete_hunt_event":
     case "add_hunt_party":

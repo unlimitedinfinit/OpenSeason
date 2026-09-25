@@ -153,7 +153,7 @@ fn copy_case_tree(from: &std::path::Path, to: &std::path::Path) -> Result<(), St
     Ok(())
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct CaseArtifact {
     pub kind: String,
     pub name: String,
@@ -161,38 +161,96 @@ pub struct CaseArtifact {
 }
 
 #[tauri::command]
-pub fn list_case_artifacts(case_id: String) -> Result<Vec<CaseArtifact>, String> {
+pub fn list_case_artifacts(app: AppHandle, case_id: String) -> Result<Vec<CaseArtifact>, String> {
     let dir = case_dir_from_id(&case_id)?;
-    if crate::seal::is_dir_sealed(&dir) {
+    let hunt = app
+        .path()
+        .app_local_data_dir()
+        .ok()
+        .map(|root| root.join("vaults").join(&case_id));
+    list_case_artifacts_at(&dir, hunt.as_deref())
+}
+
+pub fn list_case_artifacts_at(
+    documents_dir: &std::path::Path,
+    hunt_dir: Option<&std::path::Path>,
+) -> Result<Vec<CaseArtifact>, String> {
+    let mut out = Vec::new();
+    if !crate::seal::is_dir_sealed(documents_dir) {
+        for (kind, folder) in [
+            ("evidence", "evidence"),
+            ("draft", "drafts"),
+            ("export", "exports"),
+            ("filing", "filings"),
+            ("order", "orders"),
+        ] {
+            let root = documents_dir.join(folder);
+            if !root.is_dir() {
+                continue;
+            }
+            for entry in walkdir::WalkDir::new(&root).max_depth(4) {
+                let entry = entry.map_err(|e| e.to_string())?;
+                if !entry.file_type().is_file() {
+                    continue;
+                }
+                let name = entry.file_name().to_string_lossy().into_owned();
+                if name.starts_with('.') {
+                    continue;
+                }
+                out.push(CaseArtifact {
+                    kind: kind.to_string(),
+                    name,
+                    path: entry.path().to_string_lossy().into_owned(),
+                });
+            }
+        }
+    }
+    if let Some(hunt) = hunt_dir {
+        out.extend(vault_evidence_artifacts(hunt)?);
+    }
+    Ok(out)
+}
+
+fn vault_evidence_artifacts(hunt_dir: &std::path::Path) -> Result<Vec<CaseArtifact>, String> {
+    let db_path = hunt_dir.join("metadata.db");
+    if !db_path.is_file() {
         return Ok(Vec::new());
     }
+    let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
+    let mut stmt = match conn.prepare(
+        "SELECT description, file_path, sha256_hash FROM evidence ORDER BY created_at ASC",
+    ) {
+        Ok(stmt) => stmt,
+        Err(_) => return Ok(Vec::new()),
+    };
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0).unwrap_or_default(),
+                row.get::<_, String>(1).unwrap_or_default(),
+                row.get::<_, Option<String>>(2).unwrap_or(None),
+            ))
+        })
+        .map_err(|e| e.to_string())?;
     let mut out = Vec::new();
-    for (kind, folder) in [
-        ("evidence", "evidence"),
-        ("draft", "drafts"),
-        ("export", "exports"),
-        ("filing", "filings"),
-        ("order", "orders"),
-    ] {
-        let root = dir.join(folder);
-        if !root.is_dir() {
-            continue;
-        }
-        for entry in walkdir::WalkDir::new(&root).max_depth(4) {
-            let entry = entry.map_err(|e| e.to_string())?;
-            if !entry.file_type().is_file() {
-                continue;
-            }
-            let name = entry.file_name().to_string_lossy().into_owned();
-            if name.starts_with('.') {
-                continue;
-            }
-            out.push(CaseArtifact {
-                kind: kind.to_string(),
-                name,
-                path: entry.path().to_string_lossy().into_owned(),
-            });
-        }
+    for row in rows {
+        let (description, file_path, hash) = row.map_err(|e| e.to_string())?;
+        let name = if !description.trim().is_empty() {
+            description
+        } else if !file_path.trim().is_empty() {
+            file_path.clone()
+        } else {
+            "exhibit".to_string()
+        };
+        let path = hash
+            .filter(|h| crate::sandbox::is_hex_sha256(h))
+            .map(|h| hunt_dir.join("evidence").join(format!("{h}.enc")))
+            .unwrap_or_else(|| hunt_dir.join("evidence").join(&file_path));
+        out.push(CaseArtifact {
+            kind: "evidence".to_string(),
+            name,
+            path: path.to_string_lossy().into_owned(),
+        });
     }
     Ok(out)
 }
@@ -303,9 +361,35 @@ pub fn get_case(app: AppHandle, case_id: String) -> Result<CaseProfile, String> 
                 .ok()
             })
             .unwrap_or_else(|| "Confidential case".to_string());
+        if let Ok(dir) = case_dir_from_id(&case_id) {
+            return materialize_vault_case(&dir, &hunt, &case_id, &name);
+        }
         return Ok(hunt_as_profile(&case_id, &name));
     }
     Err("Case not found.".to_string())
+}
+
+pub fn materialize_vault_case(
+    documents_dir: &std::path::Path,
+    hunt_dir: &std::path::Path,
+    case_id: &str,
+    name: &str,
+) -> Result<CaseProfile, String> {
+    if documents_dir.join("case.json").is_file() {
+        return case_profile::load_case(documents_dir);
+    }
+    let mut profile = hunt_as_profile(case_id, name);
+    if crate::seal::is_dir_sealed(hunt_dir) {
+        let when = crate::seal::read_marker_sealed_at(hunt_dir)
+            .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
+        profile.sealed_at = Some(when);
+        fs::create_dir_all(documents_dir).map_err(|e| e.to_string())?;
+        case_profile::save_case(documents_dir, &profile)?;
+        return case_profile::load_case(documents_dir);
+    }
+    case_profile::ensure_case_layout(documents_dir)?;
+    case_profile::save_case(documents_dir, &profile)?;
+    case_profile::load_case(documents_dir)
 }
 
 /// Shared by the Tauri command and tests. Checks the on-disk seal marker.
@@ -391,4 +475,69 @@ pub fn sync_case_cmd(case_id: String, action: String) -> Result<SyncRefusal, Str
         }
     };
     sync::describe_sync_for_dir(&dir, action)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::HuntDatabase;
+
+    fn temp_dir(prefix: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("{prefix}-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn vault_only_hunt_evidence_appears_on_unified_case() {
+        let hunt = temp_dir("os-vault-art");
+        fs::create_dir_all(hunt.join("evidence")).unwrap();
+        let db = HuntDatabase::open(hunt.join("metadata.db")).unwrap();
+        db.conn
+            .execute(
+                "INSERT INTO evidence (description, file_path, encrypted_key_nonce, sha256_hash) VALUES (?1, ?2, ?3, ?4)",
+                rusqlite::params![
+                    "Invoice copy",
+                    "invoice.pdf",
+                    vec![0u8; 24],
+                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                ],
+            )
+            .unwrap();
+        let docs = temp_dir("os-docs-empty");
+        let items = list_case_artifacts_at(&docs, Some(&hunt)).unwrap();
+        assert!(
+            items.iter().any(|a| a.kind == "evidence" && a.name == "Invoice copy"),
+            "existing hunt exhibits must show on the unified case: {items:?}"
+        );
+        let _ = fs::remove_dir_all(&hunt);
+        let _ = fs::remove_dir_all(&docs);
+    }
+
+    #[test]
+    fn materialize_unsealed_vault_hunt_writes_case_json() {
+        let hunt = temp_dir("os-vault-open");
+        HuntDatabase::open(hunt.join("metadata.db")).unwrap();
+        let docs = temp_dir("os-docs-open").join("00000000-0000-4000-8000-000000000099");
+        let profile = materialize_vault_case(
+            &docs,
+            &hunt,
+            "00000000-0000-4000-8000-000000000099",
+            "Relator v. Sample Contractor",
+        )
+        .unwrap();
+        assert_eq!(profile.mode, crate::case_profile::CaseMode::Confidential);
+        assert!(profile.sealed_at.is_none());
+        assert!(docs.join("case.json").is_file());
+        let again = materialize_vault_case(
+            &docs,
+            &hunt,
+            "00000000-0000-4000-8000-000000000099",
+            "ignored",
+        )
+        .unwrap();
+        assert_eq!(again.title, "Relator v. Sample Contractor");
+        let _ = fs::remove_dir_all(&hunt);
+        let _ = fs::remove_dir_all(docs.parent().unwrap());
+    }
 }
