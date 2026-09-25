@@ -24,6 +24,15 @@ fn get_vault_root(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(vaults)
 }
 
+fn resolve_hunt_dir(app: &AppHandle, hunt_id: &str) -> Result<PathBuf, String> {
+    let vaults = get_vault_root(app)?;
+    crate::sandbox::resolve_id_under_root(&vaults, hunt_id)
+}
+
+fn hunt_db_path(app: &AppHandle, hunt_id: &str) -> Result<PathBuf, String> {
+    Ok(resolve_hunt_dir(app, hunt_id)?.join("metadata.db"))
+}
+
 #[tauri::command]
 pub fn save_disclosure_cmd(
     app: AppHandle,
@@ -32,8 +41,7 @@ pub fn save_disclosure_cmd(
     count: usize, // Ignored, kept for compatibility with Svelte invokes
     value: f64
 ) -> Result<String, String> {
-    let vaults_root = get_vault_root(&app)?;
-    let hunt_dir = vaults_root.join(&hunt_id);
+    let hunt_dir = resolve_hunt_dir(&app, &hunt_id)?;
     if !hunt_dir.exists() {
         return Err("Hunt not found".to_string());
     }
@@ -132,8 +140,7 @@ pub async fn verify_target_cmd(name: String) -> Result<Vec<AwardSummary>, String
 
 #[tauri::command]
 pub fn export_hunt_cmd(app: AppHandle, hunt_id: String, target_path: String) -> Result<String, String> {
-    let vaults_root = get_vault_root(&app)?;
-    let hunt_path = vaults_root.join(&hunt_id);
+    let hunt_path = resolve_hunt_dir(&app, &hunt_id)?;
 
     if !hunt_path.exists() {
         return Err("Hunt not found".to_string());
@@ -156,12 +163,20 @@ pub fn export_hunt_cmd(app: AppHandle, hunt_id: String, target_path: String) -> 
              }
         }
         
-        let sanitized_name = name.replace(" ", "_").replace("/", "-");
+        let sanitized_name = name.replace(" ", "_").replace("/", "-").replace("\\", "-");
+        if sanitized_name == crate::seal::SEAL_MARKER_NAME || sanitized_name == ".sealed" {
+            return Err("Export cannot write a file named .sealed.".to_string());
+        }
         let filename = format!("{}.osb", sanitized_name);
         download_dir.join(filename)
     } else {
         PathBuf::from(&target_path)
     };
+
+    crate::sandbox::assert_export_target_allowed(
+        &output_path,
+        &crate::case_profile::default_cases_root(),
+    )?;
 
     bundle::export_hunt(&hunt_path, &output_path).map_err(|e| e.to_string())?;
     
@@ -212,11 +227,16 @@ pub fn get_salt(app: AppHandle) -> Result<String, String> {
 
 #[tauri::command]
 pub fn unlock_vault(
+    app: AppHandle,
     password: String, 
     salt: String,
     state: State<'_, AppState>
 ) -> Result<bool, String> {
-    let session_key = crypto::derive_key(&password, &salt)?;
+    let root = app.path().app_local_data_dir()
+        .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
+    fs::create_dir_all(&root).map_err(|e| e.to_string())?;
+    let verifier_path = root.join("master_verifier.bin");
+    let session_key = crypto::unlock_vault_at(&password, &salt, &verifier_path)?;
     state.set_key(session_key);
     Ok(true)
 }
@@ -247,6 +267,9 @@ pub fn list_hunts(app: AppHandle) -> Result<Vec<HuntMetadata>, String> {
         let entry = entry.map_err(|e| e.to_string())?;
         if entry.path().is_dir() {
             let id = entry.file_name().into_string().unwrap_or_default();
+            if crate::sandbox::parse_record_id(&id).is_err() {
+                continue;
+            }
             let mut name = id.clone();
             
             // Try to read name from metadata.db if possible, or just use ID for now.
@@ -286,7 +309,7 @@ pub fn create_new_hunt(app: AppHandle, name: String, state: State<'_, AppState>)
 
     let uuid = Uuid::new_v4();
     let vaults_root = get_vault_root(&app)?;
-    let hunt_dir = vaults_root.join(uuid.to_string());
+    let hunt_dir = crate::sandbox::resolve_id_under_root(&vaults_root, &uuid.to_string())?;
 
     fs::create_dir_all(&hunt_dir.join("evidence"))
         .map_err(|e| format!("Failed to create dir: {}", e))?;
@@ -310,8 +333,7 @@ pub fn create_new_hunt(app: AppHandle, name: String, state: State<'_, AppState>)
 
 #[tauri::command]
 pub async fn update_hunt(app: AppHandle, hunt_id: String, name: String) -> Result<(), String> {
-    let vault_path = get_vault_root(&app)?;
-    let db_path = vault_path.join(&hunt_id).join("metadata.db");
+    let db_path = hunt_db_path(&app, &hunt_id)?;
 
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
     
@@ -326,12 +348,7 @@ pub async fn update_hunt(app: AppHandle, hunt_id: String, name: String) -> Resul
 #[tauri::command]
 pub async fn delete_hunt(app: AppHandle, hunt_id: String) -> Result<(), String> {
     let vault_path = get_vault_root(&app)?;
-    let hunt_path = vault_path.join(&hunt_id);
-
-    if hunt_path.exists() {
-        std::fs::remove_dir_all(hunt_path).map_err(|e| e.to_string())?;
-    }
-    
+    crate::sandbox::delete_id_under_root(&vault_path, &hunt_id)?;
     Ok(())
 }
 
@@ -363,8 +380,7 @@ pub struct SectionEntry {
 
 #[tauri::command]
 pub fn get_hunt_timeline(app: AppHandle, hunt_id: String) -> Result<Vec<EventEntry>, String> {
-    let vault_path = get_vault_root(&app)?;
-    let db_path = vault_path.join(&hunt_id).join("metadata.db");
+    let db_path = hunt_db_path(&app, &hunt_id)?;
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
 
     let mut stmt = conn.prepare("SELECT id, title, description, event_date, event_type FROM events ORDER BY event_date ASC")
@@ -396,8 +412,7 @@ pub fn add_hunt_event(
     event_date: String,
     event_type: String,
 ) -> Result<(), String> {
-    let vault_path = get_vault_root(&app)?;
-    let db_path = vault_path.join(&hunt_id).join("metadata.db");
+    let db_path = hunt_db_path(&app, &hunt_id)?;
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
 
     conn.execute(
@@ -409,8 +424,7 @@ pub fn add_hunt_event(
 
 #[tauri::command]
 pub fn delete_hunt_event(app: AppHandle, hunt_id: String, event_id: i64) -> Result<(), String> {
-    let vault_path = get_vault_root(&app)?;
-    let db_path = vault_path.join(&hunt_id).join("metadata.db");
+    let db_path = hunt_db_path(&app, &hunt_id)?;
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
 
     conn.execute("DELETE FROM events WHERE id = ?1", rusqlite::params![event_id])
@@ -420,8 +434,7 @@ pub fn delete_hunt_event(app: AppHandle, hunt_id: String, event_id: i64) -> Resu
 
 #[tauri::command]
 pub fn get_hunt_parties(app: AppHandle, hunt_id: String) -> Result<Vec<PartyEntry>, String> {
-    let vault_path = get_vault_root(&app)?;
-    let db_path = vault_path.join(&hunt_id).join("metadata.db");
+    let db_path = hunt_db_path(&app, &hunt_id)?;
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
 
     let mut stmt = conn.prepare("SELECT id, name, role, email, phone, notes FROM parties ORDER BY name ASC")
@@ -455,8 +468,7 @@ pub fn add_hunt_party(
     phone: String,
     notes: String,
 ) -> Result<(), String> {
-    let vault_path = get_vault_root(&app)?;
-    let db_path = vault_path.join(&hunt_id).join("metadata.db");
+    let db_path = hunt_db_path(&app, &hunt_id)?;
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
 
     conn.execute(
@@ -468,8 +480,7 @@ pub fn add_hunt_party(
 
 #[tauri::command]
 pub fn delete_hunt_party(app: AppHandle, hunt_id: String, party_id: i64) -> Result<(), String> {
-    let vault_path = get_vault_root(&app)?;
-    let db_path = vault_path.join(&hunt_id).join("metadata.db");
+    let db_path = hunt_db_path(&app, &hunt_id)?;
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
 
     conn.execute("DELETE FROM parties WHERE id = ?1", rusqlite::params![party_id])
@@ -479,8 +490,7 @@ pub fn delete_hunt_party(app: AppHandle, hunt_id: String, party_id: i64) -> Resu
 
 #[tauri::command]
 pub fn get_complaint_sections(app: AppHandle, hunt_id: String) -> Result<Vec<SectionEntry>, String> {
-    let vault_path = get_vault_root(&app)?;
-    let db_path = vault_path.join(&hunt_id).join("metadata.db");
+    let db_path = hunt_db_path(&app, &hunt_id)?;
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
 
     let mut stmt = conn.prepare("SELECT section_id, content FROM complaint_sections")
@@ -507,8 +517,7 @@ pub fn save_complaint_section(
     section_id: String,
     content: String,
 ) -> Result<(), String> {
-    let vault_path = get_vault_root(&app)?;
-    let db_path = vault_path.join(&hunt_id).join("metadata.db");
+    let db_path = hunt_db_path(&app, &hunt_id)?;
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
 
     conn.execute(
@@ -530,8 +539,7 @@ pub struct EvidenceEntry {
 
 #[tauri::command]
 pub fn get_hunt_evidence(app: AppHandle, hunt_id: String) -> Result<Vec<EvidenceEntry>, String> {
-    let vault_path = get_vault_root(&app)?;
-    let db_path = vault_path.join(&hunt_id).join("metadata.db");
+    let db_path = hunt_db_path(&app, &hunt_id)?;
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
 
     let mut stmt = conn.prepare("SELECT id, description, file_path, sha256_hash, created_at FROM evidence ORDER BY created_at ASC")
@@ -585,8 +593,7 @@ pub fn add_hunt_evidence(
     let (encrypted_bytes, nonce) = crypto::encrypt_data(&scrubbed_bytes, &key)?;
 
     // 6. Write encrypted file to vault directory
-    let vault_path = get_vault_root(&app)?;
-    let hunt_dir = vault_path.join(&hunt_id);
+    let hunt_dir = resolve_hunt_dir(&app, &hunt_id)?;
     let evidence_dir = hunt_dir.join("evidence");
     fs::create_dir_all(&evidence_dir).map_err(|e| e.to_string())?;
 
@@ -637,8 +644,7 @@ pub fn add_hunt_evidence_bytes(
     let (encrypted_bytes, nonce) = crypto::encrypt_data(&scrubbed_bytes, &key)?;
 
     // 5. Write encrypted file to vault directory
-    let vault_path = get_vault_root(&app)?;
-    let hunt_dir = vault_path.join(&hunt_id);
+    let hunt_dir = resolve_hunt_dir(&app, &hunt_id)?;
     let evidence_dir = hunt_dir.join("evidence");
     fs::create_dir_all(&evidence_dir).map_err(|e| e.to_string())?;
 
@@ -660,8 +666,7 @@ pub fn add_hunt_evidence_bytes(
 
 #[tauri::command]
 pub fn delete_hunt_evidence(app: AppHandle, hunt_id: String, evidence_id: i64) -> Result<(), String> {
-    let vault_path = get_vault_root(&app)?;
-    let hunt_dir = vault_path.join(&hunt_id);
+    let hunt_dir = resolve_hunt_dir(&app, &hunt_id)?;
     let db_path = hunt_dir.join("metadata.db");
     let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
 

@@ -2,6 +2,7 @@ pub mod crypto;
 pub mod commands;
 pub mod case_commands;
 pub mod case_profile;
+pub mod sandbox;
 pub mod court_rules;
 pub mod documents;
 pub mod seal;

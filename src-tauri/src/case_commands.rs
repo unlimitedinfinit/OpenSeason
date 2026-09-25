@@ -8,7 +8,6 @@ use crate::case_profile::{
     self, CaseMode, CaseProfile, ValidationReport, REVIEW_NOTICE,
 };
 use crate::crypto::AppState;
-use crate::db::HuntDatabase;
 use crate::documents::{self, ExportPaths};
 use crate::sync::{self, SyncAction, SyncRefusal};
 
@@ -16,8 +15,8 @@ fn cases_root() -> PathBuf {
     case_profile::default_cases_root()
 }
 
-fn case_dir_from_id(case_id: &str) -> PathBuf {
-    case_profile::resolve_case_dir(case_id)
+fn case_dir_from_id(case_id: &str) -> Result<PathBuf, String> {
+    crate::sandbox::resolve_id_under_root(&cases_root(), case_id)
 }
 
 #[tauri::command]
@@ -45,7 +44,7 @@ pub fn create_case(title: String, document_kind: String) -> Result<CaseProfile, 
     if title.trim().is_empty() {
         return Err("A case title is required.".to_string());
     }
-    let case_dir = root.join(&profile.id);
+    let case_dir = crate::sandbox::resolve_id_under_root(&root, &profile.id)?;
     case_profile::ensure_case_layout(&case_dir)?;
     case_profile::save_case(&case_dir, &profile)?;
     case_profile::load_case(&case_dir)
@@ -53,7 +52,7 @@ pub fn create_case(title: String, document_kind: String) -> Result<CaseProfile, 
 
 #[tauri::command]
 pub fn get_case(case_id: String) -> Result<CaseProfile, String> {
-    let dir = case_dir_from_id(&case_id);
+    let dir = case_dir_from_id(&case_id)?;
     case_profile::load_case(&dir)
 }
 
@@ -65,12 +64,12 @@ pub fn save_case_inner(dir: &std::path::Path, profile: CaseProfile) -> Result<Ca
 
 #[tauri::command]
 pub fn save_case(case_id: String, profile: CaseProfile) -> Result<CaseProfile, String> {
-    save_case_inner(&case_dir_from_id(&case_id), profile)
+    save_case_inner(&case_dir_from_id(&case_id)?, profile)
 }
 
 #[tauri::command]
 pub fn validate_case_cmd(case_id: String) -> Result<ValidationReport, String> {
-    let dir = case_dir_from_id(&case_id);
+    let dir = case_dir_from_id(&case_id)?;
     let profile = case_profile::load_case(&dir)?;
     Ok(case_profile::validate_case(&profile, Some(&dir)))
 }
@@ -84,7 +83,7 @@ pub struct ExportResult {
 
 #[tauri::command]
 pub fn export_notice_of_appeal_cmd(case_id: String) -> Result<ExportResult, String> {
-    let dir = case_dir_from_id(&case_id);
+    let dir = case_dir_from_id(&case_id)?;
     let profile = case_profile::load_case(&dir)?;
     let paths: ExportPaths = documents::export_notice_of_appeal(&dir, &profile, None)?;
     Ok(ExportResult {
@@ -99,52 +98,35 @@ pub fn convert_case_to_confidential(
     app: AppHandle,
     state: State<'_, AppState>,
     case_id: String,
+    password: String,
 ) -> Result<CaseProfile, String> {
-    let key = state
-        .get_key()
-        .ok_or_else(|| "Unlock Confidential mode first. The Legal Airlock and vault password are required before a case can be sealed.".to_string())?;
-
-    let dir = case_dir_from_id(&case_id);
-    let mut profile = case_profile::load_case(&dir)?;
-    if crate::seal::is_dir_sealed(&dir) {
-        return Err("This case is already confidential.".to_string());
+    if state.get_key().is_none() {
+        return Err("Unlock Confidential mode first. The Legal Airlock and vault password are required before a case can be sealed.".to_string());
     }
-    profile.convert_to_confidential()?;
-    let sealed_at = profile
-        .sealed_at
-        .clone()
-        .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
-    crate::seal::write_seal_marker(&dir, &profile.id, &sealed_at)?;
-    case_profile::save_case(&dir, &profile)?;
 
-    let vaults = app
+    let app_root = app
         .path()
         .app_local_data_dir()
-        .map_err(|e| format!("Failed to resolve app data dir: {}", e))?
-        .join("vaults");
+        .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
+    let salt_path = app_root.join("master_salt.bin");
+    let verifier_path = app_root.join("master_verifier.bin");
+    if !verifier_path.exists() {
+        return Err("Unlock Confidential mode first so the vault password can be checked. Plaintext will not be deleted until that check passes.".to_string());
+    }
+    let salt = fs::read_to_string(&salt_path).map_err(|e| format!("Could not read vault salt: {}", e))?;
+    let verifier = fs::read(&verifier_path).map_err(|e| format!("Could not read password verifier: {}", e))?;
+
+    let dir = case_dir_from_id(&case_id)?;
+    let vaults = app_root.join("vaults");
     fs::create_dir_all(&vaults).map_err(|e| e.to_string())?;
-    let hunt_dir = vaults.join(&profile.id);
-    crate::seal::copy_dir_recursive(&dir, &hunt_dir)?;
-    crate::seal::write_seal_marker(&hunt_dir, &profile.id, &sealed_at)?;
-    crate::seal::encrypt_vault_payloads(&hunt_dir, &key)?;
+    let hunt_dir = crate::sandbox::resolve_id_under_root(&vaults, &case_id)?;
 
-    let db_path = hunt_dir.join("metadata.db");
-    let db = HuntDatabase::open(&db_path).map_err(|e| e.to_string())?;
-    db.conn
-        .execute(
-            "INSERT INTO info (name, created_at, status, mode) VALUES (?1, ?2, 'Sealed', 'confidential')",
-            rusqlite::params![profile.title, profile.created_at],
-        )
-        .map_err(|e| e.to_string())?;
-
-    crate::seal::write_stripped_stub(&dir, &profile)?;
-
-    Ok(profile)
+    crate::seal::seal_standard_case_with_password(&dir, &hunt_dir, &password, &salt, &verifier)
 }
 
 #[tauri::command]
 pub fn sync_case_cmd(case_id: String, action: String) -> Result<SyncRefusal, String> {
-    let dir = case_dir_from_id(&case_id);
+    let dir = case_dir_from_id(&case_id)?;
     let action = match action.as_str() {
         "backup" => SyncAction::Backup,
         "publish" => SyncAction::Publish,

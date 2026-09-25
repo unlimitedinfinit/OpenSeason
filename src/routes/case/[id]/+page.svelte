@@ -13,6 +13,7 @@
   let report = $state<ValidationReport | null>(null);
   let syncResult = $state<SyncRefusal | null>(null);
   let busy = $state(false);
+  let sealPassword = $state("");
 
   onMount(load);
 
@@ -115,13 +116,18 @@
   }
 
   async function seal() {
-    if (!confirm("Convert this case to Confidential mode? This cannot be reversed by editing case.json. Sync and cloud backup will be refused. Unlock Confidential mode first. The Documents folder will keep only a case id pointer. metadata.db and court-rules in the vault stay readable.")) {
+    if (!sealPassword) {
+      error = "Re-enter the Confidential vault password to seal. A wrong password is refused so files are not encrypted under an unknown key.";
+      return;
+    }
+    if (!confirm("Convert this case to Confidential mode? This cannot be reversed by editing case.json. Sync and cloud backup will be refused. Unlock Confidential mode first, then type the vault password again here. The Documents folder keeps a pointer (id, mode, and empty profile fields). metadata.db and court-rules in the vault stay readable. This build has no in-app reader for sealed files.")) {
       return;
     }
     busy = true;
     try {
-      await invoke("convert_case_to_confidential", { caseId });
-      status = "Case sealed. Open it from Confidential (Open Season).";
+      await invoke("convert_case_to_confidential", { caseId, password: sealPassword });
+      sealPassword = "";
+      status = "Case sealed. The vault copy is encrypted. This build has no in-app sealed-file reader yet.";
       goto("/confidential");
     } catch (e) {
       error = String(e);
@@ -250,11 +256,21 @@
       <p class="text-sm text-destructive">{error}</p>
     {/if}
 
-    <div class="flex flex-wrap gap-2">
+    <div class="flex flex-wrap gap-2 items-end">
       <button onclick={save} disabled={busy} class="bg-secondary text-secondary-foreground px-4 py-2 rounded-md text-sm">Save profile</button>
       <button onclick={validate} disabled={busy} class="border border-border px-4 py-2 rounded-md text-sm">Validate</button>
       <button onclick={exportDoc} disabled={busy} class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm">Export Word and PDF</button>
       <button onclick={() => trySync("backup")} class="border border-border px-4 py-2 rounded-md text-sm">Account backup (stub)</button>
+      <label class="block space-y-1">
+        <span class="text-xs text-muted-foreground">Re-enter vault password to convert</span>
+        <input
+          type="password"
+          bind:value={sealPassword}
+          class="h-10 rounded-md border border-input bg-background px-3 text-sm"
+          placeholder="Vault password"
+          autocomplete="off"
+        />
+      </label>
       <button onclick={seal} disabled={busy} class="border border-red-500/40 text-red-300 px-4 py-2 rounded-md text-sm">Convert to Confidential</button>
     </div>
 

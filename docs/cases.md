@@ -32,9 +32,10 @@ This is the existing Open Season whistleblower vault.
 
 - Legal Airlock is required to open the vault in the desktop app.
 - Session-only master password derives the encryption key.
-- A desktop seal copies the folder into app data `vaults/{id}/`, then encrypts evidence, `case.json`, orders, filings, drafts, and exports (nonce is stored on the file). `metadata.db` and `court-rules/` are left readable. That is a real limit, not full-disk encryption.
+- A desktop seal copies the folder into app data `vaults/{id}/`, then walks the whole tree (nested folders such as `evidence/photos/` and root-level user files included) and encrypts those files (nonce is stored on the file). `metadata.db` and `court-rules/` are left readable. That is a real limit, not full-disk encryption.
+- Unlock stores a password verifier next to the salt. A wrong password is refused at unlock. Convert to Confidential asks for the password again and checks that verifier before any plaintext is deleted.
 - CLI `case seal` writes a `.sealed` marker and updates `case.json`. It does **not** encrypt files. Use the desktop vault path when you need encryption.
-- The Documents copy is replaced with a pointer: case id and mode only. Title, court, and docket are not kept there.
+- The Documents copy becomes a pointer folder: `.sealed`, `SEALED.txt`, empty layout folders, and a `case.json` that still has schema, id, mode, document kind, and sealed time. Title, court, docket, parties, and notice text are cleared. It is not only the case id and mode. This build has no in-app reader for sealed files.
 - Sync, cloud backup, and publish are refused in Rust if `.sealed` exists, even if someone edits `case.json` back to `standard`.
 
 A standard case can be converted to Confidential. That writes `.sealed` (not only fields inside `case.json`). Confidential does not convert back. If you need a copy, use a deliberate local export (Word, PDF, or `.osb`).

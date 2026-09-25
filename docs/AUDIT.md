@@ -11,15 +11,15 @@ Frontend: **Svelte 5 + TypeScript + Tailwind CSS**, served by SvelteKit in SPA m
 | Area | Grade | What we found |
 |---|---|---|
 | Legal Airlock | **Works** | Full-screen gate. User must type `I UNDERSTAND`. Now shown only for Confidential mode. |
-| Vault password / Argon2id / session key | **Works** | Salt on disk, key in memory, `zeroize` on drop. Password is not stored. Unlock does not verify the password against ciphertext, so a wrong password still "unlocks" and later file decrypt will fail. |
+| Vault password / Argon2id / session key | **Works** | Salt on disk, encrypted verifier next to it, key in memory, `zeroize` on drop. Password is not stored. Unlock rejects a wrong password. Seal asks for the password again and checks the same verifier before any plaintext is deleted. |
 | Hunt create / list / delete | **Partial** | Folders under the app data `vaults/` directory work. `create_new_hunt` used to create only an `info` table, so timeline, parties, evidence, and complaint queries could fail on a brand-new hunt. This run now initializes the full SQLite schema. |
-| Evidence encrypt + EXIF strip | **Works** | Hunt uploads strip JPEG/PNG metadata, hash, and encrypt with XChaCha20Poly1305. Nonce is stored in SQLite for those uploads. Desktop seal now prefixes the nonce on the ciphertext, decrypt-verifies, then deletes plaintext. Drag-and-drop in the UI still opens a file picker. Demo mode fakes evidence. `metadata.db` itself is still plaintext. |
+| Evidence encrypt + EXIF strip | **Works** | Hunt uploads strip JPEG/PNG metadata, hash, and encrypt with XChaCha20Poly1305. Nonce is stored in SQLite for those uploads. Desktop seal walks the whole tree (nested evidence and root-level user files), prefixes the nonce on the ciphertext, decrypt-verifies, then deletes plaintext. Drag-and-drop in the UI still opens a file picker. Demo mode fakes evidence. `metadata.db` itself is still plaintext. |
 | Timeline / parties / complaint sections | **Partial** | IPC and UI exist. They depend on SQLite tables that were not created for new hunts until this run. No tests. |
 | HuntWizard + USAspending | **Partial** | Real HTTP POST to `api.usaspending.gov`. The dashboard "Report" button still passes a hardcoded dollar value in one path. The live test prints results and does not assert. Network is optional intel, not case upload. |
 | Typst disclosure PDF | **Partial** | Compiler is real. Template is a qui tam disclosure statement. It hard-codes Arial, so Linux hosts without Arial can fail. Dashboard sometimes used mock totals. |
 | `.osb` import/export | **Works** | Zip write/read with zip-slip protection. Import names the folder from the file stem, not the original hunt id. |
 | SQLite metadata encryption | **Missing** | `metadata.db` is plaintext. Roadmap already notes this. |
-| Tests | **Partial** | Case-mode, on-disk seal bypass, evidence round-trip, and Notice of Appeal tests are in `cargo test`. The live USAspending test is `#[ignore]` because it hits the network and did not assert. |
+| Tests | **Partial** | Case-mode, on-disk seal bypass, evidence round-trip, password-verifier, path sandbox, nested encryption, and Notice of Appeal tests are in `cargo test`. The live USAspending test is `#[ignore]` because it hits the network. |
 | Windows / macOS bundles | **Could not inspect** | `tauri.conf.json` has `targets: all`. This environment did not run `tauri build` or produce `.msi` / `.dmg`. |
 | Telemetry | **Works (absent)** | No analytics SDK. USAspending is the only outbound HTTP client. |
 
@@ -71,3 +71,17 @@ Reasons:
 - Home screen that treats Confidential (Open Season) as one front door, not the only app.
 
 See [cases.md](cases.md) for the folder contract and [architecture.md](architecture.md) for how the pieces connect.
+
+## Known gaps before release
+
+These are real limits. They are not fixed in this draft.
+
+- Deleting `.sealed` locally drops the marker. The one-way rule depends on that file remaining on disk.
+- CLI `case seal` writes the marker and does not encrypt files.
+- `metadata.db` (including the case title) and `court-rules/` stay plaintext after a desktop seal.
+- There is no in-app sealed-file reader yet. Unlocking the vault does not decrypt the Documents pointer folder. There is also no format tag that distinguishes older `.enc` files (nonce in SQLite) from sealed files (nonce prefixed on the file).
+- A half-finished seal cannot be retried cleanly. If encrypt fails after the copy starts, the vault folder may be left mid-write.
+- There are no end-to-end UI tests for Convert to Confidential or for aborting that flow.
+- The PDF review-notice test checks an appended PDF comment, not glyphs drawn on the page.
+- Drag-and-drop still opens a file picker. Platform installers were not built here.
+- JustLegalAid source was not readable, so its UI framework and sync client remain unverified.

@@ -45,15 +45,12 @@ pub fn import_hunt(osb_path: &Path, vaults_root: &Path) -> Result<String, String
     // Determine hunt name from zip root or filename?
     // Let's use the filename of the OSB as the hunt name if possible, or check for metadata.
     // For MVP, use the OSB filename stem (e.g. "operation_x.osb" -> "operation_x").
-    let hunt_name = osb_path.file_stem()
-        .and_then(|s| s.to_str())
-        .ok_or("Invalid OSB filename")?
-        .to_string();
-
-    let target_dir = vaults_root.join(&hunt_name);
+    // Folder id must be a UUID so later hunt commands stay inside the vault root.
+    let hunt_id = uuid::Uuid::new_v4().to_string();
+    let target_dir = crate::sandbox::resolve_id_under_root(vaults_root, &hunt_id)?;
 
     if target_dir.exists() {
-        return Err(format!("Hunt '{}' already exists in vault.", hunt_name));
+        return Err(format!("Hunt '{}' already exists in vault.", hunt_id));
     }
 
     // Extract
@@ -79,5 +76,5 @@ pub fn import_hunt(osb_path: &Path, vaults_root: &Path) -> Result<String, String
         }
     }
 
-    Ok(hunt_name)
+    Ok(hunt_id)
 }

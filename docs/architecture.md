@@ -38,7 +38,7 @@ Confidential        -->  sync/backup/publish refused if .sealed exists
 
 The UI is not the security boundary. `sync::request_sync_for_dir` checks the `.sealed` file first, then `case.json`. `save_case` refuses an unseal payload when that marker is present.
 
-Desktop seal encrypts evidence, `case.json`, orders, filings, drafts, and exports in the vault copy. `metadata.db` and `court-rules/` stay readable. CLI `case seal` only writes the marker.
+Desktop seal checks the vault password against a verifier, then encrypts the whole vault tree (nested folders and root-level user files included). `metadata.db` and `court-rules/` stay readable. CLI `case seal` only writes the marker. Hunt and case command ids must be UUIDs; export will not write inside the cases root or to a file named `.sealed`.
 
 ## Data flow: Notice of Appeal
 
@@ -51,7 +51,7 @@ Desktop seal encrypts evidence, `case.json`, orders, filings, drafts, and export
 ## Data flow: Confidential vault (unchanged core)
 
 1. User passes the Legal Airlock and unlocks with a master password.
-2. Argon2id derives a 32-byte session key. The password is not stored.
+2. Argon2id derives a 32-byte session key. An encrypted verifier next to `master_salt.bin` rejects a wrong password. The password itself is not stored.
 3. Evidence is scrubbed, hashed, encrypted, and indexed in `metadata.db`.
 4. Disclosure PDFs and `.osb` bundles stay on disk.
 
@@ -62,6 +62,7 @@ Desktop seal encrypts evidence, `case.json`, orders, filings, drafts, and export
 | Standard case | `Documents/JustLegal/Cases/{id}/` |
 | Confidential hunt | App local data `vaults/{id}/` |
 | Vault salt | App local data `master_salt.bin` |
+| Password verifier | App local data `master_verifier.bin` |
 
 Windows, macOS, and Linux resolve those roots through the `dirs` crate and Tauri path APIs. Paths are not hard-coded to one drive letter.
 

@@ -7,7 +7,7 @@ The older Open Season whistleblower vault is still here. It is now **Confidentia
 ## What it is
 
 - **Standard cases**: a portable folder under `Documents/JustLegal/Cases/{caseId}/` with a fill-once `case.json` profile.
-- **Confidential cases**: Legal Airlock plus a local vault. After a desktop seal, evidence, `case.json`, orders, filings, drafts, and exports in the vault copy are encrypted. `metadata.db` and `court-rules/` stay readable. Sync is refused. The Documents folder keeps a pointer (case id) only. CLI `case seal` writes a `.sealed` marker so sync is refused, but does not encrypt files.
+- **Confidential cases**: Legal Airlock plus a local vault. Unlock checks a password verifier stored next to the salt. After a desktop seal (password typed again), the vault copy encrypts the whole tree, including nested folders. `metadata.db` and `court-rules/` stay readable. Sync is refused. The Documents folder keeps a pointer `case.json` (id, mode, empty profile fields). This build has no in-app reader for sealed files. CLI `case seal` writes a `.sealed` marker so sync is refused, but does not encrypt files.
 - **Notice of Appeal**: the first finished document. Caption and signature come from the profile. The body is the user's own text. Export is Word (`.docx`) and PDF.
 - **Agent interface**: `AGENTS.md` plus the `openseason` command-line tool.
 

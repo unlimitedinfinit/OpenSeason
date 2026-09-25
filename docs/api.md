@@ -20,7 +20,7 @@ Creates the folder layout and a `case.json`. Mode is standard.
 
 ### `get_case` / `save_case`
 
-Read or write `case.json` by case id (or a full folder path).
+Read or write `case.json` by case id. Hunt and case ids must be UUID text. Absolute paths and `../` ids are refused.
 
 `save_case` checks the on-disk `.sealed` marker, not only the incoming payload. A write that tries `{ "mode": "standard", "sealed_at": null }` on a sealed folder is rejected. Editing `case.json` by hand does not remove `.sealed`.
 
@@ -34,7 +34,11 @@ Validates, then writes `.docx` and `.pdf` under `exports/`. Fails if the case is
 
 ### `convert_case_to_confidential`
 
-Requires an unlocked vault. Writes `.sealed` first, copies the folder into `vaults/{id}/`, encrypts evidence plus `case.json`, orders, filings, drafts, and exports (nonce prefixed on each file, decrypt-verified before plaintext is deleted). `metadata.db` and `court-rules/` stay readable. The Documents folder is replaced with a pointer that has the case id but not the title, court, or docket. CLI `case seal` only writes the marker. Cannot be reversed by editing `case.json`.
+Arguments: `{ "caseId": "<uuid>", "password": "<vault password>" }`
+
+Requires an unlocked vault and a stored password verifier. The password is typed again and checked before any copy, encrypt, or delete. Then writes `.sealed`, copies the folder into `vaults/{id}/`, and encrypts the whole tree except `metadata.db` and `court-rules/` (nonce prefixed on each file, decrypt-verified before plaintext is deleted). The Documents folder is replaced with a pointer `case.json` (id, mode, and empty profile fields). This build has no in-app sealed-file reader. CLI `case seal` only writes the marker. Cannot be reversed by editing `case.json`.
+
+Hunt export refuses a target inside the cases root or a file named `.sealed`.
 
 ### `sync_case_cmd`
 

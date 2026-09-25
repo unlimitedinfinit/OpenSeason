@@ -7,8 +7,13 @@ use chacha20poly1305::{
     XChaCha20Poly1305, XNonce, Key
 };
 use rand::RngCore;
+use std::fs;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use zeroize::{Zeroize, ZeroizeOnDrop};
+
+/// Known plaintext sealed with the derived key and stored next to the salt.
+pub const PASSWORD_VERIFIER_MAGIC: &[u8] = b"OpenSeason-password-verifier-v1";
 
 #[derive(Clone, Zeroize, ZeroizeOnDrop)]
 pub struct SessionKey(pub [u8; 32]);
@@ -61,6 +66,58 @@ pub fn derive_key(password: &str, salt_str: &str) -> Result<SessionKey, String> 
     ).map_err(|e| e.to_string())?;
 
     Ok(SessionKey(output_key_material))
+}
+
+pub fn create_password_verifier(key: &SessionKey) -> Result<Vec<u8>, String> {
+    encrypt_blob(PASSWORD_VERIFIER_MAGIC, key)
+}
+
+pub fn verify_password_key(key: &SessionKey, verifier_blob: &[u8]) -> Result<(), String> {
+    let plain = decrypt_blob(verifier_blob, key).map_err(|_| "Wrong password.".to_string())?;
+    if plain.as_slice() != PASSWORD_VERIFIER_MAGIC {
+        return Err("Wrong password.".to_string());
+    }
+    Ok(())
+}
+
+/// Unlock: reject a wrong password when a verifier exists. First unlock writes one.
+pub fn unlock_vault_at(
+    password: &str,
+    salt: &str,
+    verifier_path: &Path,
+) -> Result<SessionKey, String> {
+    if password.is_empty() {
+        return Err("Password required.".to_string());
+    }
+    let key = derive_key(password, salt)?;
+    if verifier_path.exists() {
+        let blob = fs::read(verifier_path).map_err(|e| e.to_string())?;
+        verify_password_key(&key, &blob)?;
+    } else {
+        if let Some(parent) = verifier_path.parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        let blob = create_password_verifier(&key)?;
+        fs::write(verifier_path, blob).map_err(|e| e.to_string())?;
+    }
+    Ok(key)
+}
+
+/// Seal-time check. The verifier must already exist. Never call this after deleting plaintext.
+pub fn confirm_password_for_seal(
+    password: &str,
+    salt: &str,
+    verifier: &[u8],
+) -> Result<SessionKey, String> {
+    if password.is_empty() {
+        return Err("Re-enter the vault password to seal. Plaintext is not deleted until the password matches.".to_string());
+    }
+    if verifier.is_empty() {
+        return Err("No password verifier on disk. Unlock the vault once to set the password before sealing.".to_string());
+    }
+    let key = derive_key(password, salt)?;
+    verify_password_key(&key, verifier)?;
+    Ok(key)
 }
 
 pub const NONCE_LEN: usize = 24;
@@ -226,5 +283,38 @@ mod tests {
         assert_ne!(&blob[NONCE_LEN..], plain.as_slice());
         let out = decrypt_blob(&blob, &key).unwrap();
         assert_eq!(out, plain);
+    }
+
+    #[test]
+    fn wrong_password_rejected_at_unlock() {
+        let dir = std::env::temp_dir().join(format!("os-unlock-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let salt = generate_salt();
+        let verifier_path = dir.join("master_verifier.bin");
+        unlock_vault_at("correct-horse-battery", &salt, &verifier_path).unwrap();
+        assert!(verifier_path.exists());
+
+        let err = match unlock_vault_at("wrong-password-typed", &salt, &verifier_path) {
+            Ok(_) => panic!("wrong password must not unlock"),
+            Err(e) => e,
+        };
+        assert!(
+            err.to_lowercase().contains("wrong password"),
+            "wrong password must be rejected at unlock, got {err}"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn first_unlock_writes_verifier() {
+        let dir = std::env::temp_dir().join(format!("os-unlock-first-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let salt = generate_salt();
+        let verifier_path = dir.join("master_verifier.bin");
+        assert!(!verifier_path.exists());
+        unlock_vault_at("first-time-password", &salt, &verifier_path).unwrap();
+        assert!(verifier_path.exists());
+        unlock_vault_at("first-time-password", &salt, &verifier_path).unwrap();
+        let _ = fs::remove_dir_all(&dir);
     }
 }
