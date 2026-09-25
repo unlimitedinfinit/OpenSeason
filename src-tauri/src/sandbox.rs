@@ -1,4 +1,5 @@
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 use uuid::Uuid;
@@ -108,15 +109,61 @@ fn resolved_is_under_or_equal(root: &Path, target: &Path) -> bool {
     resolved == root || resolved.starts_with(root)
 }
 
+pub fn is_drive_relative_name(name: &str) -> bool {
+    let bytes = name.as_bytes();
+    bytes.len() >= 2
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && bytes.get(2) != Some(&b'/')
+        && bytes.get(2) != Some(&b'\\')
+}
+
+pub fn reject_unsafe_export_form(target: &Path) -> Result<(), String> {
+    if target.as_os_str().is_empty() {
+        return Err("A target path is required.".to_string());
+    }
+    let raw = target.to_string_lossy();
+    if raw.starts_with("\\\\") || raw.starts_with("//") {
+        return Err("UNC export targets are not allowed.".to_string());
+    }
+    if is_drive_relative_name(&raw) {
+        return Err("Drive-relative export targets are not allowed.".to_string());
+    }
+    if !target.is_absolute() {
+        return Err("Export target must be an absolute path.".to_string());
+    }
+    if let Ok(meta) = fs::symlink_metadata(target) {
+        if meta.file_type().is_symlink() {
+            return Err("Export cannot write through a symlink.".to_string());
+        }
+    }
+    Ok(())
+}
+
+pub fn sanitize_download_stem(name: &str) -> Result<String, String> {
+    let mut s = name.replace('\\', "-").replace('/', "-");
+    s = s.replace("..", "-");
+    s = s.replace('\0', "");
+    s = s.trim().trim_matches('.').to_string();
+    if s.is_empty() {
+        s = "export".to_string();
+    }
+    if is_reserved_marker_name(&s) || is_reserved_marker_name(&format!(".{}", s)) {
+        return Err("Refusing to write a file named .sealed.".to_string());
+    }
+    if is_drive_relative_name(&s) {
+        return Err("Drive-relative download names are not allowed.".to_string());
+    }
+    Ok(s)
+}
+
 /// Refuse writes that can clobber keys, the seal marker, or a sealed vault copy.
 pub fn assert_external_write(
     target: &Path,
     forbidden_roots: &[&Path],
     allow_overwrite: bool,
 ) -> Result<PathBuf, String> {
-    if target.as_os_str().is_empty() {
-        return Err("A target path is required.".to_string());
-    }
+    reject_unsafe_export_form(target)?;
     let name = target_file_name(target);
     if is_reserved_marker_name(&name) {
         return Err("Refusing to write a file named .sealed.".to_string());
@@ -145,6 +192,87 @@ pub fn assert_external_write(
     }
 
     Ok(resolved)
+}
+
+pub fn create_new_file(path: &Path) -> Result<fs::File, String> {
+    OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|e| format!("Could not create {}: {}", path.display(), e))
+}
+
+fn sibling_with_suffix(desired: &Path, n: u32) -> Result<PathBuf, String> {
+    let parent = desired
+        .parent()
+        .ok_or_else(|| "Export target has no parent folder.".to_string())?;
+    let stem = desired
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("export");
+    let ext = desired
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("bin");
+    if n == 0 {
+        Ok(desired.to_path_buf())
+    } else {
+        Ok(parent.join(format!("{}-{}.{}", stem, n, ext)))
+    }
+}
+
+/// Allocate a unique path and create it with O_EXCL so exists-then-create cannot race.
+pub fn prepare_export_file(
+    desired: &Path,
+    cases_root: &Path,
+    app_data_root: &Path,
+) -> Result<(fs::File, PathBuf), String> {
+    reject_unsafe_export_form(desired)?;
+    for n in 0..1000 {
+        let candidate = sibling_with_suffix(desired, n)?;
+        match assert_export_target_allowed(&candidate, cases_root, app_data_root) {
+            Err(err) if err.to_lowercase().contains("overwrite") => continue,
+            Err(err) => return Err(err),
+            Ok(_) => match create_new_file(&candidate) {
+                Ok(file) => return Ok((file, candidate)),
+                Err(err) if err.to_lowercase().contains("already") || err.contains("exists") => {
+                    continue;
+                }
+                Err(err) => {
+                    if let Err(io) = OpenOptions::new().write(true).create_new(true).open(&candidate)
+                    {
+                        if io.kind() == ErrorKind::AlreadyExists {
+                            continue;
+                        }
+                    }
+                    return Err(err);
+                }
+            },
+        }
+    }
+    Err("Could not allocate a unique export file name.".to_string())
+}
+
+pub fn require_password_if_sealed(
+    hunt_dir: &Path,
+    password: Option<&str>,
+    salt: Option<&str>,
+    verifier: Option<&[u8]>,
+) -> Result<(), String> {
+    if !seal::is_dir_sealed(hunt_dir) {
+        return Ok(());
+    }
+    let password = password.ok_or_else(|| {
+        "This hunt is sealed. Re-enter the vault password before changing or deleting it.".to_string()
+    })?;
+    let salt = salt.ok_or_else(|| {
+        "Cannot verify the vault password (salt missing). Sealed hunt was not changed.".to_string()
+    })?;
+    let verifier = verifier.ok_or_else(|| {
+        "Cannot verify the vault password (verifier missing). Sealed hunt was not changed.".to_string()
+    })?;
+    crypto::confirm_password_for_seal(password, salt, verifier)?;
+    Ok(())
 }
 
 pub fn assert_export_target_allowed(
@@ -448,6 +576,16 @@ mod tests {
             "wrong password must not delete sealed vault: {wrong}"
         );
         assert!(hunt.join("keep.enc").exists());
+
+        delete_hunt_checked(
+            &vaults,
+            &id,
+            Some("correct-delete-password"),
+            Some(&salt),
+            Some(&verifier),
+        )
+        .unwrap();
+        assert!(!hunt.exists(), "correct password must delete the sealed vault");
         let _ = fs::remove_dir_all(&vaults);
     }
 
@@ -478,5 +616,70 @@ mod tests {
         assert!(sealed.join("keep.enc").exists());
         assert!(!open.exists());
         let _ = fs::remove_dir_all(&vaults);
+    }
+
+    #[test]
+    fn export_refuses_app_data_new_file() {
+        let tmp = temp_dir();
+        let cases = tmp.join("cases");
+        let app_data = tmp.join("appdata");
+        fs::create_dir_all(&cases).unwrap();
+        fs::create_dir_all(&app_data).unwrap();
+        let brand_new = app_data.join("brand-new.osb");
+        assert!(!brand_new.exists());
+        let err = assert_export_target_allowed(&brand_new, &cases, &app_data).unwrap_err();
+        assert!(
+            err.to_lowercase().contains("app data") || err.to_lowercase().contains("cases"),
+            "new file under app data must be refused: {err}"
+        );
+        assert!(!brand_new.exists());
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn export_refuses_relative_and_unc_targets() {
+        let tmp = temp_dir();
+        let cases = tmp.join("cases");
+        let app_data = tmp.join("appdata");
+        fs::create_dir_all(&cases).unwrap();
+        fs::create_dir_all(&app_data).unwrap();
+        let rel = assert_export_target_allowed(Path::new("relative.osb"), &cases, &app_data)
+            .unwrap_err();
+        assert!(rel.to_lowercase().contains("absolute") || rel.to_lowercase().contains("relative"));
+        let unc = assert_export_target_allowed(Path::new("//server/share/x.osb"), &cases, &app_data)
+            .unwrap_err();
+        assert!(unc.to_lowercase().contains("unc") || unc.to_lowercase().contains("absolute"));
+        assert!(is_drive_relative_name("C:x"));
+        assert!(sanitize_download_stem("C:x").is_err());
+        assert!(sanitize_download_stem("foo/../bar").is_ok());
+        assert!(!sanitize_download_stem("foo/../bar").unwrap().contains(".."));
+        let dangling = tmp.join("dangling.osb");
+        std::os::unix::fs::symlink(tmp.join("missing-target.osb"), &dangling).unwrap();
+        let link_err = assert_export_target_allowed(&dangling, &cases, &app_data).unwrap_err();
+        assert!(
+            link_err.to_lowercase().contains("symlink"),
+            "dangling symlink export target must be refused: {link_err}"
+        );
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn export_repeat_same_name_gets_numeric_suffix() {
+        let tmp = temp_dir();
+        let cases = tmp.join("cases");
+        let app_data = tmp.join("appdata");
+        let downloads = tmp.join("downloads");
+        fs::create_dir_all(&cases).unwrap();
+        fs::create_dir_all(&app_data).unwrap();
+        fs::create_dir_all(&downloads).unwrap();
+        let desired = downloads.join("Disclosure_Target.pdf");
+        let (first, path1) = prepare_export_file(&desired, &cases, &app_data).unwrap();
+        drop(first);
+        assert_eq!(path1, desired);
+        let (second, path2) = prepare_export_file(&desired, &cases, &app_data).unwrap();
+        drop(second);
+        assert_eq!(path2, downloads.join("Disclosure_Target-1.pdf"));
+        assert!(path2.exists());
+        let _ = fs::remove_dir_all(&tmp);
     }
 }

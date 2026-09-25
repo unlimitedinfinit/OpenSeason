@@ -6,7 +6,11 @@ use zip::write::SimpleFileOptions;
 use walkdir::WalkDir;
 
 pub fn export_hunt(hunt_path: &Path, output_path: &Path) -> Result<(), String> {
-    let file = File::create(output_path).map_err(|e| e.to_string())?;
+    let file = crate::sandbox::create_new_file(output_path)?;
+    export_hunt_to_writer(hunt_path, file)
+}
+
+pub fn export_hunt_to_writer(hunt_path: &Path, file: File) -> Result<(), String> {
     let mut zip = ZipWriter::new(file);
     let options = SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated)

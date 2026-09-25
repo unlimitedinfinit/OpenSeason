@@ -100,11 +100,13 @@
     if (!confirm(`Generate Disclosure Statement for ${hunt.name}?`)) return;
     try {
       // Mock data for MVP since we don't have full evidence DB yet
+      const password = prompt("If this hunt is sealed, re-enter the vault password. Leave empty only for an unsealed hunt.");
       const path = await invoke("save_disclosure_cmd", { 
         huntId: hunt.id, 
         target: hunt.name, 
         count: 12, 
-        value: 1540000.0 
+        value: 1540000.0,
+        password: password && password.length ? password : null
       });
       alert("Report Saved to Vault:\n" + path);
     } catch (e) {

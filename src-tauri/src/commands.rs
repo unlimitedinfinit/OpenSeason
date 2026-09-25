@@ -33,15 +33,37 @@ fn hunt_db_path(app: &AppHandle, hunt_id: &str) -> Result<PathBuf, String> {
     Ok(resolve_hunt_dir(app, hunt_id)?.join("metadata.db"))
 }
 
+fn sealed_guard(
+    app: &AppHandle,
+    hunt_id: &str,
+    password: Option<&str>,
+) -> Result<PathBuf, String> {
+    let hunt_dir = resolve_hunt_dir(app, hunt_id)?;
+    let root = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
+    let salt = fs::read_to_string(root.join("master_salt.bin")).ok();
+    let verifier = fs::read(root.join("master_verifier.bin")).ok();
+    crate::sandbox::require_password_if_sealed(
+        &hunt_dir,
+        password,
+        salt.as_deref(),
+        verifier.as_deref(),
+    )?;
+    Ok(hunt_dir)
+}
+
 #[tauri::command]
 pub fn save_disclosure_cmd(
     app: AppHandle,
     hunt_id: String, 
     target: String, 
     count: usize, // Ignored, kept for compatibility with Svelte invokes
-    value: f64
+    value: f64,
+    password: Option<String>,
 ) -> Result<String, String> {
-    let hunt_dir = resolve_hunt_dir(&app, &hunt_id)?;
+    let hunt_dir = sealed_guard(&app, &hunt_id, password.as_deref())?;
     if !hunt_dir.exists() {
         return Err("Hunt not found".to_string());
     }
@@ -120,18 +142,20 @@ pub fn save_disclosure_cmd(
     let download_dir = app.path().download_dir()
         .map_err(|e| e.to_string())?;
     
-    let sanitized_target = target.replace(" ", "_").replace("/", "-");
-    let filename = format!("Disclosure_{}.pdf", sanitized_target);
-    let output_path = download_dir.join(&filename);
+    let stem = crate::sandbox::sanitize_download_stem(&format!(
+        "Disclosure_{}",
+        target.replace(' ', "_")
+    ))?;
+    let desired = download_dir.join(format!("{}.pdf", stem));
     let app_root = app.path().app_local_data_dir()
         .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
-    crate::sandbox::assert_export_target_allowed(
-        &output_path,
+    let (mut file, output_path) = crate::sandbox::prepare_export_file(
+        &desired,
         &crate::case_profile::default_cases_root(),
         &app_root,
     )?;
-    
-    fs::write(&output_path, &pdf_bytes).map_err(|e| e.to_string())?;
+    use std::io::Write;
+    file.write_all(&pdf_bytes).map_err(|e| e.to_string())?;
     
     Ok(output_path.to_string_lossy().into_owned())
 }
@@ -170,25 +194,20 @@ pub fn export_hunt_cmd(app: AppHandle, hunt_id: String, target_path: String) -> 
              }
         }
         
-        let sanitized_name = name.replace(" ", "_").replace("/", "-").replace("\\", "-");
-        if sanitized_name == crate::seal::SEAL_MARKER_NAME || sanitized_name == ".sealed" {
-            return Err("Export cannot write a file named .sealed.".to_string());
-        }
-        let filename = format!("{}.osb", sanitized_name);
-        download_dir.join(filename)
+        let sanitized_name = crate::sandbox::sanitize_download_stem(&name)?;
+        download_dir.join(format!("{}.osb", sanitized_name))
     } else {
         PathBuf::from(&target_path)
     };
 
     let app_root = app.path().app_local_data_dir()
         .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
-    crate::sandbox::assert_export_target_allowed(
+    let (file, output_path) = crate::sandbox::prepare_export_file(
         &output_path,
         &crate::case_profile::default_cases_root(),
         &app_root,
     )?;
-
-    bundle::export_hunt(&hunt_path, &output_path).map_err(|e| e.to_string())?;
+    bundle::export_hunt_to_writer(&hunt_path, file).map_err(|e| e.to_string())?;
     
     Ok(output_path.to_string_lossy().into_owned())
 }
@@ -348,8 +367,14 @@ pub fn create_new_hunt(app: AppHandle, name: String, state: State<'_, AppState>)
 }
 
 #[tauri::command]
-pub async fn update_hunt(app: AppHandle, hunt_id: String, name: String) -> Result<(), String> {
-    let db_path = hunt_db_path(&app, &hunt_id)?;
+pub async fn update_hunt(
+    app: AppHandle,
+    hunt_id: String,
+    name: String,
+    password: Option<String>,
+) -> Result<(), String> {
+    let hunt_dir = sealed_guard(&app, &hunt_id, password.as_deref())?;
+    let db_path = hunt_dir.join("metadata.db");
 
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
     
@@ -441,8 +466,10 @@ pub fn add_hunt_event(
     description: String,
     event_date: String,
     event_type: String,
+    password: Option<String>,
 ) -> Result<(), String> {
-    let db_path = hunt_db_path(&app, &hunt_id)?;
+    let hunt_dir = sealed_guard(&app, &hunt_id, password.as_deref())?;
+    let db_path = hunt_dir.join("metadata.db");
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
 
     conn.execute(
@@ -453,8 +480,14 @@ pub fn add_hunt_event(
 }
 
 #[tauri::command]
-pub fn delete_hunt_event(app: AppHandle, hunt_id: String, event_id: i64) -> Result<(), String> {
-    let db_path = hunt_db_path(&app, &hunt_id)?;
+pub fn delete_hunt_event(
+    app: AppHandle,
+    hunt_id: String,
+    event_id: i64,
+    password: Option<String>,
+) -> Result<(), String> {
+    let hunt_dir = sealed_guard(&app, &hunt_id, password.as_deref())?;
+    let db_path = hunt_dir.join("metadata.db");
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
 
     conn.execute("DELETE FROM events WHERE id = ?1", rusqlite::params![event_id])
@@ -497,8 +530,10 @@ pub fn add_hunt_party(
     email: String,
     phone: String,
     notes: String,
+    password: Option<String>,
 ) -> Result<(), String> {
-    let db_path = hunt_db_path(&app, &hunt_id)?;
+    let hunt_dir = sealed_guard(&app, &hunt_id, password.as_deref())?;
+    let db_path = hunt_dir.join("metadata.db");
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
 
     conn.execute(
@@ -509,8 +544,14 @@ pub fn add_hunt_party(
 }
 
 #[tauri::command]
-pub fn delete_hunt_party(app: AppHandle, hunt_id: String, party_id: i64) -> Result<(), String> {
-    let db_path = hunt_db_path(&app, &hunt_id)?;
+pub fn delete_hunt_party(
+    app: AppHandle,
+    hunt_id: String,
+    party_id: i64,
+    password: Option<String>,
+) -> Result<(), String> {
+    let hunt_dir = sealed_guard(&app, &hunt_id, password.as_deref())?;
+    let db_path = hunt_dir.join("metadata.db");
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
 
     conn.execute("DELETE FROM parties WHERE id = ?1", rusqlite::params![party_id])
@@ -546,8 +587,10 @@ pub fn save_complaint_section(
     hunt_id: String,
     section_id: String,
     content: String,
+    password: Option<String>,
 ) -> Result<(), String> {
-    let db_path = hunt_db_path(&app, &hunt_id)?;
+    let hunt_dir = sealed_guard(&app, &hunt_id, password.as_deref())?;
+    let db_path = hunt_dir.join("metadata.db");
     let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
 
     conn.execute(
@@ -694,10 +737,23 @@ pub fn add_hunt_evidence_bytes(
     Ok(())
 }
 
-#[tauri::command]
-pub fn delete_hunt_evidence(app: AppHandle, hunt_id: String, evidence_id: i64) -> Result<(), String> {
-    let hunt_dir = resolve_hunt_dir(&app, &hunt_id)?;
+pub fn delete_hunt_evidence_at(
+    hunt_dir: &std::path::Path,
+    evidence_id: i64,
+    password: Option<&str>,
+    salt: Option<&str>,
+    verifier: Option<&[u8]>,
+) -> Result<(), String> {
+    crate::sandbox::require_password_if_sealed(hunt_dir, password, salt, verifier)?;
     let db_path = hunt_dir.join("metadata.db");
+    delete_hunt_evidence_files(hunt_dir, &db_path, evidence_id)
+}
+
+fn delete_hunt_evidence_files(
+    hunt_dir: &std::path::Path,
+    db_path: &std::path::Path,
+    evidence_id: i64,
+) -> Result<(), String> {
     let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
 
     // 1. Get SHA-256 hash from DB to delete the file
@@ -732,6 +788,29 @@ pub fn delete_hunt_evidence(app: AppHandle, hunt_id: String, evidence_id: i64) -
 }
 
 #[tauri::command]
+pub fn delete_hunt_evidence(
+    app: AppHandle,
+    hunt_id: String,
+    evidence_id: i64,
+    password: Option<String>,
+) -> Result<(), String> {
+    let hunt_dir = resolve_hunt_dir(&app, &hunt_id)?;
+    let root = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
+    let salt = fs::read_to_string(root.join("master_salt.bin")).ok();
+    let verifier = fs::read(root.join("master_verifier.bin")).ok();
+    delete_hunt_evidence_at(
+        &hunt_dir,
+        evidence_id,
+        password.as_deref(),
+        salt.as_deref(),
+        verifier.as_deref(),
+    )
+}
+
+#[tauri::command]
 pub fn purge_vault_cache(
     app: AppHandle,
     password: Option<String>,
@@ -754,5 +833,76 @@ pub fn purge_vault_cache(
         "Deleted {} hunt folder(s). Skipped {} sealed Confidential vault(s). Sealed vaults are the only encrypted copy and are not deleted unless you re-enter the vault password.",
         report.deleted, report.skipped_sealed
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::HuntDatabase;
+    use crate::seal;
+    use std::fs;
+
+    fn sealed_hunt_with_evidence(password: &str) -> (PathBuf, i64, String, Vec<u8>, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("os-evdel-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(dir.join("evidence")).unwrap();
+        let salt = crypto::generate_salt();
+        let key = crypto::derive_key(password, &salt).unwrap();
+        let verifier = crypto::create_password_verifier(&key).unwrap();
+        seal::write_seal_marker(&dir, "00000000-0000-4000-8000-000000000099", "2024-01-01T00:00:00Z")
+            .unwrap();
+        let hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        fs::write(dir.join("evidence").join(format!("{}.enc", hash)), b"only-copy").unwrap();
+        let db = HuntDatabase::open(dir.join("metadata.db")).unwrap();
+        let id = db.insert_evidence("exhibit", "photo.jpg", &[0u8; 24], hash).unwrap();
+        drop(db);
+        let enc = dir.join("evidence").join(format!("{}.enc", hash));
+        (dir, id, salt, verifier, enc)
+    }
+
+    #[test]
+    fn sealed_evidence_delete_refused_without_password() {
+        let (dir, id, salt, verifier, enc) = sealed_hunt_with_evidence("correct-ev-password");
+        let err = delete_hunt_evidence_at(&dir, id, None, Some(&salt), Some(&verifier)).unwrap_err();
+        assert!(
+            err.to_lowercase().contains("password") || err.to_lowercase().contains("sealed"),
+            "sealed evidence delete without password must be refused: {err}"
+        );
+        assert!(enc.exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sealed_evidence_delete_refused_with_wrong_password() {
+        let (dir, id, salt, verifier, enc) = sealed_hunt_with_evidence("correct-ev-password");
+        let err = delete_hunt_evidence_at(
+            &dir,
+            id,
+            Some("wrong-password"),
+            Some(&salt),
+            Some(&verifier),
+        )
+        .unwrap_err();
+        assert!(
+            err.to_lowercase().contains("wrong password"),
+            "wrong password must not delete sealed evidence: {err}"
+        );
+        assert!(enc.exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sealed_evidence_delete_allowed_with_correct_password() {
+        let (dir, id, salt, verifier, enc) = sealed_hunt_with_evidence("correct-ev-password");
+        delete_hunt_evidence_at(
+            &dir,
+            id,
+            Some("correct-ev-password"),
+            Some(&salt),
+            Some(&verifier),
+        )
+        .unwrap();
+        assert!(!enc.exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
 }
 

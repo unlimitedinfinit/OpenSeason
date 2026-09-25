@@ -133,7 +133,8 @@
   async function saveName() {
       if (!huntData || !editNameValue) return;
       try {
-          await invoke("update_hunt", { huntId: huntData.id, name: editNameValue });
+          const password = prompt("If this hunt is sealed, re-enter the vault password. Leave empty only for an unsealed hunt.");
+          await invoke("update_hunt", { huntId: huntData.id, name: editNameValue, password: password && password.length ? password : null });
           huntData.name = editNameValue;
           isEditingName = false;
       } catch (e) {
@@ -159,11 +160,13 @@
     if (!huntData) return;
     if (!confirm(`Generate Confidential Qui Tam Disclosure Statement for ${huntData.name}?`)) return;
     try {
+      const password = prompt("If this hunt is sealed, re-enter the vault password. Leave empty only for an unsealed hunt.");
       const path = await invoke("save_disclosure_cmd", { 
         huntId: huntData.id, 
         target: huntData.name, 
         count: evidenceList.length, 
-        value: estimatedValue
+        value: estimatedValue,
+        password: password && password.length ? password : null
       });
       alert("Sealed Package generated successfully and saved to Downloads:\n" + path);
     } catch (e) {
@@ -196,12 +199,14 @@
   async function addTimelineEvent() {
       if (!newEventTitle || !newEventDate) return;
       try {
+          const password = prompt("If this hunt is sealed, re-enter the vault password. Leave empty only for an unsealed hunt.");
           await invoke("add_hunt_event", {
               huntId,
               title: newEventTitle,
               description: newEventDesc,
               eventDate: newEventDate,
-              eventType: newEventType
+              eventType: newEventType,
+              password: password && password.length ? password : null
           });
           newEventTitle = "";
           newEventDate = "";
@@ -217,7 +222,8 @@
   async function deleteEvent(eventId: number) {
       if (!confirm("Remove this event from timeline?")) return;
       try {
-          await invoke("delete_hunt_event", { huntId, eventId });
+          const password = prompt("If this hunt is sealed, re-enter the vault password. Leave empty only for an unsealed hunt.");
+          await invoke("delete_hunt_event", { huntId, eventId, password: password && password.length ? password : null });
           await loadTimeline();
       } catch (e) {
           alert("Failed to delete event: " + e);
@@ -228,13 +234,15 @@
   async function addPartyRecord() {
       if (!newPartyName) return;
       try {
+          const password = prompt("If this hunt is sealed, re-enter the vault password. Leave empty only for an unsealed hunt.");
           await invoke("add_hunt_party", {
               huntId,
               name: newPartyName,
               role: newPartyRole,
               email: newPartyEmail,
               phone: newPartyPhone,
-              notes: newPartyNotes
+              notes: newPartyNotes,
+              password: password && password.length ? password : null
           });
           newPartyName = "";
           newPartyRole = "Witness";
@@ -251,7 +259,8 @@
   async function deletePartyRecord(partyId: number) {
       if (!confirm("Remove this individual from registry?")) return;
       try {
-          await invoke("delete_hunt_party", { huntId, partyId });
+          const password = prompt("If this hunt is sealed, re-enter the vault password. Leave empty only for an unsealed hunt.");
+          await invoke("delete_hunt_party", { huntId, partyId, password: password && password.length ? password : null });
           await loadParties();
       } catch (e) {
           alert("Failed to delete: " + e);
@@ -261,10 +270,12 @@
   // Complaint section saving
   async function saveComplaintSection(sectionId: string) {
       try {
+          const password = prompt("If this hunt is sealed, re-enter the vault password. Leave empty only for an unsealed hunt.");
           await invoke("save_complaint_section", {
               huntId,
               sectionId,
-              content: complaintSections[sectionId]
+              content: complaintSections[sectionId],
+              password: password && password.length ? password : null
           });
           alert("Narrative section saved to secure local vault.");
       } catch (e) {
@@ -327,7 +338,8 @@
       }
 
       try {
-          await invoke("delete_hunt_evidence", { huntId, evidenceId });
+          const password = prompt("If this hunt is sealed, re-enter the vault password. Leave empty only for an unsealed hunt.");
+          await invoke("delete_hunt_evidence", { huntId, evidenceId, password: password && password.length ? password : null });
           await loadEvidence();
       } catch (err) {
           alert("Failed to delete evidence: " + err);
@@ -430,9 +442,11 @@ Violations of the False Claims Act (31 U.S.C. § 3729(a)(1)(B))
       // Auto-save the sections to database
       if (!isDemo) {
           try {
-              await invoke("save_complaint_section", { huntId, sectionId: "introduction", content: complaintSections.introduction });
-              await invoke("save_complaint_section", { huntId, sectionId: "facts", content: complaintSections.facts });
-              await invoke("save_complaint_section", { huntId, sectionId: "violations", content: complaintSections.violations });
+              const password = prompt("If this hunt is sealed, re-enter the vault password. Leave empty only for an unsealed hunt.");
+              const sealedPassword = password && password.length ? password : null;
+              await invoke("save_complaint_section", { huntId, sectionId: "introduction", content: complaintSections.introduction, password: sealedPassword });
+              await invoke("save_complaint_section", { huntId, sectionId: "facts", content: complaintSections.facts, password: sealedPassword });
+              await invoke("save_complaint_section", { huntId, sectionId: "violations", content: complaintSections.violations, password: sealedPassword });
               alert("Preset templates successfully loaded and saved to your secure offline vault.");
           } catch(e) {
               console.error("Auto-save failed", e);

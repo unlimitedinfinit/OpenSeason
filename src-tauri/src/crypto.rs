@@ -80,41 +80,108 @@ pub fn verify_password_key(key: &SessionKey, verifier_blob: &[u8]) -> Result<(),
     Ok(())
 }
 
-fn vault_has_data(vaults_dir: &Path) -> bool {
+fn uuid_hunt_dirs(vaults_dir: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let Ok(entries) = fs::read_dir(vaults_dir) else {
+        return out;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if crate::sandbox::parse_record_id(&name).is_ok() {
+            out.push(path);
+        }
+    }
+    out
+}
+
+fn vault_has_verifiable_or_hunt_data(vaults_dir: &Path) -> bool {
     if !vaults_dir.exists() {
         return false;
     }
-    fs::read_dir(vaults_dir)
-        .ok()
-        .map(|entries| {
-            entries.flatten().any(|e| {
-                let path = e.path();
-                path.is_dir() || path.is_file()
-            })
-        })
-        .unwrap_or(false)
+    !uuid_hunt_dirs(vaults_dir).is_empty()
+}
+
+fn try_decrypt_hunt_evidence(key: &SessionKey, hunt_dir: &Path) -> Option<bool> {
+    let db_path = hunt_dir.join("metadata.db");
+    if !db_path.exists() {
+        return None;
+    }
+    let Ok(conn) = rusqlite::Connection::open(&db_path) else {
+        return None;
+    };
+    let Ok(mut stmt) = conn.prepare("SELECT sha256_hash, encrypted_key_nonce FROM evidence") else {
+        return None;
+    };
+    let rows = stmt.query_map([], |row| {
+        let hash: Option<String> = row.get(0)?;
+        let nonce: Vec<u8> = row.get(1)?;
+        Ok((hash, nonce))
+    });
+    let Ok(rows) = rows else {
+        return None;
+    };
+    let mut saw = false;
+    for row in rows.flatten() {
+        let Some(hash) = row.0 else {
+            continue;
+        };
+        if !crate::sandbox::is_hex_sha256(&hash) {
+            continue;
+        }
+        let enc_path = hunt_dir.join("evidence").join(format!("{}.enc", hash));
+        let Ok(ciphertext) = fs::read(&enc_path) else {
+            continue;
+        };
+        if ciphertext.is_empty() || row.1.len() != NONCE_LEN {
+            continue;
+        }
+        saw = true;
+        if decrypt_data(&ciphertext, &row.1, key).is_ok() {
+            return Some(true);
+        }
+    }
+    if saw {
+        Some(false)
+    } else {
+        None
+    }
 }
 
 fn try_confirm_key_against_vault(key: &SessionKey, vaults_dir: &Path) -> Option<bool> {
     if !vaults_dir.exists() {
         return None;
     }
-    let mut saw_candidate = false;
-    let walker = walkdir_enc_files(vaults_dir);
-    for path in walker {
-        let Ok(blob) = fs::read(&path) else {
-            continue;
-        };
-        if blob.len() < NONCE_LEN + 1 {
-            continue;
-        }
-        saw_candidate = true;
-        if decrypt_blob(&blob, key).is_ok() {
-            return Some(true);
+    let mut saw_failure = false;
+    let mut saw_unreadable = false;
+    for hunt in uuid_hunt_dirs(vaults_dir) {
+        match try_decrypt_hunt_evidence(key, &hunt) {
+            Some(true) => return Some(true),
+            Some(false) => saw_failure = true,
+            None => {}
         }
     }
-    if saw_candidate {
+    for path in walkdir_enc_files(vaults_dir) {
+        match fs::read(&path) {
+            Ok(blob) => {
+                if blob.len() < NONCE_LEN + 1 {
+                    continue;
+                }
+                if decrypt_blob(&blob, key).is_ok() {
+                    return Some(true);
+                }
+                saw_failure = true;
+            }
+            Err(_) => saw_unreadable = true,
+        }
+    }
+    if saw_failure {
         Some(false)
+    } else if saw_unreadable {
+        None
     } else {
         None
     }
@@ -156,7 +223,7 @@ pub fn unlock_vault_at(
         verify_password_key(&key, &blob)?;
         return Ok(key);
     }
-    if vault_has_data(vaults_dir) {
+    if vault_has_verifiable_or_hunt_data(vaults_dir) {
         match try_confirm_key_against_vault(&key, vaults_dir) {
             Some(true) => {
                 if let Some(parent) = verifier_path.parent() {
@@ -168,10 +235,14 @@ pub fn unlock_vault_at(
             }
             Some(false) => return Err("Wrong password.".to_string()),
             None => {
-                return Err(
-                    "This vault already has data but no password verifier. Refusing to set a new password from this unlock, because a typo would lock the files. Restore master_verifier.bin."
-                        .to_string(),
-                );
+                let has_enc = !walkdir_enc_files(vaults_dir).is_empty();
+                if has_enc {
+                    return Err(
+                        "This vault has encrypted files that could not be checked (missing nonce or unreadable file). A new password was not set. Restore a readable evidence file or a known-good backup."
+                            .to_string(),
+                    );
+                }
+                // UUID hunts exist but nothing encrypted: first password may set the verifier.
             }
         }
     }
@@ -403,23 +474,68 @@ mod tests {
     }
 
     #[test]
-    fn missing_verifier_with_vault_data_refuses_first_password() {
-        let dir = std::env::temp_dir().join(format!("os-unlock-migrate-{}", uuid::Uuid::new_v4()));
-        let vaults = dir.join("vaults").join(uuid::Uuid::new_v4().to_string());
-        fs::create_dir_all(&vaults).unwrap();
-        fs::write(vaults.join("notes.txt"), b"existing vault data").unwrap();
+    fn preupgrade_hunt_evidence_unlocks_with_correct_password() {
+        let dir = std::env::temp_dir().join(format!("os-unlock-legacy-{}", uuid::Uuid::new_v4()));
+        let hunt_id = uuid::Uuid::new_v4().to_string();
+        let vaults = dir.join("vaults");
+        let evidence = vaults.join(&hunt_id).join("evidence");
+        fs::create_dir_all(&evidence).unwrap();
         let salt = generate_salt();
+        let password = "legacy-correct-password";
+        let key = derive_key(password, &salt).unwrap();
+        let plain = b"legacy hunt exhibit from add_hunt_evidence";
+        let (ciphertext, nonce) = encrypt_data(plain, &key).unwrap();
+        let hash = {
+            use sha2::{Digest, Sha256};
+            let mut hasher = Sha256::new();
+            hasher.update(plain);
+            format!("{:x}", hasher.finalize())
+        };
+        fs::write(evidence.join(format!("{}.enc", hash)), &ciphertext).unwrap();
+        let db = crate::db::HuntDatabase::open(vaults.join(&hunt_id).join("metadata.db")).unwrap();
+        db.insert_evidence("exhibit", "photo.jpg", &nonce, &hash).unwrap();
+        drop(db);
+
         let verifier_path = dir.join("master_verifier.bin");
-        let err = match unlock_vault_at("maybe-a-typo", &salt, &verifier_path, dir.join("vaults").as_path())
-        {
-            Ok(_) => panic!("must not create a verifier from the first typed password when vault data exists"),
+        let wrong = match unlock_vault_at("wrong-legacy-password", &salt, &verifier_path, &vaults) {
+            Ok(_) => panic!("wrong password must not unlock a pre-upgrade vault"),
             Err(e) => e,
         };
         assert!(
-            err.to_lowercase().contains("verifier") || err.to_lowercase().contains("refusing"),
-            "missing verifier with existing vault data must refuse, got {err}"
+            wrong.to_lowercase().contains("wrong password"),
+            "wrong password must be rejected, got {wrong}"
         );
         assert!(!verifier_path.exists());
+
+        unlock_vault_at(password, &salt, &verifier_path, &vaults).unwrap();
+        assert!(verifier_path.exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stray_ds_store_does_not_block_fresh_install() {
+        let dir = std::env::temp_dir().join(format!("os-unlock-dsstore-{}", uuid::Uuid::new_v4()));
+        let vaults = dir.join("vaults");
+        fs::create_dir_all(&vaults).unwrap();
+        fs::write(vaults.join(".DS_Store"), b"finder junk").unwrap();
+        let salt = generate_salt();
+        let verifier_path = dir.join("master_verifier.bin");
+        unlock_vault_at("fresh-install-password", &salt, &verifier_path, &vaults).unwrap();
+        assert!(verifier_path.exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn hunts_without_evidence_can_set_first_password() {
+        let dir = std::env::temp_dir().join(format!("os-unlock-emptyhunt-{}", uuid::Uuid::new_v4()));
+        let vaults = dir.join("vaults");
+        let hunt = vaults.join(uuid::Uuid::new_v4().to_string());
+        fs::create_dir_all(&hunt).unwrap();
+        crate::db::HuntDatabase::open(hunt.join("metadata.db")).unwrap();
+        let salt = generate_salt();
+        let verifier_path = dir.join("master_verifier.bin");
+        unlock_vault_at("first-after-empty-hunts", &salt, &verifier_path, &vaults).unwrap();
+        assert!(verifier_path.exists());
         let _ = fs::remove_dir_all(&dir);
     }
 }

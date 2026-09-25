@@ -16,8 +16,11 @@ pub fn seal_marker_path(case_dir: &Path) -> PathBuf {
     case_dir.join(SEAL_MARKER_NAME)
 }
 
-pub fn find_seal_marker(case_dir: &Path) -> Option<PathBuf> {
-    let entries = fs::read_dir(case_dir).ok()?;
+pub fn find_all_seal_markers(case_dir: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let Ok(entries) = fs::read_dir(case_dir) else {
+        return out;
+    };
     for entry in entries.flatten() {
         let path = entry.path();
         if !path.is_file() {
@@ -25,20 +28,28 @@ pub fn find_seal_marker(case_dir: &Path) -> Option<PathBuf> {
         }
         let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
         if crate::sandbox::is_reserved_marker_name(name) {
-            return Some(path);
+            out.push(path);
         }
     }
-    None
+    out
+}
+
+pub fn find_seal_marker(case_dir: &Path) -> Option<PathBuf> {
+    let matches = find_all_seal_markers(case_dir);
+    matches.into_iter().next()
 }
 
 pub fn is_dir_sealed(case_dir: &Path) -> bool {
-    let path = find_seal_marker(case_dir).unwrap_or_else(|| seal_marker_path(case_dir));
-    if !path.is_file() {
+    let matches = find_all_seal_markers(case_dir);
+    if matches.is_empty() {
         return false;
     }
-    fs::read_to_string(&path)
-        .map(|text| text.starts_with(SEAL_MARKER_MAGIC))
-        .unwrap_or(false)
+    // Any case-insensitive `.sealed` match seals the folder. Do not pick one file.
+    matches.iter().any(|path| {
+        fs::read_to_string(path)
+            .map(|text| text.starts_with(SEAL_MARKER_MAGIC))
+            .unwrap_or(true)
+    }) || matches.len() > 1
 }
 
 pub fn write_seal_marker(case_dir: &Path, case_id: &str, sealed_at: &str) -> Result<(), String> {
@@ -53,10 +64,17 @@ pub fn write_seal_marker(case_dir: &Path, case_id: &str, sealed_at: &str) -> Res
 }
 
 pub fn read_marker_sealed_at(case_dir: &Path) -> Option<String> {
-    let path = find_seal_marker(case_dir).unwrap_or_else(|| seal_marker_path(case_dir));
-    let text = fs::read_to_string(path).ok()?;
-    text.lines()
-        .find_map(|line| line.strip_prefix("sealed_at=").map(|s| s.to_string()))
+    for path in find_all_seal_markers(case_dir) {
+        if let Ok(text) = fs::read_to_string(path) {
+            if let Some(when) = text
+                .lines()
+                .find_map(|line| line.strip_prefix("sealed_at=").map(|s| s.to_string()))
+            {
+                return Some(when);
+            }
+        }
+    }
+    None
 }
 
 pub fn apply_disk_seal(profile: &mut CaseProfile, case_dir: &Path) {
@@ -630,6 +648,35 @@ mod tests {
         let user_enc = crypto::decrypt_blob(&fs::read(dir.join("notes.enc.enc")).unwrap(), &key).unwrap();
         assert_eq!(user_enc, b"user file that happens to end in enc");
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn any_case_insensitive_sealed_marker_seals_the_folder() {
+        let dir = temp_dir();
+        fs::write(dir.join(".SEALED"), "not-the-magic").unwrap();
+        assert!(
+            !is_dir_sealed(&dir),
+            "a single junk marker without magic is not sealed"
+        );
+        fs::write(
+            dir.join(".sealed"),
+            format!("{}\nid=x\nsealed_at=t\n", SEAL_MARKER_MAGIC),
+        )
+        .unwrap();
+        assert!(
+            is_dir_sealed(&dir),
+            "any case-insensitive .sealed match with magic must seal; do not pick one file"
+        );
+        let _ = fs::remove_dir_all(&dir);
+
+        let dir2 = temp_dir();
+        fs::write(dir2.join(".sealed"), "junk-one").unwrap();
+        fs::write(dir2.join(".Sealed"), "junk-two").unwrap();
+        assert!(
+            is_dir_sealed(&dir2),
+            "multiple case-insensitive .sealed names must treat the case as sealed"
+        );
+        let _ = fs::remove_dir_all(&dir2);
     }
 
     #[test]

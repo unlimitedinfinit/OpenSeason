@@ -51,7 +51,7 @@
   async function handleCreate() {
     try {
       if (huntId) {
-          await invoke("update_hunt", { huntId, name: targetName });
+          await invoke("update_hunt", { huntId, name: targetName, password: null });
       }
       // "Proceed" or "Continue Manually" just needs to close the wizard
       onComplete(); 
