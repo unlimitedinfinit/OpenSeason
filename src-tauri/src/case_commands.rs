@@ -26,23 +26,254 @@ pub fn get_cases_root() -> Result<String, String> {
 
 #[tauri::command]
 pub fn list_cases() -> Result<Vec<CaseProfile>, String> {
-    let all = case_profile::list_cases_in(&cases_root())?;
-    Ok(all
-        .into_iter()
-        .filter(|c| !c.is_sync_forbidden() || c.mode == CaseMode::Standard)
-        .filter(|c| c.mode == CaseMode::Standard)
-        .collect())
+    case_profile::list_cases_in(&cases_root())
+}
+
+#[derive(Serialize)]
+pub struct WorkspaceCase {
+    pub profile: CaseProfile,
+    pub source: String,
+    pub has_vault: bool,
+    pub sealed: bool,
+    pub folder: String,
+}
+
+fn hunt_as_profile(id: &str, name: &str) -> CaseProfile {
+    let mut profile = CaseProfile::new_standard(name, "confidential");
+    profile.id = id.to_string();
+    profile.mode = CaseMode::Confidential;
+    profile
 }
 
 #[tauri::command]
-pub fn create_case(title: String, document_kind: String) -> Result<CaseProfile, String> {
+pub fn list_workspace_cases(app: AppHandle) -> Result<Vec<WorkspaceCase>, String> {
+    let mut out = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let vaults = app
+        .path()
+        .app_local_data_dir()
+        .ok()
+        .map(|root| root.join("vaults"));
+
+    for profile in case_profile::list_cases_in(&cases_root())? {
+        let dir = case_dir_from_id(&profile.id).unwrap_or_else(|_| cases_root().join(&profile.id));
+        let sealed = crate::seal::is_dir_sealed(&dir) || profile.sealed_at.is_some();
+        let has_vault = vaults
+            .as_ref()
+            .map(|v| v.join(&profile.id).is_dir())
+            .unwrap_or(false);
+        seen.insert(profile.id.clone());
+        out.push(WorkspaceCase {
+            source: "documents".to_string(),
+            has_vault,
+            sealed,
+            folder: dir.to_string_lossy().into_owned(),
+            profile,
+        });
+    }
+
+    if let Some(vaults) = vaults {
+        if vaults.is_dir() {
+            for entry in fs::read_dir(&vaults).map_err(|e| e.to_string())? {
+                let entry = entry.map_err(|e| e.to_string())?;
+                let path = entry.path();
+                if !path.is_dir() {
+                    continue;
+                }
+                let id = entry.file_name().to_string_lossy().into_owned();
+                if crate::sandbox::parse_record_id(&id).is_err() || seen.contains(&id) {
+                    continue;
+                }
+                let name = {
+                    let db = path.join("metadata.db");
+                    rusqlite::Connection::open(&db)
+                        .ok()
+                        .and_then(|conn| {
+                            conn.query_row("SELECT name FROM info LIMIT 1", [], |row| {
+                                row.get::<_, String>(0)
+                            })
+                            .ok()
+                        })
+                        .unwrap_or_else(|| "Confidential case".to_string())
+                };
+                let profile = hunt_as_profile(&id, &name);
+                let sealed = crate::seal::is_dir_sealed(&path);
+                seen.insert(id);
+                out.push(WorkspaceCase {
+                    source: "vault".to_string(),
+                    has_vault: true,
+                    sealed,
+                    folder: path.to_string_lossy().into_owned(),
+                    profile,
+                });
+            }
+        }
+    }
+    Ok(out)
+}
+
+#[tauri::command]
+pub fn open_case_folder(path: String) -> Result<CaseProfile, String> {
+    let raw = PathBuf::from(path.trim());
+    if raw.as_os_str().is_empty() {
+        return Err("Choose a case folder that contains case.json.".to_string());
+    }
+    let case_dir = if raw.join("case.json").is_file() {
+        raw
+    } else if raw.is_file() && raw.file_name().and_then(|s| s.to_str()) == Some("case.json") {
+        raw.parent()
+            .ok_or_else(|| "case.json has no parent folder.".to_string())?
+            .to_path_buf()
+    } else {
+        return Err("That folder is not an OpenSeason case (missing case.json).".to_string());
+    };
+    let profile = case_profile::load_case(&case_dir)?;
+    let dest = cases_root().join(&profile.id);
+    if dest != case_dir && !dest.join("case.json").is_file() {
+        copy_case_tree(&case_dir, &dest)?;
+    }
+    case_profile::load_case(&case_dir_from_id(&profile.id)?)
+}
+
+fn copy_case_tree(from: &std::path::Path, to: &std::path::Path) -> Result<(), String> {
+    fs::create_dir_all(to).map_err(|e| e.to_string())?;
+    for entry in walkdir::WalkDir::new(from) {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let rel = entry.path().strip_prefix(from).map_err(|e| e.to_string())?;
+        let dest = to.join(rel);
+        if entry.file_type().is_dir() {
+            fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
+        } else if entry.file_type().is_file() {
+            if let Some(parent) = dest.parent() {
+                fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+            fs::copy(entry.path(), &dest).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+#[derive(Serialize)]
+pub struct CaseArtifact {
+    pub kind: String,
+    pub name: String,
+    pub path: String,
+}
+
+#[tauri::command]
+pub fn list_case_artifacts(case_id: String) -> Result<Vec<CaseArtifact>, String> {
+    let dir = case_dir_from_id(&case_id)?;
+    if crate::seal::is_dir_sealed(&dir) {
+        return Ok(Vec::new());
+    }
+    let mut out = Vec::new();
+    for (kind, folder) in [
+        ("evidence", "evidence"),
+        ("draft", "drafts"),
+        ("export", "exports"),
+        ("filing", "filings"),
+        ("order", "orders"),
+    ] {
+        let root = dir.join(folder);
+        if !root.is_dir() {
+            continue;
+        }
+        for entry in walkdir::WalkDir::new(&root).max_depth(4) {
+            let entry = entry.map_err(|e| e.to_string())?;
+            if !entry.file_type().is_file() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.starts_with('.') {
+                continue;
+            }
+            out.push(CaseArtifact {
+                kind: kind.to_string(),
+                name,
+                path: entry.path().to_string_lossy().into_owned(),
+            });
+        }
+    }
+    Ok(out)
+}
+
+#[tauri::command]
+pub fn add_case_evidence(
+    case_id: String,
+    filename: String,
+    file_bytes: Vec<u8>,
+    description: String,
+) -> Result<String, String> {
+    let dir = case_dir_from_id(&case_id)?;
+    if crate::seal::is_dir_sealed(&dir) {
+        return Err("This case is sealed. Add evidence in the unlocked vault, with the vault password.".to_string());
+    }
+    let evidence = dir.join("evidence");
+    fs::create_dir_all(&evidence).map_err(|e| e.to_string())?;
+    let safe = crate::sandbox::sanitize_download_stem(&filename).unwrap_or_else(|_| "exhibit".into());
+    let dest = evidence.join(&safe);
+    if dest.exists() {
+        return Err("An exhibit with that name already exists. Rename the file and try again.".to_string());
+    }
+    fs::write(&dest, &file_bytes).map_err(|e| e.to_string())?;
+    let note = evidence.join(format!("{}.txt", safe));
+    if !description.trim().is_empty() {
+        let _ = fs::write(note, description);
+    }
+    Ok(dest.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub fn export_pleading_cmd(case_id: String, kind: String) -> Result<ExportResult, String> {
+    let dir = case_dir_from_id(&case_id)?;
+    let profile = case_profile::load_case(&dir)?;
+    let paths: ExportPaths = documents::export_pleading(&dir, &profile, &kind, None)?;
+    Ok(ExportResult {
+        docx: paths.docx.to_string_lossy().into_owned(),
+        pdf: paths.pdf.to_string_lossy().into_owned(),
+        notice: REVIEW_NOTICE.to_string(),
+    })
+}
+
+#[tauri::command]
+pub fn create_case(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    title: String,
+    document_kind: String,
+    mode: Option<String>,
+) -> Result<CaseProfile, String> {
     let root = cases_root();
     fs::create_dir_all(&root).map_err(|e| e.to_string())?;
-    // Always create a child folder. The cases root may be empty on first use
-    // and must not itself become case.json.
-    let profile = case_profile::CaseProfile::new_standard(&title, &document_kind);
     if title.trim().is_empty() {
         return Err("A case title is required.".to_string());
+    }
+    let mut profile = case_profile::CaseProfile::new_standard(&title, &document_kind);
+    let requested = mode
+        .as_deref()
+        .unwrap_or("standard")
+        .trim()
+        .to_ascii_lowercase();
+    if requested == "confidential" {
+        if state.get_key().is_none() {
+            return Err("Unlock Confidential mode first (Legal Airlock and vault password).".to_string());
+        }
+        profile.mode = CaseMode::Confidential;
+        let app_root = app
+            .path()
+            .app_local_data_dir()
+            .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
+        let vaults = app_root.join("vaults");
+        fs::create_dir_all(&vaults).map_err(|e| e.to_string())?;
+        let hunt_dir = crate::sandbox::resolve_id_under_root(&vaults, &profile.id)?;
+        fs::create_dir_all(hunt_dir.join("evidence")).map_err(|e| e.to_string())?;
+        let db = crate::db::HuntDatabase::open(hunt_dir.join("metadata.db")).map_err(|e| e.to_string())?;
+        db.conn
+            .execute(
+                "INSERT INTO info (name, created_at, status, mode) VALUES (?1, ?2, 'Draft', 'confidential')",
+                rusqlite::params![&profile.title, &profile.created_at],
+            )
+            .map_err(|e| e.to_string())?;
     }
     let case_dir = crate::sandbox::resolve_id_under_root(&root, &profile.id)?;
     case_profile::ensure_case_layout(&case_dir)?;
@@ -51,9 +282,30 @@ pub fn create_case(title: String, document_kind: String) -> Result<CaseProfile, 
 }
 
 #[tauri::command]
-pub fn get_case(case_id: String) -> Result<CaseProfile, String> {
-    let dir = case_dir_from_id(&case_id)?;
-    case_profile::load_case(&dir)
+pub fn get_case(app: AppHandle, case_id: String) -> Result<CaseProfile, String> {
+    if let Ok(dir) = case_dir_from_id(&case_id) {
+        if dir.join("case.json").is_file() {
+            return case_profile::load_case(&dir);
+        }
+    }
+    let app_root = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
+    let hunt = app_root.join("vaults").join(&case_id);
+    if hunt.is_dir() {
+        let name = rusqlite::Connection::open(hunt.join("metadata.db"))
+            .ok()
+            .and_then(|conn| {
+                conn.query_row("SELECT name FROM info LIMIT 1", [], |row| {
+                    row.get::<_, String>(0)
+                })
+                .ok()
+            })
+            .unwrap_or_else(|| "Confidential case".to_string());
+        return Ok(hunt_as_profile(&case_id, &name));
+    }
+    Err("Case not found.".to_string())
 }
 
 /// Shared by the Tauri command and tests. Checks the on-disk seal marker.

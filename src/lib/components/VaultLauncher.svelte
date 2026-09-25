@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
+  import { ipc } from "$lib/ipc";
 
   let { onLaunch } = $props();
   
@@ -10,7 +10,7 @@
   let error = $state("");
   onMount(async () => {
     try {
-      await invoke("get_salt");
+      await ipc("get_salt");
       status = "Vault Locked";
     } catch (e) {
       error = "Failed to access Vault Storage: " + e;
@@ -29,7 +29,7 @@
     error = "";
     
     try {
-      const success = await invoke("unlock_vault", { password });
+      const success = await ipc("unlock_vault", { password });
       if (success) {
         onLaunch();
       } else {

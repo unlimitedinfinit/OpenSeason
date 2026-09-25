@@ -45,11 +45,20 @@ impl CaseMode {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct Party {
     pub name: String,
     #[serde(default)]
     pub role: String,
+    #[serde(default)]
+    pub address: String,
+    #[serde(default)]
+    pub email: String,
+    #[serde(default)]
+    pub phone: String,
+    /// Attorney name, or "Pro se" when the party is representing themselves.
+    #[serde(default)]
+    pub counsel: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -135,6 +144,26 @@ pub struct NoticeOfAppealDraft {
     pub user_text: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct PleadingDraft {
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub user_text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct TimelineEvent {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub date: String,
+    #[serde(default)]
+    pub notes: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CaseProfile {
     #[serde(default = "default_schema_version")]
@@ -161,6 +190,12 @@ pub struct CaseProfile {
     pub filer: Filer,
     #[serde(default)]
     pub notice_of_appeal: NoticeOfAppealDraft,
+    #[serde(default)]
+    pub complaint: PleadingDraft,
+    #[serde(default)]
+    pub motion: PleadingDraft,
+    #[serde(default)]
+    pub timeline: Vec<TimelineEvent>,
 }
 
 fn default_schema_version() -> u32 {
@@ -200,6 +235,9 @@ impl CaseProfile {
             caption: Caption::default(),
             filer: Filer::default(),
             notice_of_appeal: NoticeOfAppealDraft::default(),
+            complaint: PleadingDraft::default(),
+            motion: PleadingDraft::default(),
+            timeline: Vec::new(),
         }
     }
 
@@ -282,7 +320,7 @@ pub fn save_case(case_dir: &Path, profile: &CaseProfile) -> Result<(), String> {
         .map_err(|e| format!("Could not serialize case.json: {}", e))?;
     fs::write(case_json_path(case_dir), text)
         .map_err(|e| format!("Could not write case.json: {}", e))?;
-    if to_write.mode == CaseMode::Confidential || to_write.sealed_at.is_some() {
+    if to_write.sealed_at.is_some() {
         let when = to_write
             .sealed_at
             .clone()
@@ -508,6 +546,148 @@ pub fn validate_case(profile: &CaseProfile, case_dir: Option<&Path>) -> Validati
     }
 }
 
+fn push_core_profile_issues(profile: &CaseProfile, issues: &mut Vec<ValidationIssue>) {
+    if is_blank(&profile.title) {
+        issues.push(ValidationIssue {
+            field: "title".into(),
+            message: "Case title is required.".into(),
+        });
+    }
+    if is_blank(&profile.court.name) {
+        issues.push(ValidationIssue {
+            field: "court.name".into(),
+            message: "Court name is required so the caption can be filled.".into(),
+        });
+    }
+    if is_blank(&profile.docket_number) {
+        issues.push(ValidationIssue {
+            field: "docket_number".into(),
+            message: "Docket number is required.".into(),
+        });
+    }
+    if profile.caption.appellants().is_empty() {
+        issues.push(ValidationIssue {
+            field: "caption.parties".into(),
+            message: "Add at least one plaintiff or appellant.".into(),
+        });
+    }
+    if profile.caption.appellees().is_empty() {
+        issues.push(ValidationIssue {
+            field: "caption.parties".into(),
+            message: "Add at least one defendant or appellee.".into(),
+        });
+    }
+    if is_blank(&profile.filer.name) {
+        issues.push(ValidationIssue {
+            field: "filer.name".into(),
+            message: "Filer name is required for the signature block.".into(),
+        });
+    }
+    if is_blank(&profile.filer.signature_name) {
+        issues.push(ValidationIssue {
+            field: "filer.signature_name".into(),
+            message: "Signature name is required.".into(),
+        });
+    }
+}
+
+fn push_placeholder_issues(text: &str, issues: &mut Vec<ValidationIssue>) {
+    for hit in placeholder_hits(text) {
+        issues.push(ValidationIssue {
+            field: "placeholders".into(),
+            message: format!("Unfilled placeholder remains: {}", hit),
+        });
+    }
+}
+
+/// Validate the shared caption plus one pleading body (notice, complaint, or motion).
+pub fn validate_pleading(
+    profile: &CaseProfile,
+    case_dir: Option<&Path>,
+    kind: &str,
+) -> ValidationReport {
+    let mut issues = Vec::new();
+    push_core_profile_issues(profile, &mut issues);
+    if let Some(dir) = case_dir {
+        for missing in layout_missing(dir) {
+            issues.push(ValidationIssue {
+                field: format!("folder.{}", missing),
+                message: format!("Expected folder '{}' is missing.", missing),
+            });
+        }
+    }
+
+    let kind = kind.trim().to_ascii_lowercase();
+    match kind.as_str() {
+        "complaint" => {
+            if is_blank(&profile.complaint.user_text) {
+                issues.push(ValidationIssue {
+                    field: "complaint.user_text".into(),
+                    message: "Paste the user's own complaint text. This builder is basic and will not invent facts.".into(),
+                });
+            }
+            push_placeholder_issues(
+                &format!(
+                    "{} {} {}",
+                    profile.complaint.user_text, profile.court.name, profile.title
+                ),
+                &mut issues,
+            );
+        }
+        "motion" => {
+            if is_blank(&profile.motion.user_text) {
+                issues.push(ValidationIssue {
+                    field: "motion.user_text".into(),
+                    message: "Paste the user's own motion text. This builder is basic and will not invent the request.".into(),
+                });
+            }
+            push_placeholder_issues(
+                &format!(
+                    "{} {} {}",
+                    profile.motion.user_text, profile.court.name, profile.title
+                ),
+                &mut issues,
+            );
+        }
+        _ => {
+            if is_blank(&profile.notice_of_appeal.judgment_date) {
+                issues.push(ValidationIssue {
+                    field: "notice_of_appeal.judgment_date".into(),
+                    message: "Judgment or order date is required for a Notice of Appeal.".into(),
+                });
+            }
+            if is_blank(&profile.notice_of_appeal.judgment_description) {
+                issues.push(ValidationIssue {
+                    field: "notice_of_appeal.judgment_description".into(),
+                    message: "Describe the order or judgment being appealed, in the user's own words."
+                        .into(),
+                });
+            }
+            if is_blank(&profile.notice_of_appeal.user_text) {
+                issues.push(ValidationIssue {
+                    field: "notice_of_appeal.user_text".into(),
+                    message: "Paste the user's own Notice of Appeal text. OpenSeason will not invent it.".into(),
+                });
+            }
+            push_placeholder_issues(
+                &format!(
+                    "{} {} {} {}",
+                    profile.notice_of_appeal.user_text,
+                    profile.notice_of_appeal.judgment_description,
+                    profile.court.name,
+                    profile.title
+                ),
+                &mut issues,
+            );
+        }
+    }
+
+    ValidationReport {
+        ok: issues.is_empty(),
+        issues,
+    }
+}
+
 pub fn sample_appeal_profile() -> CaseProfile {
     CaseProfile {
         schema_version: 1,
@@ -528,18 +708,26 @@ pub fn sample_appeal_profile() -> CaseProfile {
             plaintiffs: vec![Party {
                 name: "Jordan Example".to_string(),
                 role: "Appellant".to_string(),
+                counsel: "Pro se".to_string(),
+                ..Default::default()
             }],
             defendants: vec![Party {
                 name: "Sample County Clerk".to_string(),
                 role: "Appellee".to_string(),
+                counsel: "Counsel of record".to_string(),
+                ..Default::default()
             }],
             appellants: vec![Party {
                 name: "Jordan Example".to_string(),
                 role: "Appellant".to_string(),
+                counsel: "Pro se".to_string(),
+                ..Default::default()
             }],
             appellees: vec![Party {
                 name: "Sample County Clerk".to_string(),
                 role: "Appellee".to_string(),
+                counsel: "Counsel of record".to_string(),
+                ..Default::default()
             }],
         },
         filer: Filer {
@@ -560,6 +748,15 @@ pub fn sample_appeal_profile() -> CaseProfile {
             trial_court_docket: "1:23-cv-01000".to_string(),
             user_text: "Appellant appeals from the order entered on March 1, 2024, granting the motion to dismiss. This paragraph is the user's own draft. OpenSeason did not write the grounds of appeal.".to_string(),
         },
+        complaint: PleadingDraft {
+            title: "Complaint for declaratory and injunctive relief".to_string(),
+            user_text: "This paragraph is the user's own statement of the claim. OpenSeason did not invent the facts or the legal theory.".to_string(),
+        },
+        motion: PleadingDraft {
+            title: "Motion for an extension of time".to_string(),
+            user_text: "This paragraph is the user's own motion text. OpenSeason did not invent the request or the grounds.".to_string(),
+        },
+        timeline: Vec::new(),
     }
 }
 
@@ -618,6 +815,20 @@ mod tests {
         let report = validate_case(&profile, Some(&fixture));
         assert!(report.ok, "{:?}", report.issues);
         assert_eq!(profile.filer.name, "Jordan Example");
+    }
+
+    #[test]
+    fn complaint_and_motion_validation_uses_their_own_text() {
+        let mut profile = sample_appeal_profile();
+        profile.complaint.user_text.clear();
+        let report = validate_pleading(&profile, None, "complaint");
+        assert!(!report.ok);
+        assert!(report.issues.iter().any(|i| i.field == "complaint.user_text"));
+        profile.complaint.user_text = "User drafted claim text without placeholders.".into();
+        assert!(validate_pleading(&profile, None, "complaint").ok);
+        profile.motion.user_text.clear();
+        let motion = validate_pleading(&profile, None, "motion");
+        assert!(!motion.ok);
     }
 
     #[test]

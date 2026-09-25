@@ -8,7 +8,9 @@ The older Open Season whistleblower vault is still here. It is now **Confidentia
 
 - **Standard cases**: a portable folder under `Documents/JustLegal/Cases/{caseId}/` with a fill-once `case.json` profile.
 - **Confidential cases**: Legal Airlock plus a local vault. Unlock reads the salt from disk and checks a password verifier. After a desktop seal (password typed again), the vault copy encrypts the whole tree, including nested folders. The app's own `metadata.db` and `court-rules/` stay readable. Sync is refused. Documents is then emptied to `.sealed`, `SEALED.txt`, and a pointer `case.json`. This build has no in-app reader for sealed files. CLI `case seal` writes a `.sealed` marker so sync is refused, but does not encrypt files.
-- **Notice of Appeal**: the first finished document. Caption and signature come from the profile. The body is the user's own text. Export is Word (`.docx`) and PDF.
+- **One case list**: Standard and Confidential cases share the home screen and the same dashboard. Existing vault hunts show up as Confidential cases.
+- **Notice of Appeal**: finished Word and PDF export. Caption and signature come from the profile. The body is the user's own text.
+- **Complaint and motion**: working basic templates (same profile merge). The UI labels them basic. They are not full interviews.
 - **Agent interface**: `AGENTS.md` plus the `openseason` command-line tool.
 
 This software is a formatting engine, not a lawyer. Every export tells the user to review the file and to consider consulting an attorney. It is not legal advice.
@@ -18,7 +20,7 @@ This software is a formatting engine, not a lawyer. Every export tells the user 
 - It will not write your arguments or find your citations.
 - It will not send Confidential cases to justlegal.me or anywhere else.
 - Account sync for standard cases is planned and stubbed, not built.
-- Complaint and motion builders are planned for a later release.
+- Complaint and motion builders are basic templates, not full drafters.
 
 ## Technology
 
@@ -47,6 +49,8 @@ npm install --legacy-peer-deps
 npm run tauri dev
 ```
 
+Windows owners: follow [docs/TESTING-ON-WINDOWS.md](docs/TESTING-ON-WINDOWS.md) for Visual Studio Build Tools, `npm run tauri build`, and a manual checklist.
+
 ### Tests and checks
 
 ```bash
@@ -74,7 +78,7 @@ A fake sample case lives at `fixtures/sample-appeal-case/` (Jordan Example v. Sa
 ## Project layout
 
 ```
-src/                 Svelte 5 UI (home, case profile, Confidential vault)
+src/                 Svelte 5 UI (home, wizard, unified case dashboard)
 src-tauri/           Rust backend, CLI binary `openseason`
 templates/           Court formatting rules as data files
 fixtures/            Fake sample case

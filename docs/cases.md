@@ -1,6 +1,6 @@
 # Cases, modes, and folders
 
-OpenSeason now has one engine and two doors.
+OpenSeason is one app and one case list. Standard and Confidential cases share the home screen and the same dashboard. Confidential cases still use the Legal Airlock and the vault. Old vault hunts appear as Confidential cases.
 
 ## Standard mode
 
@@ -51,9 +51,11 @@ Formatting lives in data files, not in hard-coded court names.
 
 The generic file is a fallback. It is not a promise that a specific court will accept the layout.
 
-## Notice of Appeal
+## Documents
 
-The first finished document. It pulls caption, court, docket, and signature block from `case.json`, then merges the user's own notice text. Export writes both `.docx` and `.pdf` into `exports/`. Export fails if required fields are empty or if placeholders such as `[PLAINTIFF]` or `TODO` remain.
+- **Notice of Appeal** (ready): caption, court, docket, and signature from `case.json`, plus the user's own notice text. Export writes `.docx` and `.pdf` into `exports/`.
+- **Complaint** and **Motion** (basic templates): the same profile merge, plus the user's own body text. The UI labels them basic.
+- Export fails if required fields are empty or if placeholders such as `[PLAINTIFF]` or `TODO` remain.
 
 ## Agent / CLI
 

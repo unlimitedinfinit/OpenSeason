@@ -48,11 +48,16 @@ pub fn run() {
             commands::purge_vault_cache,
             case_commands::get_cases_root,
             case_commands::list_cases,
+            case_commands::list_workspace_cases,
             case_commands::create_case,
             case_commands::get_case,
             case_commands::save_case,
             case_commands::validate_case_cmd,
             case_commands::export_notice_of_appeal_cmd,
+            case_commands::export_pleading_cmd,
+            case_commands::open_case_folder,
+            case_commands::list_case_artifacts,
+            case_commands::add_case_evidence,
             case_commands::convert_case_to_confidential,
             case_commands::sync_case_cmd
         ])

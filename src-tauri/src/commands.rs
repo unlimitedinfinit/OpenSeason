@@ -635,6 +635,40 @@ pub fn get_hunt_evidence(app: AppHandle, hunt_id: String) -> Result<Vec<Evidence
     Ok(evidence)
 }
 
+pub fn add_hunt_evidence_bytes_at(
+    hunt_dir: &std::path::Path,
+    key: &crypto::SessionKey,
+    filename: &str,
+    file_bytes: &[u8],
+    description: &str,
+    password: Option<&str>,
+    salt: Option<&str>,
+    verifier: Option<&[u8]>,
+) -> Result<(), String> {
+    crate::sandbox::require_password_if_sealed(hunt_dir, password, salt, verifier)?;
+
+    let scrubbed_bytes = crypto::strip_metadata(file_bytes);
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(&scrubbed_bytes);
+    let hash_hex = format!("{:x}", hasher.finalize());
+    let (encrypted_bytes, nonce) = crypto::encrypt_data(&scrubbed_bytes, key)?;
+
+    let evidence_dir = hunt_dir.join("evidence");
+    fs::create_dir_all(&evidence_dir).map_err(|e| e.to_string())?;
+    let enc_dest_path = evidence_dir.join(format!("{}.enc", hash_hex));
+    fs::write(&enc_dest_path, &encrypted_bytes).map_err(|e| e.to_string())?;
+
+    let db_path = hunt_dir.join("metadata.db");
+    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT INTO evidence (description, file_path, encrypted_key_nonce, sha256_hash) VALUES (?1, ?2, ?3, ?4)",
+        rusqlite::params![description, filename, nonce, hash_hex],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[tauri::command]
 pub fn add_hunt_evidence(
     app: AppHandle,
@@ -642,54 +676,37 @@ pub fn add_hunt_evidence(
     hunt_id: String,
     file_path: String,
     description: String,
+    password: Option<String>,
 ) -> Result<(), String> {
-    // 1. Check unlocked
     let key = state.get_key().ok_or("Vault Locked")?;
-
-    // 2. Read source file
+    sealed_guard(&app, &hunt_id, password.as_deref())?;
     let path = PathBuf::from(&file_path);
     if !path.exists() {
         return Err("Source file does not exist".to_string());
     }
     let file_bytes = fs::read(&path).map_err(|e| format!("Failed to read source file: {}", e))?;
-
-    // 3. Strip metadata (JPEG/PNG)
-    let scrubbed_bytes = crypto::strip_metadata(&file_bytes);
-
-    // 4. Compute SHA-256 hash
-    use sha2::{Digest, Sha256};
-    let mut hasher = Sha256::new();
-    hasher.update(&scrubbed_bytes);
-    let hash_hex = format!("{:x}", hasher.finalize());
-
-    // 5. Encrypt data
-    let (encrypted_bytes, nonce) = crypto::encrypt_data(&scrubbed_bytes, &key)?;
-
-    // 6. Write encrypted file to vault directory
-    let hunt_dir = resolve_hunt_dir(&app, &hunt_id)?;
-    let evidence_dir = hunt_dir.join("evidence");
-    fs::create_dir_all(&evidence_dir).map_err(|e| e.to_string())?;
-
-    let enc_filename = format!("{}.enc", hash_hex);
-    let enc_dest_path = evidence_dir.join(&enc_filename);
-    fs::write(&enc_dest_path, &encrypted_bytes).map_err(|e| e.to_string())?;
-
-    // 7. Add entry to SQLite database
-    let db_path = hunt_dir.join("metadata.db");
-    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
-
     let original_filename = path
         .file_name()
         .and_then(|s| s.to_str())
         .unwrap_or("unknown")
         .to_string();
-
-    conn.execute(
-        "INSERT INTO evidence (description, file_path, encrypted_key_nonce, sha256_hash) VALUES (?1, ?2, ?3, ?4)",
-        rusqlite::params![description, original_filename, nonce, hash_hex],
-    ).map_err(|e| e.to_string())?;
-
-    Ok(())
+    let hunt_dir = resolve_hunt_dir(&app, &hunt_id)?;
+    let root = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
+    let salt = fs::read_to_string(root.join("master_salt.bin")).ok();
+    let verifier = fs::read(root.join("master_verifier.bin")).ok();
+    add_hunt_evidence_bytes_at(
+        &hunt_dir,
+        &key,
+        &original_filename,
+        &file_bytes,
+        &description,
+        password.as_deref(),
+        salt.as_deref(),
+        verifier.as_deref(),
+    )
 }
 
 #[tauri::command]
@@ -700,41 +717,27 @@ pub fn add_hunt_evidence_bytes(
     filename: String,
     file_bytes: Vec<u8>,
     description: String,
+    password: Option<String>,
 ) -> Result<(), String> {
-    // 1. Check unlocked
     let key = state.get_key().ok_or("Vault Locked")?;
-
-    // 2. Strip metadata (JPEG/PNG)
-    let scrubbed_bytes = crypto::strip_metadata(&file_bytes);
-
-    // 3. Compute SHA-256 hash
-    use sha2::{Digest, Sha256};
-    let mut hasher = Sha256::new();
-    hasher.update(&scrubbed_bytes);
-    let hash_hex = format!("{:x}", hasher.finalize());
-
-    // 4. Encrypt data
-    let (encrypted_bytes, nonce) = crypto::encrypt_data(&scrubbed_bytes, &key)?;
-
-    // 5. Write encrypted file to vault directory
+    sealed_guard(&app, &hunt_id, password.as_deref())?;
     let hunt_dir = resolve_hunt_dir(&app, &hunt_id)?;
-    let evidence_dir = hunt_dir.join("evidence");
-    fs::create_dir_all(&evidence_dir).map_err(|e| e.to_string())?;
-
-    let enc_filename = format!("{}.enc", hash_hex);
-    let enc_dest_path = evidence_dir.join(&enc_filename);
-    fs::write(&enc_dest_path, &encrypted_bytes).map_err(|e| e.to_string())?;
-
-    // 6. Add entry to SQLite database
-    let db_path = hunt_dir.join("metadata.db");
-    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
-
-    conn.execute(
-        "INSERT INTO evidence (description, file_path, encrypted_key_nonce, sha256_hash) VALUES (?1, ?2, ?3, ?4)",
-        rusqlite::params![description, filename, nonce, hash_hex],
-    ).map_err(|e| e.to_string())?;
-
-    Ok(())
+    let root = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
+    let salt = fs::read_to_string(root.join("master_salt.bin")).ok();
+    let verifier = fs::read(root.join("master_verifier.bin")).ok();
+    add_hunt_evidence_bytes_at(
+        &hunt_dir,
+        &key,
+        &filename,
+        &file_bytes,
+        &description,
+        password.as_deref(),
+        salt.as_deref(),
+        verifier.as_deref(),
+    )
 }
 
 pub fn delete_hunt_evidence_at(
@@ -902,6 +905,85 @@ mod tests {
         )
         .unwrap();
         assert!(!enc.exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    fn sealed_hunt_for_add(password: &str) -> (PathBuf, crypto::SessionKey, String, Vec<u8>) {
+        let dir = std::env::temp_dir().join(format!("os-evadd-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(dir.join("evidence")).unwrap();
+        let salt = crypto::generate_salt();
+        let key = crypto::derive_key(password, &salt).unwrap();
+        let verifier = crypto::create_password_verifier(&key).unwrap();
+        seal::write_seal_marker(&dir, "00000000-0000-4000-8000-000000000088", "2024-01-01T00:00:00Z")
+            .unwrap();
+        HuntDatabase::open(dir.join("metadata.db")).unwrap();
+        (dir, key, salt, verifier)
+    }
+
+    #[test]
+    fn sealed_evidence_add_refused_without_password() {
+        let (dir, key, salt, verifier) = sealed_hunt_for_add("correct-add-password");
+        let err = add_hunt_evidence_bytes_at(
+            &dir,
+            &key,
+            "photo.jpg",
+            b"new exhibit bytes",
+            "sealed add",
+            None,
+            Some(&salt),
+            Some(&verifier),
+        )
+        .unwrap_err();
+        assert!(
+            err.to_lowercase().contains("password") || err.to_lowercase().contains("sealed"),
+            "sealed evidence add without password must be refused: {err}"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sealed_evidence_add_refused_with_wrong_password() {
+        let (dir, key, salt, verifier) = sealed_hunt_for_add("correct-add-password");
+        let err = add_hunt_evidence_bytes_at(
+            &dir,
+            &key,
+            "photo.jpg",
+            b"new exhibit bytes",
+            "sealed add",
+            Some("wrong-password"),
+            Some(&salt),
+            Some(&verifier),
+        )
+        .unwrap_err();
+        assert!(
+            err.to_lowercase().contains("wrong password"),
+            "wrong password must not add sealed evidence: {err}"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sealed_evidence_add_allowed_with_correct_password() {
+        let (dir, key, salt, verifier) = sealed_hunt_for_add("correct-add-password");
+        add_hunt_evidence_bytes_at(
+            &dir,
+            &key,
+            "photo.jpg",
+            b"new exhibit bytes",
+            "sealed add",
+            Some("correct-add-password"),
+            Some(&salt),
+            Some(&verifier),
+        )
+        .unwrap();
+        let entries: Vec<_> = fs::read_dir(dir.join("evidence"))
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .collect();
+        assert!(
+            entries.iter().any(|e| e.path().extension().and_then(|s| s.to_str()) == Some("enc")),
+            "correct password must write an encrypted exhibit"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 }

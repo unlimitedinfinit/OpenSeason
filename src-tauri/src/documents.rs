@@ -53,12 +53,18 @@ fn typst_escape(text: &str) -> String {
         .replace('>', "\\>")
 }
 
-pub fn assembled_notice_paragraphs(profile: &CaseProfile) -> Vec<String> {
-    let appellants = profile.caption.appellants();
-    let appellees = profile.caption.appellees();
-    let appellant_names = Caption::party_names(&appellants);
-    let appellee_names = Caption::party_names(&appellees);
+fn party_side_label(kind: &str, left: bool) -> &'static str {
+    match (kind, left) {
+        ("complaint", true) | ("motion", true) => "Plaintiff(s),",
+        ("complaint", false) | ("motion", false) => "Defendant(s).",
+        (_, true) => "Appellant(s),",
+        (_, false) => "Appellee(s).",
+    }
+}
 
+fn assembled_caption_lines(profile: &CaseProfile, kind: &str) -> Vec<String> {
+    let left = profile.caption.appellants();
+    let right = profile.caption.appellees();
     let mut lines = Vec::new();
     lines.push(profile.court.name.clone());
     if let Some(div) = &profile.court.division {
@@ -67,49 +73,21 @@ pub fn assembled_notice_paragraphs(profile: &CaseProfile) -> Vec<String> {
         }
     }
     lines.push(String::new());
-    lines.push(appellant_names.clone());
-    lines.push("Appellant(s),".to_string());
+    lines.push(Caption::party_names(&left));
+    lines.push(party_side_label(kind, true).to_string());
     lines.push(String::new());
     lines.push("v.".to_string());
     lines.push(String::new());
-    lines.push(appellee_names);
-    lines.push("Appellee(s).".to_string());
+    lines.push(Caption::party_names(&right));
+    lines.push(party_side_label(kind, false).to_string());
     lines.push(String::new());
     lines.push(format!("Case No. {}", profile.docket_number));
-    if !profile.notice_of_appeal.trial_court_docket.trim().is_empty() {
-        lines.push(format!(
-            "Trial court docket: {}",
-            profile.notice_of_appeal.trial_court_docket
-        ));
-    }
     lines.push(String::new());
-    lines.push("NOTICE OF APPEAL".to_string());
-    lines.push(String::new());
+    lines
+}
 
-    let mut lead = format!(
-        "Notice is given that {} appeal(s) to {} from the {} entered on {}.",
-        appellant_names,
-        profile.court.name,
-        profile.notice_of_appeal.judgment_description.trim(),
-        profile.notice_of_appeal.judgment_date.trim()
-    );
-    if !profile.notice_of_appeal.trial_court_name.trim().is_empty() {
-        lead.push_str(&format!(
-            " The order was entered in {}.",
-            profile.notice_of_appeal.trial_court_name.trim()
-        ));
-    }
-    lines.push(lead);
-    lines.push(String::new());
-
-    for paragraph in profile.notice_of_appeal.user_text.split("\n\n") {
-        let trimmed = paragraph.trim();
-        if !trimmed.is_empty() {
-            lines.push(trimmed.to_string());
-            lines.push(String::new());
-        }
-    }
-
+fn assembled_signature_lines(profile: &CaseProfile) -> Vec<String> {
+    let mut lines = Vec::new();
     lines.push(format!(
         "Date: {}",
         chrono::Local::now().format("%B %d, %Y")
@@ -138,11 +116,106 @@ pub fn assembled_notice_paragraphs(profile: &CaseProfile) -> Vec<String> {
     lines
 }
 
+fn push_user_paragraphs(lines: &mut Vec<String>, text: &str) {
+    for paragraph in text.split("\n\n") {
+        let trimmed = paragraph.trim();
+        if !trimmed.is_empty() {
+            lines.push(trimmed.to_string());
+            lines.push(String::new());
+        }
+    }
+}
+
+pub fn pleading_heading(kind: &str) -> &'static str {
+    match kind.trim().to_ascii_lowercase().as_str() {
+        "complaint" => "COMPLAINT",
+        "motion" => "MOTION",
+        _ => "NOTICE OF APPEAL",
+    }
+}
+
+pub fn assembled_pleading_paragraphs(profile: &CaseProfile, kind: &str) -> Vec<String> {
+    let key = kind.trim().to_ascii_lowercase();
+    if key.is_empty() || key == "notice_of_appeal" || key == "appeal" {
+        return assembled_notice_paragraphs(profile);
+    }
+
+    let mut lines = assembled_caption_lines(profile, &key);
+    let heading = pleading_heading(&key);
+    lines.push(heading.to_string());
+    lines.push(String::new());
+    let (subtitle, body) = if key == "complaint" {
+        (profile.complaint.title.as_str(), profile.complaint.user_text.as_str())
+    } else {
+        (profile.motion.title.as_str(), profile.motion.user_text.as_str())
+    };
+    if !subtitle.trim().is_empty() {
+        lines.push(subtitle.trim().to_string());
+        lines.push(String::new());
+    }
+    lines.push(format!(
+        "This is a basic {} template. OpenSeason filled the caption, parties, and signature block from the case profile. The body below is the user's own text.",
+        if key == "complaint" { "complaint" } else { "motion" }
+    ));
+    lines.push(String::new());
+    push_user_paragraphs(&mut lines, body);
+    lines.extend(assembled_signature_lines(profile));
+    lines
+}
+
+pub fn assembled_notice_paragraphs(profile: &CaseProfile) -> Vec<String> {
+    let appellants = profile.caption.appellants();
+    let appellant_names = Caption::party_names(&appellants);
+
+    let mut lines = assembled_caption_lines(profile, "notice_of_appeal");
+    if !profile.notice_of_appeal.trial_court_docket.trim().is_empty() {
+        // Insert trial docket after Case No. (last non-empty caption line before blank).
+        if let Some(blank) = lines.iter().rposition(|l| l.is_empty()) {
+            lines.insert(
+                blank,
+                format!(
+                    "Trial court docket: {}",
+                    profile.notice_of_appeal.trial_court_docket
+                ),
+            );
+        }
+    }
+    lines.push("NOTICE OF APPEAL".to_string());
+    lines.push(String::new());
+
+    let mut lead = format!(
+        "Notice is given that {} appeal(s) to {} from the {} entered on {}.",
+        appellant_names,
+        profile.court.name,
+        profile.notice_of_appeal.judgment_description.trim(),
+        profile.notice_of_appeal.judgment_date.trim()
+    );
+    if !profile.notice_of_appeal.trial_court_name.trim().is_empty() {
+        lead.push_str(&format!(
+            " The order was entered in {}.",
+            profile.notice_of_appeal.trial_court_name.trim()
+        ));
+    }
+    lines.push(lead);
+    lines.push(String::new());
+    push_user_paragraphs(&mut lines, &profile.notice_of_appeal.user_text);
+    lines.extend(assembled_signature_lines(profile));
+    lines
+}
+
 fn build_docx_bytes(profile: &CaseProfile, rules: &CourtRules) -> Result<Vec<u8>, String> {
+    build_docx_bytes_from_lines(&assembled_notice_paragraphs(profile), "NOTICE OF APPEAL", rules)
+}
+
+fn build_docx_bytes_from_lines(
+    lines: &[String],
+    heading: &str,
+    rules: &CourtRules,
+) -> Result<Vec<u8>, String> {
     let size = rules.font_size_half_points();
     let mut paras = Vec::new();
-    for (index, line) in assembled_notice_paragraphs(profile).iter().enumerate() {
-        let is_title = line == "NOTICE OF APPEAL";
+    for (index, line) in lines.iter().enumerate() {
+        let is_title = line == heading;
         let is_court = index == 0;
         let center = is_title
             || is_court
@@ -258,13 +331,17 @@ fn build_docx_bytes(profile: &CaseProfile, rules: &CourtRules) -> Result<Vec<u8>
 }
 
 fn build_typst_source(profile: &CaseProfile, rules: &CourtRules) -> String {
+    build_typst_source_from_lines(&assembled_notice_paragraphs(profile), "NOTICE OF APPEAL", rules)
+}
+
+fn build_typst_source_from_lines(lines: &[String], heading: &str, rules: &CourtRules) -> String {
     let fonts = rules.typst_font_list();
     let size = rules.font_size_pt;
     let leading = rules.line_spacing;
     let mut blocks = String::new();
-    for (index, line) in assembled_notice_paragraphs(profile).iter().enumerate() {
+    for (index, line) in lines.iter().enumerate() {
         let escaped = typst_escape(line);
-        let is_title = line == "NOTICE OF APPEAL";
+        let is_title = line == heading;
         if line.is_empty() {
             blocks.push_str("#v(0.6em)\n");
             continue;
@@ -375,6 +452,69 @@ pub fn export_notice_of_appeal(
     let mut pdf_bytes = pdf::compile_typst(typst_src)?;
     // Typst embeds page text as glyphs, so keep a plaintext PDF comment
     // with the same notice that already appears in the footer.
+    pdf_bytes.extend_from_slice(b"\n% ");
+    pdf_bytes.extend_from_slice(REVIEW_NOTICE.as_bytes());
+    pdf_bytes.extend_from_slice(b"\n");
+    fs::write(&pdf_path, &pdf_bytes).map_err(|e| e.to_string())?;
+
+    Ok(ExportPaths {
+        docx: docx_path,
+        pdf: pdf_path,
+    })
+}
+
+pub fn export_pleading(
+    case_dir: &Path,
+    profile: &CaseProfile,
+    kind: &str,
+    out_dir: Option<&Path>,
+) -> Result<ExportPaths, String> {
+    let key = kind.trim().to_ascii_lowercase();
+    if key.is_empty() || key == "notice_of_appeal" || key == "appeal" {
+        return export_notice_of_appeal(case_dir, profile, out_dir);
+    }
+    if crate::seal::is_dir_sealed(case_dir) {
+        return Err("This case is sealed. Export from the Documents pointer is refused.".to_string());
+    }
+    if let Some(out) = out_dir {
+        assert_notice_out_dir(out)?;
+    }
+    let report = crate::case_profile::validate_pleading(profile, Some(case_dir), &key);
+    if !report.ok {
+        let details = report
+            .issues
+            .iter()
+            .map(|i| format!("{}: {}", i.field, i.message))
+            .collect::<Vec<_>>()
+            .join("; ");
+        return Err(format!("Case is not ready to export. {}", details));
+    }
+
+    let heading = pleading_heading(&key);
+    let lines = assembled_pleading_paragraphs(profile, &key);
+    let rules = CourtRules::load_for_case(case_dir);
+    let dest = out_dir
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| case_dir.join("exports"));
+    fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
+
+    let stem = format!(
+        "{}-{}",
+        key.replace('_', "-"),
+        profile
+            .docket_number
+            .replace('/', "-")
+            .replace(' ', "_")
+            .replace('\\', "-")
+    );
+    let docx_path = dest.join(format!("{}.docx", stem));
+    let pdf_path = dest.join(format!("{}.pdf", stem));
+
+    let docx_bytes = build_docx_bytes_from_lines(&lines, heading, &rules)?;
+    fs::write(&docx_path, &docx_bytes).map_err(|e| e.to_string())?;
+
+    let typst_src = build_typst_source_from_lines(&lines, heading, &rules);
+    let mut pdf_bytes = pdf::compile_typst(typst_src)?;
     pdf_bytes.extend_from_slice(b"\n% ");
     pdf_bytes.extend_from_slice(REVIEW_NOTICE.as_bytes());
     pdf_bytes.extend_from_slice(b"\n");
@@ -546,6 +686,32 @@ mod tests {
             inspect_pdf_contains(&paths.pdf, "not legal advice").unwrap(),
             "PDF must say it is not legal advice"
         );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn complaint_and_motion_templates_use_profile() {
+        let profile = sample_appeal_profile();
+        let complaint = assembled_pleading_paragraphs(&profile, "complaint").join("\n");
+        assert!(complaint.contains("COMPLAINT"));
+        assert!(complaint.contains("Jordan Example"));
+        assert!(complaint.contains("basic complaint template"));
+        assert!(complaint.contains("user's own statement"));
+        assert!(complaint.contains(REVIEW_NOTICE));
+        let motion = assembled_pleading_paragraphs(&profile, "motion").join("\n");
+        assert!(motion.contains("MOTION"));
+        assert!(motion.contains("user's own motion text"));
+        assert!(motion.contains("Sample County Clerk"));
+    }
+
+    #[test]
+    fn complaint_docx_export_embeds_profile_fields() {
+        let (dir, profile) = temp_case();
+        let paths = export_pleading(&dir, &profile, "complaint", None).unwrap();
+        assert!(paths.docx.exists());
+        assert!(inspect_docx_contains(&paths.docx, "COMPLAINT").unwrap());
+        assert!(inspect_docx_contains(&paths.docx, "Jordan Example").unwrap());
+        assert!(inspect_docx_contains(&paths.docx, REVIEW_NOTICE).unwrap());
         let _ = fs::remove_dir_all(&dir);
     }
 }
