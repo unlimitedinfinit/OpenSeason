@@ -10,7 +10,7 @@ OpenSeason is a **formatting and assembly engine**, not a research engine. It tu
 2. **Only format and assemble the user's own material.** You may move their words into a caption, signature block, or template. You may not improve, expand, or "complete" their legal theory.
 3. **Do not fill placeholders with made-up text.** If you see `[PLAINTIFF]`, `{{docket}}`, `TODO`, `TBD`, or similar markers, stop and ask the user for the real value.
 4. **Every export is the user's document.** Remind them to review every line before filing. The software is not legal advice. Consider consulting a licensed attorney.
-5. **Confidential cases never go to the network.** Do not call sync, cloud backup, publish, email, or any upload API for a case whose mode is `confidential` or whose `sealed_at` field is set. Local Word/PDF export and local `.osb` export are allowed when the user asks.
+5. **Confidential cases never go to the network.** Do not call sync, cloud backup, publish, email, or any upload API if the folder has a `.sealed` marker, or if `mode` is `confidential`, or if `sealed_at` is set. Do not delete `.sealed` to "help" the user sync. Local Word/PDF export and local `.osb` export are allowed when the user asks. The optional USAspending lookup sends only the target name you type to `api.usaspending.gov`. It does not upload the case folder.
 6. **No telemetry.** Do not send case contents, prompts, or file paths to a remote logger.
 
 ## What you may do
@@ -40,7 +40,8 @@ cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- case validate
 # Export Notice of Appeal (Word + PDF)
 cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- export notice-of-appeal ./my-case
 
-# Seal a standard case (cannot be reversed)
+# Seal a standard case (writes .sealed; cannot be undone by editing case.json)
+# CLI seal does not encrypt files. Use the desktop vault path for encryption.
 cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- case seal ./my-case
 
 # Sync stub: standard cases return "not implemented"; confidential cases are refused

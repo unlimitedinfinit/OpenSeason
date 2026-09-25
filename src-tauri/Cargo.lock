@@ -3572,6 +3572,7 @@ dependencies = [
  "clap",
  "comemo",
  "dirs 5.0.1",
+ "flate2",
  "rand 0.8.5",
  "regex",
  "reqwest",

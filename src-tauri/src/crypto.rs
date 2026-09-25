@@ -63,6 +63,26 @@ pub fn derive_key(password: &str, salt_str: &str) -> Result<SessionKey, String> 
     Ok(SessionKey(output_key_material))
 }
 
+pub const NONCE_LEN: usize = 24;
+
+/// Encrypt and prefix the 24-byte nonce so a file can be decrypted without a sidecar.
+pub fn encrypt_blob(data: &[u8], key: &SessionKey) -> Result<Vec<u8>, String> {
+    let (ciphertext, nonce) = encrypt_data(data, key)?;
+    if nonce.len() != NONCE_LEN {
+        return Err(format!("Unexpected nonce length {}", nonce.len()));
+    }
+    let mut out = nonce;
+    out.extend(ciphertext);
+    Ok(out)
+}
+
+pub fn decrypt_blob(blob: &[u8], key: &SessionKey) -> Result<Vec<u8>, String> {
+    if blob.len() < NONCE_LEN + 1 {
+        return Err("Encrypted file is too short to contain a nonce and ciphertext.".to_string());
+    }
+    decrypt_data(&blob[NONCE_LEN..], &blob[..NONCE_LEN], key)
+}
+
 pub fn encrypt_data(data: &[u8], key: &SessionKey) -> Result<(Vec<u8>, Vec<u8>), String> {
     let cipher = XChaCha20Poly1305::new(Key::from_slice(&key.0));
     
@@ -190,5 +210,21 @@ pub fn strip_metadata(data: &[u8]) -> Vec<u8> {
         strip_png_metadata(data)
     } else {
         data.to_vec()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn encrypt_blob_round_trip() {
+        let salt = generate_salt();
+        let key = derive_key("fixture-password-not-used-elsewhere", &salt).unwrap();
+        let plain = b"sample evidence bytes for Jordan Example";
+        let blob = encrypt_blob(plain, &key).unwrap();
+        assert_ne!(&blob[NONCE_LEN..], plain.as_slice());
+        let out = decrypt_blob(&blob, &key).unwrap();
+        assert_eq!(out, plain);
     }
 }

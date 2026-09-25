@@ -349,7 +349,12 @@ pub fn export_notice_of_appeal(
     fs::write(&docx_path, &docx_bytes).map_err(|e| e.to_string())?;
 
     let typst_src = build_typst_source(profile, &rules);
-    let pdf_bytes = pdf::compile_typst(typst_src)?;
+    let mut pdf_bytes = pdf::compile_typst(typst_src)?;
+    // Typst embeds page text as glyphs, so keep a plaintext PDF comment
+    // with the same notice that already appears in the footer.
+    pdf_bytes.extend_from_slice(b"\n% ");
+    pdf_bytes.extend_from_slice(REVIEW_NOTICE.as_bytes());
+    pdf_bytes.extend_from_slice(b"\n");
     fs::write(&pdf_path, &pdf_bytes).map_err(|e| e.to_string())?;
 
     Ok(ExportPaths {
@@ -377,6 +382,47 @@ pub fn export_notice_of_appeal_docx_only(
     let bytes = build_docx_bytes(profile, &rules)?;
     fs::write(&path, bytes).map_err(|e| e.to_string())?;
     Ok(path)
+}
+
+pub fn inspect_pdf_contains(path: &Path, needle: &str) -> Result<bool, String> {
+    let bytes = fs::read(path).map_err(|e| e.to_string())?;
+    if bytes.windows(needle.len()).any(|w| w == needle.as_bytes()) {
+        return Ok(true);
+    }
+    if String::from_utf8_lossy(&bytes).contains(needle) {
+        return Ok(true);
+    }
+    // Typst often stores page text in Flate streams.
+    let mut i = 0;
+    while i + 10 < bytes.len() {
+        if bytes[i..].starts_with(b"stream") {
+            let start = i + 6;
+            let rest = &bytes[start..];
+            let end = rest
+                .windows(9)
+                .position(|w| w == b"endstream")
+                .map(|p| start + p);
+            if let Some(end) = end {
+                let mut payload = &bytes[start..end];
+                if payload.starts_with(b"\r\n") {
+                    payload = &payload[2..];
+                } else if payload.starts_with(b"\n") {
+                    payload = &payload[1..];
+                }
+                let mut decoded = Vec::new();
+                let mut decoder = flate2::read::ZlibDecoder::new(payload);
+                if std::io::Read::read_to_end(&mut decoder, &mut decoded).is_ok()
+                    && String::from_utf8_lossy(&decoded).contains(needle)
+                {
+                    return Ok(true);
+                }
+                i = end + 9;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    Ok(false)
 }
 
 pub fn inspect_docx_contains(path: &Path, needle: &str) -> Result<bool, String> {
@@ -451,6 +497,26 @@ mod tests {
             }
             Err(e) => panic!("PDF export should work when a system font exists: {}", e),
         }
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn exported_docx_and_pdf_contain_review_notice() {
+        let (dir, profile) = temp_case();
+        let paths = export_notice_of_appeal(&dir, &profile, None)
+            .expect("sample case should export Word and PDF");
+        assert!(
+            inspect_docx_contains(&paths.docx, REVIEW_NOTICE).unwrap(),
+            "DOCX must include the review / not-legal-advice notice"
+        );
+        assert!(
+            inspect_docx_contains(&paths.docx, "not legal advice").unwrap(),
+            "DOCX must say it is not legal advice"
+        );
+        assert!(
+            inspect_pdf_contains(&paths.pdf, "not legal advice").unwrap(),
+            "PDF must say it is not legal advice"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 }

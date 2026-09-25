@@ -219,6 +219,9 @@ impl CaseProfile {
     }
 
     pub fn reopen_as_standard(&self) -> Result<CaseProfile, String> {
+        if !self.is_sync_forbidden() {
+            return Err("This case is not sealed.".to_string());
+        }
         Err("Confidential cases cannot be made syncable. Use a deliberate local export if you need a copy on disk.".to_string())
     }
 }
@@ -254,17 +257,40 @@ pub fn load_case(case_dir: &Path) -> Result<CaseProfile, String> {
     let path = case_json_path(case_dir);
     let text = fs::read_to_string(&path)
         .map_err(|e| format!("Could not read {}: {}", path.display(), e))?;
-    serde_json::from_str(&text).map_err(|e| format!("case.json is not valid: {}", e))
+    let mut profile: CaseProfile =
+        serde_json::from_str(&text).map_err(|e| format!("case.json is not valid: {}", e))?;
+    crate::seal::apply_disk_seal(&mut profile, case_dir);
+    Ok(profile)
 }
 
 pub fn save_case(case_dir: &Path, profile: &CaseProfile) -> Result<(), String> {
+    if crate::seal::is_dir_sealed(case_dir)
+        && (profile.mode != CaseMode::Confidential || profile.sealed_at.is_none())
+    {
+        return Err(
+            "This case is sealed on disk. Editing case.json cannot make it syncable.".to_string(),
+        );
+    }
     ensure_case_layout(case_dir)?;
     let mut to_write = profile.clone();
     to_write.updated_at = Utc::now().to_rfc3339();
+    if crate::seal::is_dir_sealed(case_dir) {
+        to_write.mode = CaseMode::Confidential;
+        if to_write.sealed_at.is_none() {
+            to_write.sealed_at = crate::seal::read_marker_sealed_at(case_dir);
+        }
+    }
     let text = serde_json::to_string_pretty(&to_write)
         .map_err(|e| format!("Could not serialize case.json: {}", e))?;
     fs::write(case_json_path(case_dir), text)
         .map_err(|e| format!("Could not write case.json: {}", e))?;
+    if to_write.mode == CaseMode::Confidential || to_write.sealed_at.is_some() {
+        let when = to_write
+            .sealed_at
+            .clone()
+            .unwrap_or_else(|| Utc::now().to_rfc3339());
+        crate::seal::write_seal_marker(case_dir, &to_write.id, &when)?;
+    }
     Ok(())
 }
 
@@ -582,13 +608,22 @@ mod tests {
 
     #[test]
     fn convert_is_one_way() {
+        let standard = sample_appeal_profile();
+        assert_eq!(
+            standard.reopen_as_standard().unwrap_err(),
+            "This case is not sealed."
+        );
+
         let mut profile = sample_appeal_profile();
         profile.convert_to_confidential().unwrap();
         assert_eq!(profile.mode, CaseMode::Confidential);
         assert!(profile.sealed_at.is_some());
         assert!(profile.is_sync_forbidden());
-        assert!(profile.reopen_as_standard().is_err());
-        // Even if someone flips the flag, sealed_at still blocks sync.
+        let err = profile.reopen_as_standard().unwrap_err();
+        assert!(
+            err.contains("cannot be made syncable"),
+            "sealed reopen must use the confidential error, got: {err}"
+        );
         profile.mode = CaseMode::Standard;
         assert!(profile.is_sync_forbidden());
     }

@@ -1,6 +1,9 @@
+use std::path::Path;
+
 use serde::{Deserialize, Serialize};
 
 use crate::case_profile::{CaseMode, CaseProfile};
+use crate::seal;
 
 /// Network-facing actions that must never receive a confidential case.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,6 +46,48 @@ pub fn request_sync(profile: &CaseProfile, action: SyncAction) -> Result<(), Syn
     let _ = action;
     let _ = CaseMode::Standard;
     Err(SyncError::NotImplemented)
+}
+
+/// Checks the on-disk `.sealed` marker first, then case.json. Editing case.json cannot unseal.
+pub fn request_sync_for_dir(case_dir: &Path, action: SyncAction) -> Result<(), SyncError> {
+    if seal::is_dir_sealed(case_dir) {
+        return Err(SyncError::ConfidentialForbidden);
+    }
+    let profile = crate::case_profile::load_case(case_dir)
+        .map_err(|_| SyncError::NotImplemented)?;
+    request_sync(&profile, action)
+}
+
+pub fn describe_sync_for_dir(case_dir: &Path, action: SyncAction) -> Result<SyncRefusal, String> {
+    let mode = crate::case_profile::load_case(case_dir)
+        .map(|p| p.mode.as_str().to_string())
+        .unwrap_or_else(|_| {
+            if seal::is_dir_sealed(case_dir) {
+                "confidential".to_string()
+            } else {
+                "unknown".to_string()
+            }
+        });
+    match request_sync_for_dir(case_dir, action) {
+        Ok(()) => Ok(SyncRefusal {
+            action: format!("{:?}", action).to_ascii_lowercase(),
+            mode,
+            reason: "ok".to_string(),
+            kind: "ok".to_string(),
+        }),
+        Err(SyncError::ConfidentialForbidden) => Ok(SyncRefusal {
+            action: format!("{:?}", action).to_ascii_lowercase(),
+            mode,
+            reason: SyncError::ConfidentialForbidden.to_string(),
+            kind: "confidential_forbidden".to_string(),
+        }),
+        Err(SyncError::NotImplemented) => Ok(SyncRefusal {
+            action: format!("{:?}", action).to_ascii_lowercase(),
+            mode,
+            reason: SyncError::NotImplemented.to_string(),
+            kind: "not_implemented".to_string(),
+        }),
+    }
 }
 
 pub fn describe_sync_error(profile: &CaseProfile, action: SyncAction) -> SyncRefusal {

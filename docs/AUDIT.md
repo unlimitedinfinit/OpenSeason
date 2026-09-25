@@ -13,13 +13,13 @@ Frontend: **Svelte 5 + TypeScript + Tailwind CSS**, served by SvelteKit in SPA m
 | Legal Airlock | **Works** | Full-screen gate. User must type `I UNDERSTAND`. Now shown only for Confidential mode. |
 | Vault password / Argon2id / session key | **Works** | Salt on disk, key in memory, `zeroize` on drop. Password is not stored. Unlock does not verify the password against ciphertext, so a wrong password still "unlocks" and later file decrypt will fail. |
 | Hunt create / list / delete | **Partial** | Folders under the app data `vaults/` directory work. `create_new_hunt` used to create only an `info` table, so timeline, parties, evidence, and complaint queries could fail on a brand-new hunt. This run now initializes the full SQLite schema. |
-| Evidence encrypt + EXIF strip | **Works** | JPEG/PNG metadata strip, SHA-256, XChaCha20Poly1305 `.enc` files. Drag-and-drop in the UI still opens a file picker instead of using the dropped file. Demo mode fakes evidence. |
+| Evidence encrypt + EXIF strip | **Works** | Hunt uploads strip JPEG/PNG metadata, hash, and encrypt with XChaCha20Poly1305. Nonce is stored in SQLite for those uploads. Desktop seal now prefixes the nonce on the ciphertext, decrypt-verifies, then deletes plaintext. Drag-and-drop in the UI still opens a file picker. Demo mode fakes evidence. `metadata.db` itself is still plaintext. |
 | Timeline / parties / complaint sections | **Partial** | IPC and UI exist. They depend on SQLite tables that were not created for new hunts until this run. No tests. |
 | HuntWizard + USAspending | **Partial** | Real HTTP POST to `api.usaspending.gov`. The dashboard "Report" button still passes a hardcoded dollar value in one path. The live test prints results and does not assert. Network is optional intel, not case upload. |
 | Typst disclosure PDF | **Partial** | Compiler is real. Template is a qui tam disclosure statement. It hard-codes Arial, so Linux hosts without Arial can fail. Dashboard sometimes used mock totals. |
 | `.osb` import/export | **Works** | Zip write/read with zip-slip protection. Import names the folder from the file stem, not the original hunt id. |
 | SQLite metadata encryption | **Missing** | `metadata.db` is plaintext. Roadmap already notes this. |
-| Tests | **Partial** | One network-facing USAspending test, no vault tests. This run adds case-mode, validation, sync-refusal, and Notice of Appeal tests. |
+| Tests | **Partial** | Case-mode, on-disk seal bypass, evidence round-trip, and Notice of Appeal tests are in `cargo test`. The live USAspending test is `#[ignore]` because it hits the network and did not assert. |
 | Windows / macOS bundles | **Could not inspect** | `tauri.conf.json` has `targets: all`. This environment did not run `tauri build` or produce `.msi` / `.dmg`. |
 | Telemetry | **Works (absent)** | No analytics SDK. USAspending is the only outbound HTTP client. |
 
@@ -64,7 +64,7 @@ Reasons:
 
 ## What this foundation run added
 
-- Standard vs Confidential case modes enforced in Rust.
+- Standard vs Confidential case modes enforced in Rust, including an on-disk `.sealed` marker so editing `case.json` cannot unseal a case.
 - Portable case folder + fill-once `case.json`.
 - Working Notice of Appeal export to `.docx` and PDF.
 - `openseason` CLI and `AGENTS.md`.

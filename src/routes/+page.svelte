@@ -83,7 +83,7 @@
           <p class="text-xs font-mono text-red-400">Encrypted vault</p>
           <h3 class="text-xl font-semibold">Confidential (Open Season)</h3>
           <p class="text-sm text-muted-foreground">
-            For sealed whistleblower work. Shows the Legal Airlock, unlocks the vault, and never sends the case through sync, cloud backup, or publish.
+            For sealed whistleblower work. Shows the Legal Airlock and unlocks the vault. Sync, cloud backup, and publish are refused. The optional USAspending lookup still sends a target name to a public API. It does not upload the case folder.
           </p>
         </button>
       </GlassOSPanel>

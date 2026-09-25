@@ -4,6 +4,7 @@ pub mod case_commands;
 pub mod case_profile;
 pub mod court_rules;
 pub mod documents;
+pub mod seal;
 pub mod sync;
 pub mod db;
 pub mod bundle;

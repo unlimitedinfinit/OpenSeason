@@ -30,13 +30,15 @@ OpenSeason is one local engine with two front doors: a human wizard in the deskt
 
 ```
 Standard case.json  -->  may call sync stub (returns not implemented)
-                    -->  can convert to Confidential (writes sealed_at)
-Confidential        -->  sync/backup/publish refused in Rust
-                    -->  cannot become standard
+                    -->  can convert to Confidential (writes .sealed plus sealed_at)
+Confidential        -->  sync/backup/publish refused if .sealed exists
+                    -->  cannot become standard by editing case.json
                     -->  local Word/PDF/.osb export still allowed
 ```
 
-The UI is not the security boundary. `sync::request_sync` checks `mode` and `sealed_at` before any future network adapter can run.
+The UI is not the security boundary. `sync::request_sync_for_dir` checks the `.sealed` file first, then `case.json`. `save_case` refuses an unseal payload when that marker is present.
+
+Desktop seal encrypts evidence, `case.json`, orders, filings, drafts, and exports in the vault copy. `metadata.db` and `court-rules/` stay readable. CLI `case seal` only writes the marker.
 
 ## Data flow: Notice of Appeal
 

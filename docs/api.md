@@ -22,7 +22,7 @@ Creates the folder layout and a `case.json`. Mode is standard.
 
 Read or write `case.json` by case id (or a full folder path).
 
-Saving a sealed case as standard is rejected.
+`save_case` checks the on-disk `.sealed` marker, not only the incoming payload. A write that tries `{ "mode": "standard", "sealed_at": null }` on a sealed folder is rejected. Editing `case.json` by hand does not remove `.sealed`.
 
 ### `validate_case_cmd`
 
@@ -34,7 +34,7 @@ Validates, then writes `.docx` and `.pdf` under `exports/`. Fails if the case is
 
 ### `convert_case_to_confidential`
 
-Requires an unlocked vault. Copies the folder into `vaults/{id}/`, encrypts leftover evidence files, writes a `SEALED.txt` stub in the Documents copy, and sets `sealed_at`. Cannot be reversed.
+Requires an unlocked vault. Writes `.sealed` first, copies the folder into `vaults/{id}/`, encrypts evidence plus `case.json`, orders, filings, drafts, and exports (nonce prefixed on each file, decrypt-verified before plaintext is deleted). `metadata.db` and `court-rules/` stay readable. The Documents folder is replaced with a pointer that has the case id but not the title, court, or docket. CLI `case seal` only writes the marker. Cannot be reversed by editing `case.json`.
 
 ### `sync_case_cmd`
 
@@ -42,7 +42,7 @@ Arguments: `{ "caseId": "...", "action": "backup" | "publish" | "pull_account" }
 
 Never uploads. Returns a structured refusal:
 
-- `confidential_forbidden` if the case is confidential or was ever sealed
+- `confidential_forbidden` if `.sealed` exists or the loaded profile is confidential / has `sealed_at`
 - `not_implemented` if the case is still standard
 
 ## Confidential vault commands (existing)

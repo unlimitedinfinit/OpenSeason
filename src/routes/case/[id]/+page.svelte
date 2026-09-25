@@ -115,7 +115,7 @@
   }
 
   async function seal() {
-    if (!confirm("Convert this case to Confidential mode? This cannot be reversed. Sync and cloud backup will be refused forever. Unlock Confidential mode first.")) {
+    if (!confirm("Convert this case to Confidential mode? This cannot be reversed by editing case.json. Sync and cloud backup will be refused. Unlock Confidential mode first. The Documents folder will keep only a case id pointer. metadata.db and court-rules in the vault stay readable.")) {
       return;
     }
     busy = true;

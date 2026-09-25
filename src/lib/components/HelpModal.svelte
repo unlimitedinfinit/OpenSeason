@@ -168,7 +168,7 @@
           </h3>
           <div class="ml-12 space-y-4">
             <p class="text-muted-foreground">
-              Because Open Season is a zero-trust, 100% offline application, all case data, SQLite databases, and encrypted evidence are stored strictly on your local machine. No data is ever sent to the cloud.
+              Case files stay on this computer. The only network call in this app is the optional USAspending lookup: it sends the target name you type to api.usaspending.gov and does not upload your vault, evidence, or case folder. Account sync, cloud backup, and publish are stubbed and refuse Confidential cases. There is no telemetry.
             </p>
             
             <div class="p-4 bg-muted/50 rounded-md border border-border space-y-2">

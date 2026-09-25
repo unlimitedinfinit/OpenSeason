@@ -30,13 +30,14 @@ Standard cases **may** use account sync, cloud backup, or publish later. Those p
 
 This is the existing Open Season whistleblower vault.
 
-- Legal Airlock is required.
+- Legal Airlock is required to open the vault in the desktop app.
 - Session-only master password derives the encryption key.
-- Evidence is encrypted with XChaCha20Poly1305.
-- Storage is under the app data `vaults/` directory, not a cloud folder.
-- Every sync, cloud backup, and publish call is refused in the Rust backend, even if a future UI forgets to hide the button.
+- A desktop seal copies the folder into app data `vaults/{id}/`, then encrypts evidence, `case.json`, orders, filings, drafts, and exports (nonce is stored on the file). `metadata.db` and `court-rules/` are left readable. That is a real limit, not full-disk encryption.
+- CLI `case seal` writes a `.sealed` marker and updates `case.json`. It does **not** encrypt files. Use the desktop vault path when you need encryption.
+- The Documents copy is replaced with a pointer: case id and mode only. Title, court, and docket are not kept there.
+- Sync, cloud backup, and publish are refused in Rust if `.sealed` exists, even if someone edits `case.json` back to `standard`.
 
-A standard case can be converted to Confidential. That sets `mode` to `confidential` and writes `sealed_at`. After that, the case can never be treated as syncable. Confidential does not convert back. If you need a copy, use a deliberate local export (Word, PDF, or `.osb`).
+A standard case can be converted to Confidential. That writes `.sealed` (not only fields inside `case.json`). Confidential does not convert back. If you need a copy, use a deliberate local export (Word, PDF, or `.osb`).
 
 ## Court rules
 

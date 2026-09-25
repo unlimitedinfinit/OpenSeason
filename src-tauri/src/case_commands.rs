@@ -57,14 +57,15 @@ pub fn get_case(case_id: String) -> Result<CaseProfile, String> {
     case_profile::load_case(&dir)
 }
 
+/// Shared by the Tauri command and tests. Checks the on-disk seal marker.
+pub fn save_case_inner(dir: &std::path::Path, profile: CaseProfile) -> Result<CaseProfile, String> {
+    case_profile::save_case(dir, &profile)?;
+    case_profile::load_case(dir)
+}
+
 #[tauri::command]
 pub fn save_case(case_id: String, profile: CaseProfile) -> Result<CaseProfile, String> {
-    if profile.is_sync_forbidden() && profile.mode != CaseMode::Confidential {
-        return Err("A sealed case cannot be saved as a standard case.".to_string());
-    }
-    let dir = case_dir_from_id(&case_id);
-    case_profile::save_case(&dir, &profile)?;
-    case_profile::load_case(&dir)
+    save_case_inner(&case_dir_from_id(&case_id), profile)
 }
 
 #[tauri::command]
@@ -105,10 +106,15 @@ pub fn convert_case_to_confidential(
 
     let dir = case_dir_from_id(&case_id);
     let mut profile = case_profile::load_case(&dir)?;
-    if profile.is_sync_forbidden() && profile.mode == CaseMode::Confidential {
+    if crate::seal::is_dir_sealed(&dir) {
         return Err("This case is already confidential.".to_string());
     }
     profile.convert_to_confidential()?;
+    let sealed_at = profile
+        .sealed_at
+        .clone()
+        .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
+    crate::seal::write_seal_marker(&dir, &profile.id, &sealed_at)?;
     case_profile::save_case(&dir, &profile)?;
 
     let vaults = app
@@ -118,12 +124,9 @@ pub fn convert_case_to_confidential(
         .join("vaults");
     fs::create_dir_all(&vaults).map_err(|e| e.to_string())?;
     let hunt_dir = vaults.join(&profile.id);
-    copy_dir_recursive(&dir, &hunt_dir)?;
-
-    let evidence_dir = hunt_dir.join("evidence");
-    if evidence_dir.exists() {
-        encrypt_plain_evidence(&evidence_dir, &key)?;
-    }
+    crate::seal::copy_dir_recursive(&dir, &hunt_dir)?;
+    crate::seal::write_seal_marker(&hunt_dir, &profile.id, &sealed_at)?;
+    crate::seal::encrypt_vault_payloads(&hunt_dir, &key)?;
 
     let db_path = hunt_dir.join("metadata.db");
     let db = HuntDatabase::open(&db_path).map_err(|e| e.to_string())?;
@@ -134,101 +137,14 @@ pub fn convert_case_to_confidential(
         )
         .map_err(|e| e.to_string())?;
 
-    // Leave a stub in the Documents tree so the case no longer looks standard.
-    write_sealed_stub(&dir, &profile)?;
+    crate::seal::write_stripped_stub(&dir, &profile)?;
 
     Ok(profile)
-}
-
-fn write_sealed_stub(dir: &std::path::Path, profile: &CaseProfile) -> Result<(), String> {
-    for sub in ["orders", "filings", "evidence", "drafts", "exports"] {
-        let path = dir.join(sub);
-        if path.exists() {
-            let _ = fs::remove_dir_all(&path);
-        }
-        fs::create_dir_all(&path).map_err(|e| e.to_string())?;
-    }
-    let stub = serde_json::json!({
-        "schema_version": profile.schema_version,
-        "id": profile.id,
-        "title": profile.title,
-        "mode": "confidential",
-        "document_kind": profile.document_kind,
-        "created_at": profile.created_at,
-        "updated_at": profile.updated_at,
-        "sealed_at": profile.sealed_at,
-        "court": profile.court,
-        "docket_number": profile.docket_number,
-        "caption": { "plaintiffs": [], "defendants": [], "appellants": [], "appellees": [] },
-        "filer": { "name": "", "role": "", "address_lines": [], "phone": "", "email": "", "signature_name": "" },
-        "notice_of_appeal": {
-            "judgment_date": "",
-            "judgment_description": "",
-            "trial_court_name": "",
-            "trial_court_docket": "",
-            "user_text": ""
-        }
-    });
-    fs::write(
-        dir.join("case.json"),
-        serde_json::to_string_pretty(&stub).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())?;
-    fs::write(
-        dir.join("SEALED.txt"),
-        "This case was converted to Confidential mode.\nOpen it from Confidential (Open Season) after unlocking the vault.\nThe working copy now lives in the local encrypted vault, not in this folder.\n",
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-fn copy_dir_recursive(from: &std::path::Path, to: &std::path::Path) -> Result<(), String> {
-    fs::create_dir_all(to).map_err(|e| e.to_string())?;
-    for entry in fs::read_dir(from).map_err(|e| e.to_string())? {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let src = entry.path();
-        let dest = to.join(entry.file_name());
-        if src.is_dir() {
-            copy_dir_recursive(&src, &dest)?;
-        } else {
-            fs::copy(&src, &dest).map_err(|e| e.to_string())?;
-        }
-    }
-    Ok(())
-}
-
-fn encrypt_plain_evidence(
-    evidence_dir: &std::path::Path,
-    key: &crate::crypto::SessionKey,
-) -> Result<(), String> {
-    use sha2::{Digest, Sha256};
-
-    for entry in fs::read_dir(evidence_dir).map_err(|e| e.to_string())? {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let path = entry.path();
-        if !path.is_file() {
-            continue;
-        }
-        if path.extension().and_then(|s| s.to_str()) == Some("enc") {
-            continue;
-        }
-        let bytes = fs::read(&path).map_err(|e| e.to_string())?;
-        let scrubbed = crate::crypto::strip_metadata(&bytes);
-        let mut hasher = Sha256::new();
-        hasher.update(&scrubbed);
-        let hash_hex = format!("{:x}", hasher.finalize());
-        let (encrypted, _nonce) = crate::crypto::encrypt_data(&scrubbed, key)?;
-        let enc_path = evidence_dir.join(format!("{}.enc", hash_hex));
-        fs::write(&enc_path, encrypted).map_err(|e| e.to_string())?;
-        let _ = fs::remove_file(&path);
-    }
-    Ok(())
 }
 
 #[tauri::command]
 pub fn sync_case_cmd(case_id: String, action: String) -> Result<SyncRefusal, String> {
     let dir = case_dir_from_id(&case_id);
-    let profile = case_profile::load_case(&dir)?;
     let action = match action.as_str() {
         "backup" => SyncAction::Backup,
         "publish" => SyncAction::Publish,
@@ -240,5 +156,5 @@ pub fn sync_case_cmd(case_id: String, action: String) -> Result<SyncRefusal, Str
             ))
         }
     };
-    Ok(sync::describe_sync_error(&profile, action))
+    sync::describe_sync_for_dir(&dir, action)
 }

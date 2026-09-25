@@ -127,12 +127,11 @@ fn run(cli: Cli) -> Result<(), String> {
                 return Err("validation failed".to_string());
             }
             CaseCmd::Seal { path } => {
-                let mut profile = case_profile::load_case(&path)?;
-                profile.convert_to_confidential()?;
-                case_profile::save_case(&path, &profile)?;
+                let profile = open_season_lib::seal::seal_case_on_disk(&path)?;
                 println!("Case {} is now confidential.", profile.id);
-                println!("Sync, cloud backup, and publish will be refused.");
-                println!("This cannot be reversed. Use a deliberate local export if you need a copy.");
+                println!("Wrote the {} marker. Sync, cloud backup, and publish will be refused.", open_season_lib::seal::SEAL_MARKER_NAME);
+                println!("This cannot be reversed by editing case.json.");
+                println!("CLI seal does not encrypt files. Use Confidential mode in the desktop app (unlocked vault) to encrypt a vault copy.");
             }
         },
         Commands::Export { action } => match action {
@@ -149,14 +148,13 @@ fn run(cli: Cli) -> Result<(), String> {
             }
         },
         Commands::Sync { path, action } => {
-            let profile = case_profile::load_case(&path)?;
             let action = match action.as_str() {
                 "backup" => SyncAction::Backup,
                 "publish" => SyncAction::Publish,
                 "pull" | "pull_account" => SyncAction::PullAccount,
                 other => return Err(format!("Unknown action '{}'", other)),
             };
-            let result = sync::describe_sync_error(&profile, action);
+            let result = sync::describe_sync_for_dir(&path, action)?;
             println!("{}", serde_json::to_string_pretty(&result).unwrap());
             if result.kind == "confidential_forbidden" {
                 return Err(result.reason);
