@@ -652,15 +652,41 @@ pub fn add_hunt_evidence_bytes_at(
     let mut hasher = Sha256::new();
     hasher.update(&scrubbed_bytes);
     let hash_hex = format!("{:x}", hasher.finalize());
-    let (encrypted_bytes, nonce) = crypto::encrypt_data(&scrubbed_bytes, key)?;
 
     let evidence_dir = hunt_dir.join("evidence");
     fs::create_dir_all(&evidence_dir).map_err(|e| e.to_string())?;
     let enc_dest_path = evidence_dir.join(format!("{}.enc", hash_hex));
-    fs::write(&enc_dest_path, &encrypted_bytes).map_err(|e| e.to_string())?;
-
     let db_path = hunt_dir.join("metadata.db");
-    let conn = rusqlite::Connection::open(db_path).map_err(|e| e.to_string())?;
+    let conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
+    let already_logged: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM evidence WHERE sha256_hash = ?1",
+            rusqlite::params![hash_hex],
+            |row| row.get::<_, i64>(0),
+        )
+        .map(|n| n > 0)
+        .unwrap_or(false);
+
+    // Content-addressed filename. A second add of the same bytes must never
+    // overwrite or delete the existing .enc (often the only sealed copy).
+    if enc_dest_path.exists() || already_logged {
+        return Ok(());
+    }
+
+    let (encrypted_bytes, nonce) = crypto::encrypt_data(&scrubbed_bytes, key)?;
+    match crate::sandbox::create_new_file(&enc_dest_path) {
+        Ok(mut file) => {
+            use std::io::Write;
+            file.write_all(&encrypted_bytes).map_err(|e| e.to_string())?;
+        }
+        Err(err)
+            if err.to_lowercase().contains("already") || err.to_lowercase().contains("exists") =>
+        {
+            return Ok(());
+        }
+        Err(err) => return Err(err),
+    }
+
     conn.execute(
         "INSERT INTO evidence (description, file_path, encrypted_key_nonce, sha256_hash) VALUES (?1, ?2, ?3, ?4)",
         rusqlite::params![description, filename, nonce, hash_hex],
@@ -984,6 +1010,79 @@ mod tests {
             entries.iter().any(|e| e.path().extension().and_then(|s| s.to_str()) == Some("enc")),
             "correct password must write an encrypted exhibit"
         );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    fn evidence_row_count(dir: &std::path::Path) -> i64 {
+        let conn = rusqlite::Connection::open(dir.join("metadata.db")).unwrap();
+        conn.query_row("SELECT COUNT(*) FROM evidence", [], |row| row.get(0))
+            .unwrap()
+    }
+
+    fn only_enc_file(dir: &std::path::Path) -> std::path::PathBuf {
+        let mut encs: Vec<_> = fs::read_dir(dir.join("evidence"))
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("enc"))
+            .collect();
+        assert_eq!(encs.len(), 1, "expected exactly one .enc, got {encs:?}");
+        encs.remove(0)
+    }
+
+    #[test]
+    fn sealed_evidence_duplicate_hash_does_not_overwrite() {
+        let (dir, key, salt, verifier) = sealed_hunt_for_add("correct-add-password");
+        let payload = b"identical sealed exhibit bytes";
+        add_hunt_evidence_bytes_at(
+            &dir,
+            &key,
+            "photo.jpg",
+            payload,
+            "first add",
+            Some("correct-add-password"),
+            Some(&salt),
+            Some(&verifier),
+        )
+        .unwrap();
+        let enc = only_enc_file(&dir);
+        let before = fs::read(&enc).unwrap();
+        assert!(!before.is_empty());
+        add_hunt_evidence_bytes_at(
+            &dir,
+            &key,
+            "photo-copy.jpg",
+            payload,
+            "second add of the same bytes",
+            Some("correct-add-password"),
+            Some(&salt),
+            Some(&verifier),
+        )
+        .unwrap();
+        assert_eq!(
+            fs::read(&enc).unwrap(),
+            before,
+            "re-adding identical content must not rewrite the sealed .enc"
+        );
+        assert_eq!(only_enc_file(&dir), enc);
+        assert_eq!(evidence_row_count(&dir), 1);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn unsealed_evidence_duplicate_hash_is_noop() {
+        let dir = std::env::temp_dir().join(format!("os-evdup-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(dir.join("evidence")).unwrap();
+        HuntDatabase::open(dir.join("metadata.db")).unwrap();
+        let salt = crypto::generate_salt();
+        let key = crypto::derive_key("unsealed-add-password", &salt).unwrap();
+        let payload = b"same unsealed exhibit twice";
+        add_hunt_evidence_bytes_at(&dir, &key, "a.bin", payload, "one", None, None, None).unwrap();
+        let enc = only_enc_file(&dir);
+        let before = fs::read(&enc).unwrap();
+        add_hunt_evidence_bytes_at(&dir, &key, "b.bin", payload, "two", None, None, None).unwrap();
+        assert_eq!(fs::read(&enc).unwrap(), before);
+        assert_eq!(evidence_row_count(&dir), 1);
         let _ = fs::remove_dir_all(&dir);
     }
 }
