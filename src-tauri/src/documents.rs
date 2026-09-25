@@ -312,11 +312,34 @@ fn build_typst_source(profile: &CaseProfile, rules: &CourtRules) -> String {
     )
 }
 
+fn assert_notice_out_dir(out: &Path) -> Result<(), String> {
+    let name = out.file_name().and_then(|s| s.to_str()).unwrap_or("");
+    if crate::sandbox::is_reserved_marker_name(name) {
+        return Err("Export cannot write to a path named .sealed.".to_string());
+    }
+    let app_data = crate::sandbox::default_app_data_root();
+    let resolved = crate::sandbox::canonicalize_existing_prefix(out);
+    if app_data.exists() {
+        if let Ok(app_canon) = app_data.canonicalize() {
+            if resolved == app_canon || resolved.starts_with(&app_canon) {
+                return Err("Export cannot write inside the app data folder.".to_string());
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn export_notice_of_appeal(
     case_dir: &Path,
     profile: &CaseProfile,
     out_dir: Option<&Path>,
 ) -> Result<ExportPaths, String> {
+    if crate::seal::is_dir_sealed(case_dir) {
+        return Err("This case is sealed. Export from the Documents pointer is refused.".to_string());
+    }
+    if let Some(out) = out_dir {
+        assert_notice_out_dir(out)?;
+    }
     let report = validate_case(profile, Some(case_dir));
     if !report.ok {
         let details = report
@@ -370,6 +393,12 @@ pub fn export_notice_of_appeal_docx_only(
     out_dir: Option<&Path>,
 ) -> Result<PathBuf, String> {
     let report = validate_case(profile, Some(case_dir));
+    if crate::seal::is_dir_sealed(case_dir) {
+        return Err("This case is sealed. Export from the Documents pointer is refused.".to_string());
+    }
+    if let Some(out) = out_dir {
+        assert_notice_out_dir(out)?;
+    }
     if !report.ok {
         return Err("Case is not ready to export.".to_string());
     }

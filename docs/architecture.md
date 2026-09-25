@@ -38,7 +38,7 @@ Confidential        -->  sync/backup/publish refused if .sealed exists
 
 The UI is not the security boundary. `sync::request_sync_for_dir` checks the `.sealed` file first, then `case.json`. `save_case` refuses an unseal payload when that marker is present.
 
-Desktop seal checks the vault password against a verifier, then encrypts the whole vault tree (nested folders and root-level user files included). `metadata.db` and `court-rules/` stay readable. CLI `case seal` only writes the marker. Hunt and case command ids must be UUIDs; export will not write inside the cases root or to a file named `.sealed`.
+Desktop seal checks the vault password against a verifier, then encrypts the whole vault tree (nested folders and root-level user files included). Only the app's own `{vault}/metadata.db` and `{vault}/court-rules/` stay readable. Documents is then emptied to the pointer files. CLI `case seal` only writes the marker. Hunt and case command ids must be UUIDs. Export will not write inside app data or the cases root, will not overwrite an existing file, and will not write a file named `.sealed`. Sealed vault delete and purge require the vault password.
 
 ## Data flow: Notice of Appeal
 

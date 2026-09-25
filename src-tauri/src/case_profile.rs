@@ -264,11 +264,9 @@ pub fn load_case(case_dir: &Path) -> Result<CaseProfile, String> {
 }
 
 pub fn save_case(case_dir: &Path, profile: &CaseProfile) -> Result<(), String> {
-    if crate::seal::is_dir_sealed(case_dir)
-        && (profile.mode != CaseMode::Confidential || profile.sealed_at.is_none())
-    {
+    if crate::seal::is_dir_sealed(case_dir) {
         return Err(
-            "This case is sealed on disk. Editing case.json cannot make it syncable.".to_string(),
+            "This case is sealed. The Documents folder is a pointer only and cannot be edited.".to_string(),
         );
     }
     ensure_case_layout(case_dir)?;
@@ -303,6 +301,22 @@ pub fn create_case_folder(
     let mut profile = CaseProfile::new_standard(title, document_kind);
     if title.trim().is_empty() {
         return Err("A case title is required.".to_string());
+    }
+    let dest_name = parent_or_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+    if crate::sandbox::is_reserved_marker_name(dest_name) {
+        return Err("Refusing to create a case folder named .sealed.".to_string());
+    }
+    let app_data = crate::sandbox::default_app_data_root();
+    let resolved = crate::sandbox::canonicalize_existing_prefix(parent_or_path);
+    if app_data.exists() {
+        if let Ok(app_canon) = app_data.canonicalize() {
+            if resolved == app_canon || resolved.starts_with(&app_canon) {
+                return Err("Refusing to create a case folder inside the app data directory.".to_string());
+            }
+        }
     }
     if mode == CaseMode::Confidential {
         profile

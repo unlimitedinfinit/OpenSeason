@@ -8,11 +8,9 @@
   let status = $state("Checking Vault...");
   let isChecking = $state(true);
   let error = $state("");
-  let salt = $state("");
-
   onMount(async () => {
     try {
-      salt = await invoke("get_salt");
+      await invoke("get_salt");
       status = "Vault Locked";
     } catch (e) {
       error = "Failed to access Vault Storage: " + e;
@@ -31,7 +29,7 @@
     error = "";
     
     try {
-      const success = await invoke("unlock_vault", { password, salt });
+      const success = await invoke("unlock_vault", { password });
       if (success) {
         onLaunch();
       } else {

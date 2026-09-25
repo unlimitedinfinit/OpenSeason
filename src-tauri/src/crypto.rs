@@ -8,7 +8,7 @@ use chacha20poly1305::{
 };
 use rand::RngCore;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -80,11 +80,72 @@ pub fn verify_password_key(key: &SessionKey, verifier_blob: &[u8]) -> Result<(),
     Ok(())
 }
 
-/// Unlock: reject a wrong password when a verifier exists. First unlock writes one.
+fn vault_has_data(vaults_dir: &Path) -> bool {
+    if !vaults_dir.exists() {
+        return false;
+    }
+    fs::read_dir(vaults_dir)
+        .ok()
+        .map(|entries| {
+            entries.flatten().any(|e| {
+                let path = e.path();
+                path.is_dir() || path.is_file()
+            })
+        })
+        .unwrap_or(false)
+}
+
+fn try_confirm_key_against_vault(key: &SessionKey, vaults_dir: &Path) -> Option<bool> {
+    if !vaults_dir.exists() {
+        return None;
+    }
+    let mut saw_candidate = false;
+    let walker = walkdir_enc_files(vaults_dir);
+    for path in walker {
+        let Ok(blob) = fs::read(&path) else {
+            continue;
+        };
+        if blob.len() < NONCE_LEN + 1 {
+            continue;
+        }
+        saw_candidate = true;
+        if decrypt_blob(&blob, key).is_ok() {
+            return Some(true);
+        }
+    }
+    if saw_candidate {
+        Some(false)
+    } else {
+        None
+    }
+}
+
+fn walkdir_enc_files(root: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                walk(&path, out);
+            } else if path.extension().and_then(|s| s.to_str()) == Some("enc") {
+                out.push(path);
+            }
+        }
+    }
+    walk(root, &mut out);
+    out
+}
+
+/// Unlock: reject a wrong password when a verifier exists.
+/// A missing verifier is created only when no vault data exists.
 pub fn unlock_vault_at(
     password: &str,
     salt: &str,
     verifier_path: &Path,
+    vaults_dir: &Path,
 ) -> Result<SessionKey, String> {
     if password.is_empty() {
         return Err("Password required.".to_string());
@@ -93,13 +154,32 @@ pub fn unlock_vault_at(
     if verifier_path.exists() {
         let blob = fs::read(verifier_path).map_err(|e| e.to_string())?;
         verify_password_key(&key, &blob)?;
-    } else {
-        if let Some(parent) = verifier_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        }
-        let blob = create_password_verifier(&key)?;
-        fs::write(verifier_path, blob).map_err(|e| e.to_string())?;
+        return Ok(key);
     }
+    if vault_has_data(vaults_dir) {
+        match try_confirm_key_against_vault(&key, vaults_dir) {
+            Some(true) => {
+                if let Some(parent) = verifier_path.parent() {
+                    fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                }
+                let blob = create_password_verifier(&key)?;
+                fs::write(verifier_path, blob).map_err(|e| e.to_string())?;
+                return Ok(key);
+            }
+            Some(false) => return Err("Wrong password.".to_string()),
+            None => {
+                return Err(
+                    "This vault already has data but no password verifier. Refusing to set a new password from this unlock, because a typo would lock the files. Restore master_verifier.bin."
+                        .to_string(),
+                );
+            }
+        }
+    }
+    if let Some(parent) = verifier_path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let blob = create_password_verifier(&key)?;
+    fs::write(verifier_path, blob).map_err(|e| e.to_string())?;
     Ok(key)
 }
 
@@ -291,10 +371,12 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let salt = generate_salt();
         let verifier_path = dir.join("master_verifier.bin");
-        unlock_vault_at("correct-horse-battery", &salt, &verifier_path).unwrap();
+        let vaults = dir.join("vaults");
+        fs::create_dir_all(&vaults).unwrap();
+        unlock_vault_at("correct-horse-battery", &salt, &verifier_path, &vaults).unwrap();
         assert!(verifier_path.exists());
 
-        let err = match unlock_vault_at("wrong-password-typed", &salt, &verifier_path) {
+        let err = match unlock_vault_at("wrong-password-typed", &salt, &verifier_path, &vaults) {
             Ok(_) => panic!("wrong password must not unlock"),
             Err(e) => e,
         };
@@ -312,9 +394,32 @@ mod tests {
         let salt = generate_salt();
         let verifier_path = dir.join("master_verifier.bin");
         assert!(!verifier_path.exists());
-        unlock_vault_at("first-time-password", &salt, &verifier_path).unwrap();
+        let vaults = dir.join("vaults");
+        fs::create_dir_all(&vaults).unwrap();
+        unlock_vault_at("first-time-password", &salt, &verifier_path, &vaults).unwrap();
         assert!(verifier_path.exists());
-        unlock_vault_at("first-time-password", &salt, &verifier_path).unwrap();
+        unlock_vault_at("first-time-password", &salt, &verifier_path, &vaults).unwrap();
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn missing_verifier_with_vault_data_refuses_first_password() {
+        let dir = std::env::temp_dir().join(format!("os-unlock-migrate-{}", uuid::Uuid::new_v4()));
+        let vaults = dir.join("vaults").join(uuid::Uuid::new_v4().to_string());
+        fs::create_dir_all(&vaults).unwrap();
+        fs::write(vaults.join("notes.txt"), b"existing vault data").unwrap();
+        let salt = generate_salt();
+        let verifier_path = dir.join("master_verifier.bin");
+        let err = match unlock_vault_at("maybe-a-typo", &salt, &verifier_path, dir.join("vaults").as_path())
+        {
+            Ok(_) => panic!("must not create a verifier from the first typed password when vault data exists"),
+            Err(e) => e,
+        };
+        assert!(
+            err.to_lowercase().contains("verifier") || err.to_lowercase().contains("refusing"),
+            "missing verifier with existing vault data must refuse, got {err}"
+        );
+        assert!(!verifier_path.exists());
         let _ = fs::remove_dir_all(&dir);
     }
 }

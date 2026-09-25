@@ -16,8 +16,23 @@ pub fn seal_marker_path(case_dir: &Path) -> PathBuf {
     case_dir.join(SEAL_MARKER_NAME)
 }
 
+pub fn find_seal_marker(case_dir: &Path) -> Option<PathBuf> {
+    let entries = fs::read_dir(case_dir).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+        if crate::sandbox::is_reserved_marker_name(name) {
+            return Some(path);
+        }
+    }
+    None
+}
+
 pub fn is_dir_sealed(case_dir: &Path) -> bool {
-    let path = seal_marker_path(case_dir);
+    let path = find_seal_marker(case_dir).unwrap_or_else(|| seal_marker_path(case_dir));
     if !path.is_file() {
         return false;
     }
@@ -38,7 +53,8 @@ pub fn write_seal_marker(case_dir: &Path, case_id: &str, sealed_at: &str) -> Res
 }
 
 pub fn read_marker_sealed_at(case_dir: &Path) -> Option<String> {
-    let text = fs::read_to_string(seal_marker_path(case_dir)).ok()?;
+    let path = find_seal_marker(case_dir).unwrap_or_else(|| seal_marker_path(case_dir));
+    let text = fs::read_to_string(path).ok()?;
     text.lines()
         .find_map(|line| line.strip_prefix("sealed_at=").map(|s| s.to_string()))
 }
@@ -60,23 +76,29 @@ pub fn apply_disk_seal(profile: &mut CaseProfile, case_dir: &Path) {
 pub fn seal_case_on_disk(case_dir: &Path) -> Result<CaseProfile, String> {
     let mut profile = case_profile::load_case(case_dir)?;
     profile.convert_to_confidential()?;
-    let sealed_at = profile
-        .sealed_at
-        .clone()
-        .unwrap_or_else(|| Utc::now().to_rfc3339());
-    write_seal_marker(case_dir, &profile.id, &sealed_at)?;
     case_profile::save_case(case_dir, &profile)?;
     case_profile::load_case(case_dir)
 }
 
+pub const STUB_ONLY_NAMES: &[&str] = &["case.json", SEAL_MARKER_NAME, SEAL_README_NAME];
+
+/// After the vault copy decrypt-verifies, Documents keeps only the pointer files.
 pub fn write_stripped_stub(case_dir: &Path, profile: &CaseProfile) -> Result<(), String> {
-    for sub in ["orders", "filings", "evidence", "drafts", "exports"] {
-        let path = case_dir.join(sub);
-        if path.exists() {
-            let _ = fs::remove_dir_all(&path);
+    if case_dir.exists() {
+        let entries: Vec<_> = fs::read_dir(case_dir)
+            .map_err(|e| e.to_string())?
+            .filter_map(|e| e.ok())
+            .collect();
+        for entry in entries {
+            let path = entry.path();
+            if path.is_dir() {
+                fs::remove_dir_all(&path).map_err(|e| e.to_string())?;
+            } else {
+                fs::remove_file(&path).map_err(|e| e.to_string())?;
+            }
         }
-        fs::create_dir_all(&path).map_err(|e| e.to_string())?;
     }
+    fs::create_dir_all(case_dir).map_err(|e| e.to_string())?;
     let sealed_at = profile
         .sealed_at
         .clone()
@@ -131,16 +153,21 @@ pub fn copy_dir_recursive(from: &Path, to: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn should_skip_encrypt(path: &Path) -> bool {
+/// Skip only the app's own files at the vault root, not user files that share a name.
+fn is_app_owned_skip(vault_root: &Path, path: &Path) -> bool {
+    let parent = match path.parent() {
+        Some(p) => p,
+        None => return false,
+    };
+    if parent != vault_root {
+        return false;
+    }
     let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
-    if name == SEAL_MARKER_NAME || name == SEAL_README_NAME || name == "metadata.db" || name == ".gitkeep"
-    {
-        return true;
-    }
-    if path.extension().and_then(|s| s.to_str()) == Some("enc") {
-        return true;
-    }
-    false
+    crate::sandbox::is_reserved_marker_name(name) || name == SEAL_README_NAME || name == "metadata.db"
+}
+
+fn is_app_court_rules_dir(vault_root: &Path, path: &Path) -> bool {
+    path == vault_root.join("court-rules")
 }
 
 fn is_symlink(path: &Path) -> bool {
@@ -245,7 +272,7 @@ fn encrypt_plain_evidence_in(
             count += encrypt_plain_evidence_in(&path, evidence_root, key, db)?;
             continue;
         }
-        if !path.is_file() || should_skip_encrypt(&path) {
+        if !path.is_file() || is_app_owned_skip(evidence_root.parent().unwrap_or(evidence_root), &path) {
             continue;
         }
         let dest_dir = path.parent().unwrap_or(evidence_root);
@@ -268,7 +295,7 @@ pub fn encrypt_plain_evidence(evidence_dir: &Path, key: &SessionKey) -> Result<u
 
 /// Walk the whole vault tree. Nested folders and root-level user files are encrypted.
 /// `court-rules/` and `metadata.db` stay readable (documented limit).
-fn encrypt_dir_tree(dir: &Path, key: &SessionKey) -> Result<usize, String> {
+fn encrypt_dir_tree(dir: &Path, vault_root: &Path, key: &SessionKey) -> Result<usize, String> {
     if !dir.exists() {
         return Ok(0);
     }
@@ -283,19 +310,18 @@ fn encrypt_dir_tree(dir: &Path, key: &SessionKey) -> Result<usize, String> {
         if is_symlink(&path) {
             continue;
         }
-        let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
         if path.is_dir() {
-            if name == "court-rules" {
+            if is_app_court_rules_dir(vault_root, &path) {
                 continue;
             }
-            if name == "evidence" {
+            if path == vault_root.join("evidence") {
                 count += encrypt_plain_evidence(&path, key)?;
                 continue;
             }
-            count += encrypt_dir_tree(&path, key)?;
+            count += encrypt_dir_tree(&path, vault_root, key)?;
             continue;
         }
-        if path.is_file() && !should_skip_encrypt(&path) {
+        if path.is_file() && !is_app_owned_skip(vault_root, &path) {
             encrypt_file_replace(&path, key)?;
             count += 1;
         }
@@ -305,7 +331,7 @@ fn encrypt_dir_tree(dir: &Path, key: &SessionKey) -> Result<usize, String> {
 
 /// Encrypt every encryptable file in a vault copy, including nested folders and root files.
 pub fn encrypt_vault_payloads(vault_dir: &Path, key: &SessionKey) -> Result<usize, String> {
-    encrypt_dir_tree(vault_dir, key)
+    encrypt_dir_tree(vault_dir, vault_dir, key)
 }
 
 /// Password is checked against the stored verifier before any copy, encrypt, or delete.
@@ -330,12 +356,11 @@ pub fn seal_standard_case_with_verified_key(
     }
     let mut profile = case_profile::load_case(case_dir)?;
     profile.convert_to_confidential()?;
+    case_profile::save_case(case_dir, &profile)?;
     let sealed_at = profile
         .sealed_at
         .clone()
         .unwrap_or_else(|| Utc::now().to_rfc3339());
-    write_seal_marker(case_dir, &profile.id, &sealed_at)?;
-    case_profile::save_case(case_dir, &profile)?;
 
     if let Some(parent) = vault_dir.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -555,18 +580,39 @@ mod tests {
         .unwrap();
         fs::write(dir.join("loose-notes.txt"), b"root level user file").unwrap();
         fs::write(dir.join("orders").join("2024").join("order.txt"), b"nested order").unwrap();
+        fs::write(
+            dir.join("evidence").join("photos").join("metadata.db"),
+            b"user named this metadata.db",
+        )
+        .unwrap();
+        fs::write(dir.join("notes.enc"), b"user file that happens to end in enc").unwrap();
+        fs::write(dir.join("evidence").join(".gitkeep"), b"user gitkeep").unwrap();
         HuntDatabase::open(dir.join("metadata.db")).unwrap();
 
         let key = test_key();
         let n = encrypt_vault_payloads(&dir, &key).unwrap();
-        assert!(n >= 4, "expected nested evidence, root file, order, and case.json; got {n}");
+        assert!(n >= 7, "expected nested evidence, root files, order, and case.json; got {n}");
 
         assert!(!dir.join("evidence").join("photos").join("nested.txt").exists());
         assert!(!dir.join("loose-notes.txt").exists());
         assert!(!dir.join("orders").join("2024").join("order.txt").exists());
+        assert!(!dir.join("notes.enc").exists());
+        assert!(dir.join("notes.enc.enc").exists() || dir.join("notes.enc").with_extension("enc.enc").exists() || {
+            // encrypt_file_replace appends .enc to the file name
+            dir.join("notes.enc.enc").exists()
+        });
         assert!(dir.join("loose-notes.txt.enc").exists());
         assert!(dir.join("orders").join("2024").join("order.txt.enc").exists());
         assert!(dir.join("court-rules").join("generic.json").exists());
+        assert!(
+            !dir.join("evidence").join("photos").join("metadata.db").exists(),
+            "user file named metadata.db under evidence must be encrypted"
+        );
+        assert!(
+            !dir.join("evidence").join(".gitkeep").exists(),
+            "user .gitkeep must be encrypted"
+        );
+        assert!(dir.join("metadata.db").exists(), "app metadata.db at vault root stays readable");
 
         let mut found_nested = false;
         for entry in fs::read_dir(dir.join("evidence").join("photos")).unwrap() {
@@ -581,6 +627,77 @@ mod tests {
         assert!(found_nested, "nested evidence/photos file must be encrypted in place");
         let root_plain = crypto::decrypt_blob(&fs::read(dir.join("loose-notes.txt.enc")).unwrap(), &key).unwrap();
         assert_eq!(root_plain, b"root level user file");
+        let user_enc = crypto::decrypt_blob(&fs::read(dir.join("notes.enc.enc")).unwrap(), &key).unwrap();
+        assert_eq!(user_enc, b"user file that happens to end in enc");
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn desktop_seal_leaves_only_stub_files_in_documents() {
+        let documents = temp_dir();
+        ensure_case_layout(&documents).unwrap();
+        case_profile::save_case(&documents, &sample_appeal_profile()).unwrap();
+        fs::create_dir_all(documents.join("evidence").join("photos")).unwrap();
+        fs::create_dir_all(documents.join("extra-folder")).unwrap();
+        fs::write(
+            documents.join("evidence").join("photos").join("nested.txt"),
+            b"nested photo note",
+        )
+        .unwrap();
+        fs::write(documents.join("loose-notes.txt"), b"root level user file").unwrap();
+        fs::write(documents.join("extra-folder").join("memo.txt"), b"extra memo").unwrap();
+
+        let salt = crypto::generate_salt();
+        let password = "fixture-desktop-seal-password";
+        let key = crypto::derive_key(password, &salt).unwrap();
+        let verifier = crypto::create_password_verifier(&key).unwrap();
+        let vault = std::env::temp_dir().join(format!("os-e2e-vault-{}", uuid::Uuid::new_v4()));
+
+        seal_standard_case_with_password(&documents, &vault, password, &salt, &verifier).unwrap();
+
+        let leftover: Vec<String> = fs::read_dir(&documents)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        let mut leftover_sorted = leftover.clone();
+        leftover_sorted.sort();
+        assert_eq!(
+            leftover_sorted,
+            vec![
+                SEAL_MARKER_NAME.to_string(),
+                SEAL_README_NAME.to_string(),
+                "case.json".to_string()
+            ],
+            "Documents must contain only the stub files, got {leftover:?}"
+        );
+        assert!(!documents.join("loose-notes.txt").exists());
+        assert!(!documents.join("evidence").exists());
+        assert!(!documents.join("extra-folder").exists());
+        let stub = fs::read_to_string(documents.join("case.json")).unwrap();
+        assert!(!stub.contains("Jordan Example"));
+        assert!(is_dir_sealed(&documents));
+
+        let nested_plain = {
+            let mut found = None;
+            for entry in fs::read_dir(vault.join("evidence").join("photos")).unwrap() {
+                let path = entry.unwrap().path();
+                if path.extension().and_then(|s| s.to_str()) == Some("enc") {
+                    let plain = crypto::decrypt_blob(&fs::read(&path).unwrap(), &key).unwrap();
+                    if plain == b"nested photo note" {
+                        found = Some(plain);
+                    }
+                }
+            }
+            found
+        };
+        assert!(nested_plain.is_some(), "vault nested evidence must decrypt");
+        let root_blob = fs::read(vault.join("loose-notes.txt.enc")).unwrap();
+        assert_eq!(
+            crypto::decrypt_blob(&root_blob, &key).unwrap(),
+            b"root level user file"
+        );
+        let _ = fs::remove_dir_all(&documents);
+        let _ = fs::remove_dir_all(&vault);
     }
 }

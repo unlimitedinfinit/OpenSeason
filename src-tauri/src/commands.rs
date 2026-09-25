@@ -123,6 +123,13 @@ pub fn save_disclosure_cmd(
     let sanitized_target = target.replace(" ", "_").replace("/", "-");
     let filename = format!("Disclosure_{}.pdf", sanitized_target);
     let output_path = download_dir.join(&filename);
+    let app_root = app.path().app_local_data_dir()
+        .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
+    crate::sandbox::assert_export_target_allowed(
+        &output_path,
+        &crate::case_profile::default_cases_root(),
+        &app_root,
+    )?;
     
     fs::write(&output_path, &pdf_bytes).map_err(|e| e.to_string())?;
     
@@ -173,9 +180,12 @@ pub fn export_hunt_cmd(app: AppHandle, hunt_id: String, target_path: String) -> 
         PathBuf::from(&target_path)
     };
 
+    let app_root = app.path().app_local_data_dir()
+        .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
     crate::sandbox::assert_export_target_allowed(
         &output_path,
         &crate::case_profile::default_cases_root(),
+        &app_root,
     )?;
 
     bundle::export_hunt(&hunt_path, &output_path).map_err(|e| e.to_string())?;
@@ -228,15 +238,21 @@ pub fn get_salt(app: AppHandle) -> Result<String, String> {
 #[tauri::command]
 pub fn unlock_vault(
     app: AppHandle,
-    password: String, 
-    salt: String,
+    password: String,
     state: State<'_, AppState>
 ) -> Result<bool, String> {
     let root = app.path().app_local_data_dir()
         .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
     fs::create_dir_all(&root).map_err(|e| e.to_string())?;
+    let salt_path = root.join("master_salt.bin");
+    if !salt_path.exists() {
+        let salt = crypto::generate_salt();
+        fs::write(&salt_path, &salt).map_err(|e| e.to_string())?;
+    }
+    let salt = fs::read_to_string(&salt_path).map_err(|e| e.to_string())?;
     let verifier_path = root.join("master_verifier.bin");
-    let session_key = crypto::unlock_vault_at(&password, &salt, &verifier_path)?;
+    let vaults_dir = root.join("vaults");
+    let session_key = crypto::unlock_vault_at(&password, &salt, &verifier_path, &vaults_dir)?;
     state.set_key(session_key);
     Ok(true)
 }
@@ -346,9 +362,23 @@ pub async fn update_hunt(app: AppHandle, hunt_id: String, name: String) -> Resul
 }
 
 #[tauri::command]
-pub async fn delete_hunt(app: AppHandle, hunt_id: String) -> Result<(), String> {
+pub async fn delete_hunt(
+    app: AppHandle,
+    hunt_id: String,
+    password: Option<String>,
+) -> Result<(), String> {
     let vault_path = get_vault_root(&app)?;
-    crate::sandbox::delete_id_under_root(&vault_path, &hunt_id)?;
+    let root = app.path().app_local_data_dir()
+        .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
+    let salt = fs::read_to_string(root.join("master_salt.bin")).ok();
+    let verifier = fs::read(root.join("master_verifier.bin")).ok();
+    crate::sandbox::delete_hunt_checked(
+        &vault_path,
+        &hunt_id,
+        password.as_deref(),
+        salt.as_deref(),
+        verifier.as_deref(),
+    )?;
     Ok(())
 }
 
@@ -678,10 +708,19 @@ pub fn delete_hunt_evidence(app: AppHandle, hunt_id: String, evidence_id: i64) -
 
     // 2. Delete file if it exists
     if let Some(hash_hex) = hash_opt {
+        if !crate::sandbox::is_hex_sha256(&hash_hex) {
+            return Err("Evidence hash is not a SHA-256 hex value. File was not deleted.".to_string());
+        }
         let enc_filename = format!("{}.enc", hash_hex);
         let enc_path = hunt_dir.join("evidence").join(&enc_filename);
+        let evidence_root = hunt_dir.join("evidence");
         if enc_path.exists() {
-            let _ = fs::remove_file(enc_path);
+            let canon = enc_path.canonicalize().map_err(|e| e.to_string())?;
+            let evidence_canon = evidence_root.canonicalize().map_err(|e| e.to_string())?;
+            if !canon.starts_with(&evidence_canon) {
+                return Err("Evidence path escaped the hunt folder.".to_string());
+            }
+            let _ = fs::remove_file(canon);
         }
     }
 
@@ -693,13 +732,27 @@ pub fn delete_hunt_evidence(app: AppHandle, hunt_id: String, evidence_id: i64) -
 }
 
 #[tauri::command]
-pub fn purge_vault_cache(app: AppHandle) -> Result<(), String> {
+pub fn purge_vault_cache(
+    app: AppHandle,
+    password: Option<String>,
+    include_sealed: Option<bool>,
+) -> Result<String, String> {
     let root = app.path().app_local_data_dir()
         .map_err(|e| e.to_string())?;
     let vaults = root.join("vaults");
-    if vaults.exists() {
-        std::fs::remove_dir_all(&vaults).map_err(|e| e.to_string())?;
-    }
-    Ok(())
+    let salt = fs::read_to_string(root.join("master_salt.bin")).ok();
+    let verifier = fs::read(root.join("master_verifier.bin")).ok();
+    let include_sealed = include_sealed.unwrap_or(false);
+    let report = crate::sandbox::purge_vaults_checked(
+        &vaults,
+        password.as_deref(),
+        salt.as_deref(),
+        verifier.as_deref(),
+        include_sealed,
+    )?;
+    Ok(format!(
+        "Deleted {} hunt folder(s). Skipped {} sealed Confidential vault(s). Sealed vaults are the only encrypted copy and are not deleted unless you re-enter the vault password.",
+        report.deleted, report.skipped_sealed
+    ))
 }
 

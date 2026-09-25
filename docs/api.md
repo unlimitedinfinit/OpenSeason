@@ -36,9 +36,9 @@ Validates, then writes `.docx` and `.pdf` under `exports/`. Fails if the case is
 
 Arguments: `{ "caseId": "<uuid>", "password": "<vault password>" }`
 
-Requires an unlocked vault and a stored password verifier. The password is typed again and checked before any copy, encrypt, or delete. Then writes `.sealed`, copies the folder into `vaults/{id}/`, and encrypts the whole tree except `metadata.db` and `court-rules/` (nonce prefixed on each file, decrypt-verified before plaintext is deleted). The Documents folder is replaced with a pointer `case.json` (id, mode, and empty profile fields). This build has no in-app sealed-file reader. CLI `case seal` only writes the marker. Cannot be reversed by editing `case.json`.
+Requires an unlocked vault and a stored password verifier. The password is typed again and checked before any copy, encrypt, or delete. Then writes `.sealed`, copies the folder into `vaults/{id}/`, and encrypts the whole tree except the app's own `{vault}/metadata.db` and `{vault}/court-rules/` (nonce prefixed on each file, decrypt-verified before plaintext is deleted). User files named `metadata.db`, `.enc`, or `.gitkeep` in other folders are encrypted. After that, Documents is emptied to `.sealed`, `SEALED.txt`, and a pointer `case.json`. This build has no in-app sealed-file reader. CLI `case seal` only writes the marker. Cannot be reversed by editing `case.json`.
 
-Hunt export refuses a target inside the cases root or a file named `.sealed`.
+Hunt export refuses a target inside app data or the cases root, a file named `.sealed` (any case), and overwriting an existing file. Sealed vault delete and purge require the vault password.
 
 ### `sync_case_cmd`
 

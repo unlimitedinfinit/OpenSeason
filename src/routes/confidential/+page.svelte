@@ -86,9 +86,10 @@
   }
 
   async function deleteHunt(id: string) {
-    if (!confirm("Are you sure you want to PERMANENTLY delete this case? This action cannot be undone.")) return;
+    if (!confirm("Permanently delete this hunt? If it is a sealed Confidential case, this is often the only encrypted copy.")) return;
+    const password = prompt("If this hunt is sealed, re-enter the vault password. Leave empty only for an unsealed hunt.");
     try {
-      await invoke("delete_hunt", { huntId: id });
+      await invoke("delete_hunt", { huntId: id, password: password && password.length ? password : null });
       await loadHunts();
     } catch (e) {
       alert("Delete Failed: " + e);
