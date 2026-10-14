@@ -11,6 +11,13 @@ pub mod db;
 pub mod bundle;
 pub mod usaspending;
 pub mod pdf;
+pub mod holidays;
+pub mod rule_pack;
+pub mod deadlines;
+pub mod check;
+pub mod court_md;
+pub mod agent;
+pub mod mcp;
 
 use crypto::AppState;
 
@@ -59,7 +66,11 @@ pub fn run() {
             case_commands::list_case_artifacts,
             case_commands::add_case_evidence,
             case_commands::convert_case_to_confidential,
-            case_commands::sync_case_cmd
+            case_commands::sync_case_cmd,
+            case_commands::list_rule_packs,
+            case_commands::import_markdown_cmd,
+            case_commands::check_case_cmd,
+            case_commands::deadline_cmd
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

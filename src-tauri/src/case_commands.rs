@@ -477,6 +477,41 @@ pub fn sync_case_cmd(case_id: String, action: String) -> Result<SyncRefusal, Str
     sync::describe_sync_for_dir(&dir, action)
 }
 
+#[tauri::command]
+pub fn list_rule_packs() -> Result<Vec<crate::rule_pack::RulePack>, String> {
+    Ok(crate::rule_pack::RulePack::list_builtin())
+}
+
+#[tauri::command]
+pub fn import_markdown_cmd(case_id: String, markdown: String) -> Result<crate::court_md::CourtMarkdownDoc, String> {
+    crate::court_md::import_markdown(&case_dir_from_id(&case_id)?, &markdown)
+}
+
+#[tauri::command]
+pub fn check_case_cmd(
+    case_id: String,
+    pack: Option<String>,
+    rule: Option<String>,
+    trigger_date: Option<String>,
+) -> Result<crate::check::CheckAllReport, String> {
+    crate::check::run_all(
+        &case_dir_from_id(&case_id)?,
+        pack.as_deref(),
+        rule.as_deref(),
+        trigger_date.as_deref(),
+    )
+}
+
+#[tauri::command]
+pub fn deadline_cmd(
+    case_id: String,
+    pack: String,
+    rule: String,
+    trigger_date: String,
+) -> Result<crate::deadlines::DeadlineResult, String> {
+    crate::check::run_deadline(&case_dir_from_id(&case_id)?, &pack, &rule, &trigger_date)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

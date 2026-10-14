@@ -129,8 +129,87 @@ fn push_user_paragraphs(lines: &mut Vec<String>, text: &str) {
 pub fn pleading_heading(kind: &str) -> &'static str {
     match kind.trim().to_ascii_lowercase().as_str() {
         "complaint" => "COMPLAINT",
-        "motion" => "MOTION",
+        "appellate_brief" | "brief" => "APPELLATE BRIEF",
+        "appellate_motion" => "MOTION IN THE APPELLATE COURT",
+        "mandamus" => "PETITION FOR RULE TO SHOW CAUSE",
+        "motion" | "reconsideration" | "enlargement" | "stay" | "amend_findings" => "MOTION",
         _ => "NOTICE OF APPEAL",
+    }
+}
+
+fn motion_kind_label(kind: &str, profile: &CaseProfile) -> String {
+    let key = if kind == "motion" && !profile.motion_kind.is_empty() {
+        profile.motion_kind.as_str()
+    } else {
+        kind
+    };
+    match key {
+        "reconsideration" => "Motion for reconsideration (basic template)".into(),
+        "enlargement" => "Motion for enlargement of time (basic template)".into(),
+        "stay" => "Motion for a stay (basic template)".into(),
+        "amend_findings" => "Motion to amend findings (basic template)".into(),
+        "appellate_motion" => "Motion in the appellate court (basic template)".into(),
+        "appellate_brief" | "brief" => "Appellate brief scaffold (basic)".into(),
+        "mandamus" => "Colorado C.A.R. 21 petition (basic template)".into(),
+        "complaint" => "Complaint (basic template)".into(),
+        _ => "Motion (basic template)".into(),
+    }
+}
+
+fn pleading_body<'a>(profile: &'a CaseProfile, kind: &str) -> (&'a str, &'a str) {
+    match kind {
+        "complaint" => (profile.complaint.title.as_str(), profile.complaint.user_text.as_str()),
+        "appellate_brief" | "brief" => (profile.brief.title.as_str(), profile.brief.user_text.as_str()),
+        "appellate_motion" => (
+            profile.appellate_motion.title.as_str(),
+            profile.appellate_motion.user_text.as_str(),
+        ),
+        "mandamus" => (profile.mandamus.title.as_str(), profile.mandamus.user_text.as_str()),
+        _ => (profile.motion.title.as_str(), profile.motion.user_text.as_str()),
+    }
+}
+
+fn scaffold_sections(kind: &str) -> &'static [&'static str] {
+    match kind {
+        "appellate_brief" | "brief" => &[
+            "Table of contents (user supplies entries)",
+            "Table of authorities (filled from cites the user wrote; unverified cites stay tagged)",
+            "Preliminary statement",
+            "Procedural history",
+            "Statement of facts (each fact needs a record cite)",
+            "Legal argument (user-supplied; this app does not invent points)",
+            "Conclusion",
+        ],
+        "mandamus" => &[
+            "Jurisdiction (C.A.R. 21)",
+            "Parties",
+            "Issues presented",
+            "Facts from the record",
+            "Reasons relief should issue (user-supplied)",
+            "Prayer for relief",
+        ],
+        "reconsideration" => &[
+            "The order challenged",
+            "The rule relied on (user must verify)",
+            "Grounds as written by the user",
+            "Relief requested",
+        ],
+        "enlargement" => &[
+            "The deadline that needs more time",
+            "The reason for the request (user-supplied)",
+            "The new date requested",
+        ],
+        "stay" => &[
+            "The order to be stayed",
+            "Why a stay is requested (user-supplied)",
+            "The terms of the stay requested",
+        ],
+        "amend_findings" => &[
+            "The finding to be amended",
+            "The proposed amendment (user-supplied)",
+            "Record support",
+        ],
+        _ => &[],
     }
 }
 
@@ -139,27 +218,40 @@ pub fn assembled_pleading_paragraphs(profile: &CaseProfile, kind: &str) -> Vec<S
     if key.is_empty() || key == "notice_of_appeal" || key == "appeal" {
         return assembled_notice_paragraphs(profile);
     }
+    if !profile.court_markdown.trim().is_empty() && key == "court_md" {
+        return crate::court_md::parse_markdown(&profile.court_markdown).lines;
+    }
 
-    let mut lines = assembled_caption_lines(profile, &key);
+    let caption_kind = match key.as_str() {
+        "complaint" | "mandamus" => "complaint",
+        _ => "notice_of_appeal",
+    };
+    let mut lines = assembled_caption_lines(profile, caption_kind);
     let heading = pleading_heading(&key);
     lines.push(heading.to_string());
     lines.push(String::new());
-    let (subtitle, body) = if key == "complaint" {
-        (profile.complaint.title.as_str(), profile.complaint.user_text.as_str())
-    } else {
-        (profile.motion.title.as_str(), profile.motion.user_text.as_str())
-    };
+    let (subtitle, body) = pleading_body(profile, &key);
     if !subtitle.trim().is_empty() {
         lines.push(subtitle.trim().to_string());
         lines.push(String::new());
     }
-    lines.push(format!(
-        "This is a basic {} template. OpenSeason filled the caption, parties, and signature block from the case profile. The body below is the user's own text.",
-        if key == "complaint" { "complaint" } else { "motion" }
-    ));
+    lines.push(motion_kind_label(&key, profile));
+    lines.push(
+        "The builder filled the caption, parties, and signature block from the case profile. The body below is the user's own text. This app does not invent facts, grounds, or citations.".into(),
+    );
     lines.push(String::new());
+    for section in scaffold_sections(&key) {
+        lines.push(section.to_string());
+        lines.push(String::new());
+    }
     push_user_paragraphs(&mut lines, body);
     lines.extend(assembled_signature_lines(profile));
+    lines.push(String::new());
+    lines.push("CERTIFICATE OF SERVICE".into());
+    lines.push(
+        "I will serve a copy of this paper myself. This software did not file or serve anything."
+            .into(),
+    );
     lines
 }
 
@@ -473,6 +565,9 @@ pub fn export_pleading(
     if key.is_empty() || key == "notice_of_appeal" || key == "appeal" {
         return export_notice_of_appeal(case_dir, profile, out_dir);
     }
+    if key == "court_md" || key == "markdown" {
+        return export_court_markdown(case_dir, profile, out_dir);
+    }
     if crate::seal::is_dir_sealed(case_dir) {
         return Err("This case is sealed. Export from the Documents pointer is refused.".to_string());
     }
@@ -520,6 +615,65 @@ pub fn export_pleading(
     pdf_bytes.extend_from_slice(b"\n");
     fs::write(&pdf_path, &pdf_bytes).map_err(|e| e.to_string())?;
 
+    Ok(ExportPaths {
+        docx: docx_path,
+        pdf: pdf_path,
+    })
+}
+
+pub fn export_court_markdown(
+    case_dir: &Path,
+    profile: &CaseProfile,
+    out_dir: Option<&Path>,
+) -> Result<ExportPaths, String> {
+    if crate::seal::is_dir_sealed(case_dir) {
+        return Err("This case is sealed. Export from the Documents pointer is refused.".to_string());
+    }
+    if let Some(out) = out_dir {
+        assert_notice_out_dir(out)?;
+    }
+    let markdown = if !profile.court_markdown.trim().is_empty() {
+        profile.court_markdown.clone()
+    } else {
+        let path = case_dir.join("drafts").join("draft.md");
+        if path.is_file() {
+            fs::read_to_string(path).map_err(|e| e.to_string())?
+        } else {
+            crate::court_md::markdown_from_profile(profile, &profile.document_kind)
+        }
+    };
+    let doc = crate::court_md::parse_markdown(&markdown);
+    if doc.lines.is_empty() {
+        return Err("Markdown draft is empty.".into());
+    }
+    let rules = CourtRules::load_for_case(case_dir);
+    let dest = out_dir
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| case_dir.join("exports"));
+    fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
+    let stem = format!(
+        "court-md-{}",
+        profile
+            .docket_number
+            .replace('/', "-")
+            .replace(' ', "_")
+            .replace('\\', "-")
+    );
+    let heading = if doc.meta.doc_title.is_empty() {
+        "MOTION"
+    } else {
+        doc.meta.doc_title.as_str()
+    };
+    let docx_path = dest.join(format!("{stem}.docx"));
+    let pdf_path = dest.join(format!("{stem}.pdf"));
+    let docx_bytes = build_docx_bytes_from_lines(&doc.lines, heading, &rules)?;
+    fs::write(&docx_path, &docx_bytes).map_err(|e| e.to_string())?;
+    let typst_src = build_typst_source_from_lines(&doc.lines, heading, &rules);
+    let mut pdf_bytes = crate::pdf::compile_typst(typst_src)?;
+    pdf_bytes.extend_from_slice(b"\n% ");
+    pdf_bytes.extend_from_slice(REVIEW_NOTICE.as_bytes());
+    pdf_bytes.extend_from_slice(b"\n");
+    fs::write(&pdf_path, &pdf_bytes).map_err(|e| e.to_string())?;
     Ok(ExportPaths {
         docx: docx_path,
         pdf: pdf_path,
@@ -695,7 +849,8 @@ mod tests {
         let complaint = assembled_pleading_paragraphs(&profile, "complaint").join("\n");
         assert!(complaint.contains("COMPLAINT"));
         assert!(complaint.contains("Jordan Example"));
-        assert!(complaint.contains("basic complaint template"));
+        assert!(complaint.to_ascii_lowercase().contains("basic"));
+        assert!(complaint.contains("COMPLAINT") || complaint.contains("Complaint"));
         assert!(complaint.contains("user's own statement"));
         assert!(complaint.contains(REVIEW_NOTICE));
         let motion = assembled_pleading_paragraphs(&profile, "motion").join("\n");
@@ -713,5 +868,18 @@ mod tests {
         assert!(inspect_docx_contains(&paths.docx, "Jordan Example").unwrap());
         assert!(inspect_docx_contains(&paths.docx, REVIEW_NOTICE).unwrap());
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn appellate_brief_scaffold_uses_profile_and_says_basic() {
+        let mut profile = sample_appeal_profile();
+        profile.brief.user_text = "This paragraph is the user's own brief point.".into();
+        let blob = assembled_pleading_paragraphs(&profile, "appellate_brief").join("\n");
+        assert!(blob.contains("APPELLATE BRIEF"));
+        assert!(blob.contains("basic"));
+        assert!(blob.contains("user's own brief point"));
+        assert!(blob.contains("CERTIFICATE OF SERVICE"));
+        assert!(blob.contains("did not file or serve"));
+        assert!(blob.contains("Jordan Example"));
     }
 }

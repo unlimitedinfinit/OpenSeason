@@ -196,6 +196,21 @@ pub struct CaseProfile {
     pub motion: PleadingDraft,
     #[serde(default)]
     pub timeline: Vec<TimelineEvent>,
+    /// Rule pack id: generic-us-appellate, nj-app-div, or co-mandamus.
+    #[serde(default)]
+    pub rule_pack_id: String,
+    /// reconsideration, enlargement, stay, amend_findings, or empty.
+    #[serde(default)]
+    pub motion_kind: String,
+    #[serde(default)]
+    pub brief: PleadingDraft,
+    #[serde(default)]
+    pub appellate_motion: PleadingDraft,
+    #[serde(default)]
+    pub mandamus: PleadingDraft,
+    /// Full court-markdown draft (md2court subset) when imported.
+    #[serde(default)]
+    pub court_markdown: String,
 }
 
 fn default_schema_version() -> u32 {
@@ -238,6 +253,12 @@ impl CaseProfile {
             complaint: PleadingDraft::default(),
             motion: PleadingDraft::default(),
             timeline: Vec::new(),
+            rule_pack_id: "generic-us-appellate".to_string(),
+            motion_kind: String::new(),
+            brief: PleadingDraft::default(),
+            appellate_motion: PleadingDraft::default(),
+            mandamus: PleadingDraft::default(),
+            court_markdown: String::new(),
         }
     }
 
@@ -634,7 +655,42 @@ pub fn validate_pleading(
                 &mut issues,
             );
         }
-        "motion" => {
+        "appellate_brief" | "brief" => {
+            if is_blank(&profile.brief.user_text) {
+                issues.push(ValidationIssue {
+                    field: "brief.user_text".into(),
+                    message: "Paste the user's own brief text. The scaffold will not invent argument.".into(),
+                });
+            }
+            push_placeholder_issues(&profile.brief.user_text, &mut issues);
+        }
+        "appellate_motion" => {
+            if is_blank(&profile.appellate_motion.user_text) {
+                issues.push(ValidationIssue {
+                    field: "appellate_motion.user_text".into(),
+                    message: "Paste the user's own appellate-motion text.".into(),
+                });
+            }
+            push_placeholder_issues(&profile.appellate_motion.user_text, &mut issues);
+        }
+        "mandamus" => {
+            if is_blank(&profile.mandamus.user_text) {
+                issues.push(ValidationIssue {
+                    field: "mandamus.user_text".into(),
+                    message: "Paste the user's own mandamus petition text. The Colorado pack will not invent the showing.".into(),
+                });
+            }
+            push_placeholder_issues(&profile.mandamus.user_text, &mut issues);
+        }
+        "court_md" | "markdown" => {
+            if is_blank(&profile.court_markdown) {
+                issues.push(ValidationIssue {
+                    field: "court_markdown".into(),
+                    message: "Import a Markdown draft first.".into(),
+                });
+            }
+        }
+        "motion" | "reconsideration" | "enlargement" | "stay" | "amend_findings" => {
             if is_blank(&profile.motion.user_text) {
                 issues.push(ValidationIssue {
                     field: "motion.user_text".into(),
@@ -757,6 +813,12 @@ pub fn sample_appeal_profile() -> CaseProfile {
             user_text: "This paragraph is the user's own motion text. OpenSeason did not invent the request or the grounds.".to_string(),
         },
         timeline: Vec::new(),
+        rule_pack_id: "generic-us-appellate".to_string(),
+        motion_kind: String::new(),
+        brief: PleadingDraft::default(),
+        appellate_motion: PleadingDraft::default(),
+        mandamus: PleadingDraft::default(),
+        court_markdown: String::new(),
     }
 }
 
