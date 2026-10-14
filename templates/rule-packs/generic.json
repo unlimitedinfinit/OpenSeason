@@ -22,5 +22,37 @@
       "tolls_appeal_under": null,
       "notes": "30 calendar days is a common federal civil default. Confirm the governing rule before using this date."
     }
+  ],
+  "forms": [],
+  "situations": [
+    {
+      "id": "appeal",
+      "label": "I am appealing",
+      "question": "Did a trial court enter a decision you want a higher court to review?",
+      "aliases": ["appeal", "notice of appeal"],
+      "court": "Generic United States appellate court",
+      "form_ids": [],
+      "packet_id": null,
+      "deadline_id": "notice-of-appeal-generic",
+      "why": "This generic pack is a placeholder. Install a state pack before relying on a form or a day count. The 30-day figure is marked as a common federal civil default and needs verification.",
+      "citation": "user-supplied",
+      "citation_status": "needs_verification",
+      "steps": [
+        {
+          "id": "pick-state",
+          "title": "Choose a state pack",
+          "why": "Generic United States appellate is not a court. A state or circuit pack names the real forms and rules.",
+          "form_ids": [],
+          "citation": "",
+          "citation_status": "needs_verification",
+          "teach": {
+            "what_it_is": "A reminder that this pack is a fallback, not a filing kit.",
+            "when_used": "When no state pack is installed yet.",
+            "common_mistakes": ["Using the 30-day placeholder as if a court had set it."],
+            "learn_more": "Run packs list, then packs install <state>. Or open Get legal help on JustLegal after the confirmation prompt."
+          }
+        }
+      ]
+    }
   ]
 }

@@ -340,7 +340,7 @@ pub fn run_deadline(
     rule_id: &str,
     trigger_date: &str,
 ) -> Result<DeadlineResult, String> {
-    let pack = RulePack::builtin(pack_id)?;
+    let pack = RulePack::resolve(pack_id).or_else(|_| RulePack::builtin(pack_id))?;
     let rule = pack.find_deadline(rule_id)?.clone();
     let date = parse_iso_date(trigger_date)?;
     let result = compute_deadline(&pack, &rule, date);

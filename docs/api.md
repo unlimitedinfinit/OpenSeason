@@ -63,6 +63,10 @@ The window and the CLI call the same functions (`check::run_all`, `court_md::imp
 
 Returns bundled packs: `nj-app-div`, `co-mandamus`, `generic-us-appellate`.
 
+### Forms packs and finder
+
+`list_form_packs_cmd`, `install_form_pack_cmd`, `remove_form_pack_cmd`, `verify_form_pack_cmd`, `guide_questions_cmd`, `guide_find_cmd`, `help_links_cmd`. CLI: `packs list|install|remove|verify`, `guide questions|find`, `docs links`. There is no Tauri command that opens a browser; the UI confirms first. See [FORMS-PACKS.md](FORMS-PACKS.md).
+
 ### `import_markdown_cmd`
 
 Arguments: `{ "caseId": "<uuid>", "markdown": "---\n..." }`

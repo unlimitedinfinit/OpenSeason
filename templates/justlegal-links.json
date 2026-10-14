@@ -1,0 +1,51 @@
+{
+  "schema": "openseason.justlegal-links/v1",
+  "verified_on": "2026-10-14",
+  "source_note": "URLs come from justlegal.me/llms.txt (updated 2026-09-24) and were rechecked with HTTP GET on 2026-10-14. /registry/index.json is live application/json (22,936 catalogued forms). The HTML help routes are a client-rendered SPA that returns 200. The app never opens these from the CLI or MCP.",
+  "offline_note": "These pages need a web browser and an internet connection. Skip them and the rest of OpenSeason still works offline.",
+  "confirm": "This will open your web browser to JustLegal's online resources. You need an internet connection. Continue?",
+  "never_files": true,
+  "never_serves": true,
+  "links": [
+    {
+      "id": "find-legal-help",
+      "kind": "get-legal-help",
+      "label": "Get legal help",
+      "description": "JustLegal's find-legal-help router: free help in your state and what a smaller paid step costs.",
+      "url": "https://justlegal.me/find-legal-help",
+      "verified": true
+    },
+    {
+      "id": "knowledge-hub",
+      "kind": "find-resources",
+      "label": "Find resources",
+      "description": "JustLegal knowledge hub: civil litigation concepts and procedural notes.",
+      "url": "https://justlegal.me/resources/knowledge-hub",
+      "verified": true
+    },
+    {
+      "id": "guides",
+      "kind": "find-resources",
+      "label": "Procedural guides",
+      "description": "JustLegal walkthroughs for pleadings, service, and court appearances.",
+      "url": "https://justlegal.me/resources/guides",
+      "verified": true
+    },
+    {
+      "id": "court-forms",
+      "kind": "online-database",
+      "label": "Court forms directory",
+      "description": "JustLegal national court forms directory (task-based packets).",
+      "url": "https://justlegal.me/court-forms",
+      "verified": true
+    },
+    {
+      "id": "registry",
+      "kind": "online-database",
+      "label": "Online forms database",
+      "description": "JustLegal machine-readable registry index (states, counts, official form index URLs). Not a 7 GB download.",
+      "url": "https://justlegal.me/registry/index.json",
+      "verified": true
+    }
+  ]
+}

@@ -82,5 +82,238 @@
       "tolls_appeal_under": "R. 2:4-3(e)",
       "notes": "A timely motion of the listed kinds tolls the time for appeal until entry of the order deciding the motion. Confirm the current list of tolling motions."
     }
+  ],
+  "forms": [
+    {
+      "id": "nj-reconsideration-motion",
+      "title": "Motion for reconsideration (Appellate Division)",
+      "form_number": "",
+      "state": "NJ",
+      "court": "Superior Court of New Jersey, Appellate Division",
+      "situation": "reconsideration",
+      "size_bytes": 0,
+      "download_url": "",
+      "official_url": "https://www.njcourts.gov/attorneys/rules-of-court",
+      "sha256": "",
+      "path_in_pack": "",
+      "citation": "R. 2:11-6",
+      "citation_status": "pack_source",
+      "teach": {
+        "what_it_is": "A written request that the Appellate Division look again at an order or judgment it already entered. OpenSeason can format the motion packet. It does not file it.",
+        "when_used": "When an Appellate Division judgment or order was just entered and you want that same court to reconsider it. The bundled deadline table counts 10 days from entry under R. 2:11-6.",
+        "common_mistakes": [
+          "Counting from the day you received the order instead of the date of entry.",
+          "Treating this as a new appeal instead of a motion in the same court.",
+          "Inventing case citations to fill the brief. Use only authorities you already have."
+        ],
+        "learn_more": "Confirm the current text of R. 2:11-6 on the New Jersey Courts rules page before relying on the day count. Time may be enlarged under R. 1:3-4(a). A timely motion of this kind may toll the time to appeal under R. 2:4-3(e)."
+      }
+    },
+    {
+      "id": "nj-enlarge-time",
+      "title": "Motion for enlargement of time",
+      "form_number": "",
+      "state": "NJ",
+      "court": "Superior Court of New Jersey, Appellate Division",
+      "situation": "enlargement",
+      "size_bytes": 0,
+      "download_url": "",
+      "official_url": "https://www.njcourts.gov/attorneys/rules-of-court",
+      "sha256": "",
+      "path_in_pack": "",
+      "citation": "R. 1:3-4(a)",
+      "citation_status": "pack_source",
+      "teach": {
+        "what_it_is": "A request that the court give you more time to take a step the rules already allow. You write why you need the time. The app only formats the paper.",
+        "when_used": "When a clock is running and the rule that governs your step can be enlarged. Some times cannot be enlarged; the pack does not list every exception.",
+        "common_mistakes": [
+          "Assuming every deadline can be extended.",
+          "Waiting until after a non-enlargeable time has already run."
+        ],
+        "learn_more": "R. 1:3-4(a) says the court may enlarge time except where a rule says it may not. Read the rule that created your deadline."
+      }
+    },
+    {
+      "id": "nj-stay-pending-appeal",
+      "title": "Motion for a stay pending appeal",
+      "form_number": "",
+      "state": "NJ",
+      "court": "Superior Court of New Jersey, Appellate Division",
+      "situation": "stay",
+      "size_bytes": 0,
+      "download_url": "",
+      "official_url": "https://www.njcourts.gov/attorneys/rules-of-court",
+      "sha256": "",
+      "path_in_pack": "",
+      "citation": "R. 2:9-5",
+      "citation_status": "pack_source",
+      "teach": {
+        "what_it_is": "A request to pause enforcement of an order while an appeal is pending. Stay practice is motion-driven in this pack.",
+        "when_used": "When an order will take effect and you have asked (or will ask) a higher court to review it. This pack does not pick a day count.",
+        "common_mistakes": [
+          "Treating a stay motion as an automatic pause. It is not automatic in this pack.",
+          "Inventing bond or security terms. Write only terms you actually propose."
+        ],
+        "learn_more": "Confirm the current text of R. 2:9-5. The app will not file or serve the motion."
+      }
+    },
+    {
+      "id": "nj-cn-10837",
+      "title": "How to Appeal a Trial Court Decision (pro se appellate kit)",
+      "form_number": "CN 10837",
+      "state": "NJ",
+      "court": "Superior Court of New Jersey, Appellate Division",
+      "situation": "appeal",
+      "size_bytes": 1926847,
+      "download_url": "https://justlegal.me/mirrors/files/nj-cn-10837.pdf",
+      "official_url": "https://www.njcourts.gov/sites/default/files/forms/10837_appl_prose_kit.pdf",
+      "sha256": "0727ba72e91eab21dbd87e5b1ddca3b414baba09bf335b27ec10284a9583414b",
+      "path_in_pack": "",
+      "citation": "JustLegal registry NJ form nj-cn-10837 (collected 2026-09-22)",
+      "citation_status": "pack_source",
+      "teach": {
+        "what_it_is": "The New Jersey Judiciary's published pro se kit on how to appeal a trial-court decision. JustLegal catalogued it as CN 10837. OpenSeason does not bundle the PDF.",
+        "when_used": "When a trial court entered a final decision and you are considering an appeal to the Appellate Division.",
+        "common_mistakes": [
+          "Missing the notice-of-appeal deadline. This pack does not state that day count; confirm the current rule.",
+          "Using a fixture or draft instead of the court's own kit."
+        ],
+        "learn_more": "Download from njcourts.gov or install an NJ forms pack. The JustLegal mirror hash is recorded in the public registry; re-verify the file before you rely on it."
+      }
+    }
+  ],
+  "situations": [
+    {
+      "id": "reconsideration",
+      "label": "I lost and want the same court to look again",
+      "question": "Did the Appellate Division just enter an order you want that same court to reconsider?",
+      "aliases": ["look again", "reconsider", "reconsideration-appellate", "general-motion"],
+      "court": "Superior Court of New Jersey, Appellate Division",
+      "form_ids": ["nj-reconsideration-motion"],
+      "packet_id": "motion-packet",
+      "deadline_id": "reconsideration-appellate",
+      "why": "The bundled NJ pack treats this as a motion for reconsideration under R. 2:11-6, not as a new appeal.",
+      "citation": "R. 2:11-6",
+      "citation_status": "pack_source",
+      "steps": [
+        {
+          "id": "calendar",
+          "title": "Count the reconsideration clock",
+          "why": "The pack counts 10 calendar days from entry, then rolls weekends and New Jersey holidays to the next business day.",
+          "form_ids": [],
+          "citation": "R. 2:11-6",
+          "citation_status": "pack_source",
+          "teach": {
+            "what_it_is": "A deadline table, not a court order. You still confirm the date of entry from the papers you have.",
+            "when_used": "As soon as you have the date the order was entered.",
+            "common_mistakes": ["Using the date you opened the mail instead of the date of entry."],
+            "learn_more": "Time may be enlarged under R. 1:3-4(a). A timely motion may toll the appeal clock under R. 2:4-3(e)."
+          }
+        },
+        {
+          "id": "draft-packet",
+          "title": "Write the motion packet in your own words",
+          "why": "Notice of motion, motion, certification, proposed order, and certificate of service. You write the grounds. The app formats.",
+          "form_ids": ["nj-reconsideration-motion"],
+          "citation": "R. 2:11-6",
+          "citation_status": "pack_source",
+          "teach": {
+            "what_it_is": "The five-part packet OpenSeason can assemble from your draft.",
+            "when_used": "After you have the order and your own grounds.",
+            "common_mistakes": ["Letting an agent invent facts or case citations to fill blank sections."],
+            "learn_more": "Use draft sections / draft fill. Leave a box blank rather than guessing."
+          }
+        }
+      ]
+    },
+    {
+      "id": "enlargement",
+      "label": "I need more time",
+      "question": "Is a clock running, and do you want the court to give you more time?",
+      "aliases": ["more time", "extension", "enlarge", "general-motion"],
+      "court": "Superior Court of New Jersey, Appellate Division",
+      "form_ids": ["nj-enlarge-time"],
+      "packet_id": "motion-packet",
+      "deadline_id": "enlarge-time",
+      "why": "The pack points at R. 1:3-4(a). Some times cannot be enlarged. This app will not decide that for you.",
+      "citation": "R. 1:3-4(a)",
+      "citation_status": "pack_source",
+      "steps": [
+        {
+          "id": "write-why",
+          "title": "Write why you need the time",
+          "why": "The court reads your reasons, not a template paragraph.",
+          "form_ids": ["nj-enlarge-time"],
+          "citation": "R. 1:3-4(a)",
+          "citation_status": "pack_source",
+          "teach": {
+            "what_it_is": "A motion asking the court to enlarge time.",
+            "when_used": "Before a enlargeable deadline runs, if you need more time.",
+            "common_mistakes": ["Assuming every deadline can be extended."],
+            "learn_more": "Read the rule that created your original deadline."
+          }
+        }
+      ]
+    },
+    {
+      "id": "stay",
+      "label": "I need the order paused",
+      "question": "Will an order take effect while you are asking a higher court to review it?",
+      "aliases": ["pause", "stay pending appeal", "general-motion"],
+      "court": "Superior Court of New Jersey, Appellate Division",
+      "form_ids": ["nj-stay-pending-appeal"],
+      "packet_id": "motion-packet",
+      "deadline_id": "stay-pending-appeal",
+      "why": "The pack cites R. 2:9-5. Stay practice is motion-driven. There is no automatic day count in this pack.",
+      "citation": "R. 2:9-5",
+      "citation_status": "pack_source",
+      "steps": [
+        {
+          "id": "write-terms",
+          "title": "Write the stay terms you actually want",
+          "why": "The app will not invent bond, security, or who is restrained.",
+          "form_ids": ["nj-stay-pending-appeal"],
+          "citation": "R. 2:9-5",
+          "citation_status": "pack_source",
+          "teach": {
+            "what_it_is": "A motion to pause enforcement pending appeal.",
+            "when_used": "When enforcement would happen before the appeal is decided.",
+            "common_mistakes": ["Thinking the stay is automatic."],
+            "learn_more": "Confirm the current text of R. 2:9-5."
+          }
+        }
+      ]
+    },
+    {
+      "id": "appeal",
+      "label": "I am appealing a trial-court decision",
+      "question": "Did a trial court enter a final order you want the Appellate Division to review?",
+      "aliases": ["appeal", "notice of appeal"],
+      "court": "Superior Court of New Jersey, Appellate Division",
+      "form_ids": ["nj-cn-10837"],
+      "packet_id": null,
+      "deadline_id": null,
+      "why": "JustLegal catalogues CN 10837 as the Judiciary's pro se appellate kit. This pack does not include a notice-of-appeal day count, so the finder will not invent one.",
+      "citation": "JustLegal registry NJ form nj-cn-10837 (collected 2026-09-22)",
+      "citation_status": "pack_source",
+      "steps": [
+        {
+          "id": "get-kit",
+          "title": "Get the official appeal kit",
+          "why": "The PDF is not bundled in git. Install an NJ forms pack or download from the court.",
+          "form_ids": ["nj-cn-10837"],
+          "citation": "CN 10837",
+          "citation_status": "pack_source",
+          "teach": {
+            "what_it_is": "The court's own how-to-appeal kit for people without a lawyer.",
+            "when_used": "After a final trial-court decision, if you are considering an appeal.",
+            "common_mistakes": [
+              "Guessing the notice-of-appeal deadline. Confirm the current New Jersey Court Rules."
+            ],
+            "learn_more": "Official file listed in the JustLegal NJ registry: https://www.njcourts.gov/sites/default/files/forms/10837_appl_prose_kit.pdf"
+          }
+        }
+      ]
+    }
   ]
 }

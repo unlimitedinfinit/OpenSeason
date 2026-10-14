@@ -23,6 +23,9 @@ Frontend: **Svelte 5 + TypeScript + Tailwind CSS**, served by SvelteKit in SPA m
 | Rule packs / check stage | **Works (manual verify)** | NJ deadline table plus Colorado C.A.R. 21 scaffold. Fact/authority/deadline/sign-off run from the Check tab and from the CLI/MCP. Authority is never auto-verified. |
 | Guided motion drafting | **Works (basic)** | Per-kind section prompts for reconsideration, enlargement, stay, amend findings, appellate motion, brief, mandamus, complaint. One textarea per prompt in the UI; `draft sections` / `draft fill` on the CLI. Not a lawyer interview. |
 | Agent interface | **Works** | `openseason --json` plus `openseason mcp`. Playbook, schemas, and `issues[].message` say how to fix. Same engine as the UI. |
+| Forms catalog / installer | **Works (fixture + adapter)** | JustLegal public registry at `/registry/index.json` was readable (22,936 forms). PDFs are not in git. Fixture pack installs locally and verifies SHA-256. Live 7 GB mirrors download only if the user points a catalog at them. |
+| Filing finder | **Works (pack data)** | `guide find` recommends forms/steps the pack already lists, with teaching and `needs_verification` when a cite is missing. Does not invent NJ appeal days. |
+| JustLegal help links | **Works** | Configurable `templates/justlegal-links.json`. Window confirms before opening. CLI/MCP never open a browser. |
 | Windows installer | **Partial** | Workflow uploads `.msi`/`.exe`. First run failed until `default-run = open-season`. Josh's laptop lacks MSVC (`link.exe not found`); the documented path is the CI artifact, not a local cargo build. |
 | Windows / macOS bundles | **Could not inspect** | `tauri.conf.json` has `targets: all`. This environment did not run `tauri build` or produce `.msi` / `.dmg`. |
 | Telemetry | **Works (absent)** | No analytics SDK. USAspending is the only outbound HTTP client. |

@@ -483,6 +483,62 @@ pub fn list_rule_packs() -> Result<Vec<crate::rule_pack::RulePack>, String> {
 }
 
 #[tauri::command]
+pub fn list_form_packs_cmd() -> Result<crate::forms::PackList, String> {
+    crate::forms::list_packs(None, None)
+}
+
+#[tauri::command]
+pub fn install_form_pack_cmd(
+    state: String,
+    situation: Option<String>,
+    file: Option<String>,
+) -> Result<crate::forms::InstallReport, String> {
+    crate::forms::install(crate::forms::InstallOpts {
+        state,
+        situation,
+        catalog: None,
+        file: file.map(std::path::PathBuf::from),
+        root: None,
+        allow_network: false,
+    })
+}
+
+#[tauri::command]
+pub fn remove_form_pack_cmd(state: String) -> Result<String, String> {
+    crate::forms::remove_pack(&state, None)
+}
+
+#[tauri::command]
+pub fn verify_form_pack_cmd(state: Option<String>) -> Result<Vec<crate::forms::VerifyReport>, String> {
+    crate::forms::verify_pack(state.as_deref(), None)
+}
+
+#[tauri::command]
+pub fn guide_questions_cmd() -> Result<crate::guide::GuideQuestions, String> {
+    crate::guide::questions()
+}
+
+#[tauri::command]
+pub fn guide_find_cmd(
+    state: String,
+    court: Option<String>,
+    situation: String,
+    trigger_date: Option<String>,
+) -> Result<crate::guide::GuideResult, String> {
+    crate::guide::find(
+        &state,
+        court.as_deref(),
+        &situation,
+        trigger_date.as_deref(),
+    )
+}
+
+#[tauri::command]
+pub fn help_links_cmd() -> Result<crate::help_links::HelpLinks, String> {
+    crate::help_links::HelpLinks::load()
+}
+
+#[tauri::command]
 pub fn import_markdown_cmd(case_id: String, markdown: String) -> Result<crate::court_md::CourtMarkdownDoc, String> {
     crate::court_md::import_markdown(&case_dir_from_id(&case_id)?, &markdown)
 }

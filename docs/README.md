@@ -14,6 +14,9 @@ OpenSeason is a local desktop builder for self-represented filers. Confidential 
 | [developer_guide.md](developer_guide.md) | Setup, test, build |
 | [topology.md](topology.md) | Folder tree |
 | [glossary.md](glossary.md) | Terms |
+| [FORMS-PACKS.md](FORMS-PACKS.md) | Forms catalog, installer, filing finder, JustLegal hosting |
+| [RULE-PACKS.md](RULE-PACKS.md) | Deadline / teaching pack authoring |
+| [AGENT-INTERFACE.md](AGENT-INTERFACE.md) | CLI/MCP envelope |
 | [../AGENTS.md](../AGENTS.md) | Rules for any AI using the case folder |
 
 ## Quick links

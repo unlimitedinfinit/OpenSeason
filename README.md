@@ -17,6 +17,9 @@ Agents drive the same engine through `openseason --json` or `openseason mcp`. Se
 - **Mandamus**: Colorado C.A.R. 21 basic scaffold. The Mandamus-Colorado-09-2026 repo was not readable from this environment.
 - **Complaint**: working basic template. Not a full interview.
 - **Agent interface**: `AGENTS.md` plus the `openseason` command-line tool.
+- **Forms packs**: catalog + optional install into `Documents/JustLegal/Packs/`. The 7 GB JustLegal tree is not in git. See [docs/FORMS-PACKS.md](docs/FORMS-PACKS.md).
+- **What do I need to file?**: plain-language finder in the window and `openseason --json guide`. Teaching lives in packs. Legal information, not advice.
+- **Get legal help**: Help menu links to JustLegal after a confirmation. CLI/MCP return the URLs only.
 
 This software is a formatting engine, not a lawyer. Every export tells the user to review the file and to consider consulting an attorney. It is not legal advice.
 

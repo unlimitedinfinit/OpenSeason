@@ -1,0 +1,76 @@
+{
+  "schema": "openseason.forms-catalog/v1",
+  "id": "openseason-fixture",
+  "name": "OpenSeason fixture forms catalog",
+  "generated_at": "2026-10-14",
+  "source_url": "https://justlegal.me/registry/index.json",
+  "source_note": "FIXTURE ONLY. download_url values use https://example.test/ and must not be treated as live court downloads. Real JustLegal PDFs are not bundled. Teaching text lives in rule packs. This catalog is the install index, not legal advice.",
+  "never_files": true,
+  "never_serves": true,
+  "sources": [
+    {
+      "id": "fixture-local",
+      "kind": "dir",
+      "base_url": "fixtures/forms-catalog/packs/",
+      "note": "Local unpacked fixture used by tests and offline demo install."
+    },
+    {
+      "id": "http",
+      "kind": "http",
+      "base_url": "https://example.test/packs/",
+      "note": "FAKE. Example HTTP host. Replace with your CDN."
+    },
+    {
+      "id": "github-release",
+      "kind": "github_release",
+      "repo": "unlimitedinfinit/OpenSeason",
+      "tag": "forms-packs",
+      "note": "PLACEHOLDER. No forms-packs GitHub Release exists yet."
+    },
+    {
+      "id": "r2",
+      "kind": "s3",
+      "base_url": "https://example.test/r2/",
+      "note": "PLACEHOLDER Cloudflare R2 / S3-style bucket."
+    },
+    {
+      "id": "justlegal-registry",
+      "kind": "http",
+      "base_url": "https://justlegal.me/registry/",
+      "note": "Live JustLegal index (verified JSON). Fetch only when the user asks. Do not vendor the 7 GB mirror tree."
+    }
+  ],
+  "packs": [
+    {
+      "id": "nj-appeal-fixture",
+      "state": "NJ",
+      "court": "Superior Court of New Jersey, Appellate Division",
+      "situations": ["appeal", "reconsideration", "fee-waiver"],
+      "title": "New Jersey appeal fixture pack (tiny fake files)",
+      "size_bytes": 0,
+      "download_url": "https://example.test/packs/nj-appeal-fixture.zip",
+      "local_dir": "packs/nj-appeal",
+      "sha256": "",
+      "rule_pack_id": "nj-app-div",
+      "source_id": "fixture-local"
+    }
+  ],
+  "forms": [
+    {
+      "id": "fixture-nj-appeal-kit",
+      "state": "NJ",
+      "court": "Superior Court of New Jersey, Appellate Division",
+      "situation": "appeal",
+      "title": "Fake Notice of Appeal cover sheet (fixture)",
+      "form_number": "FIXTURE-NJ-APPEAL",
+      "size_bytes": 0,
+      "download_url": "https://example.test/forms/fixture-nj-appeal-kit.txt",
+      "official_url": "https://example.test/official/never-a-real-court",
+      "sha256": "",
+      "path_in_pack": "forms/notice-of-appeal.txt",
+      "pack_id": "nj-appeal-fixture",
+      "citation": "",
+      "citation_status": "needs_verification"
+    }
+  ]
+}

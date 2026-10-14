@@ -38,8 +38,14 @@ fn tool_list() -> Value {
         tool("export_court", "Render Word and PDF. Never files or serves.", json!({"path": path, "kind": {"type": "string"}}), &["path"]),
         tool("export_packet", "Assemble notice of motion, motion, certification, proposed order, certificate of service.", json!({"path": path}), &["path"]),
         tool("export_ics", "Write a .ics reminder for a computed deadline.", json!({"path": path, "pack": {"type": "string"}, "rule": {"type": "string"}, "trigger_date": {"type": "string"}}), &["path", "pack", "rule", "trigger_date"]),
-        tool("packs_list", "List bundled rule packs.", json!({}), &[]),
+        tool("packs_list", "List bundled rule packs and installable form packs. Shows download sizes. Never files.", json!({"catalog": {"type": "string"}}), &[]),
         tool("packs_validate", "Validate a rule-pack JSON file. New states are data, not code.", json!({"file": {"type": "string"}}), &["file"]),
+        tool("packs_install", "Install a forms pack for a state (optional situation). Uses a local file or catalog local_dir. Does not open a browser. Never files.", json!({"state": {"type": "string"}, "situation": {"type": "string"}, "file": {"type": "string"}, "catalog": {"type": "string"}}), &["state"]),
+        tool("packs_remove", "Remove an installed forms pack.", json!({"state": {"type": "string"}}), &["state"]),
+        tool("packs_verify", "Verify SHA-256 hashes of installed form files.", json!({"state": {"type": "string"}}), &[]),
+        tool("guide_questions", "What do I need to file? Return the plain-language questions. Legal information, not advice.", json!({}), &[]),
+        tool("guide_find", "Recommend forms or a packet from pack data. Never invents a rule. Includes help_links as data and never opens a browser.", json!({"state": {"type": "string"}, "court": {"type": "string"}, "situation": {"type": "string"}, "trigger_date": {"type": "string", "description": "YYYY-MM-DD"}}), &["state", "situation"]),
+        tool("help_links", "JustLegal Get legal help / Find resources URLs as data. Never opens a browser. UI must confirm first.", json!({}), &[]),
         tool("gaps_add", "Capture a justice-gap note. Fake names only.", json!({"path": path, "title": {"type": "string"}, "court": {"type": "string"}, "rule": {"type": "string"}, "happened": {"type": "string"}, "hard": {"type": "string"}}), &["path", "title"]),
     ])
 }
@@ -154,13 +160,67 @@ fn call_tool(name: &str, args: &Value) -> Result<Value, String> {
             let ics = crate::calendar::write_ics(&dir, &result)?;
             Ok(json!({"ics": ics, "due": result.due, "never_files": true}))
         }
-        "packs_list" => Ok(json!(RulePack::list_builtin()
-            .iter()
-            .map(|p| json!({"id": p.id, "name": p.name, "jurisdiction": p.jurisdiction}))
-            .collect::<Vec<_>>())),
+        "packs_list" => {
+            let catalog = if s("catalog").is_empty() {
+                None
+            } else {
+                Some(std::path::PathBuf::from(s("catalog")))
+            };
+            Ok(serde_json::to_value(crate::forms::list_packs(catalog.as_deref(), None)?).unwrap())
+        }
         "packs_validate" => {
             Ok(serde_json::to_value(RulePack::validate_file(std::path::Path::new(&s("file")))?).unwrap())
         }
+        "packs_install" => {
+            let file = if s("file").is_empty() {
+                None
+            } else {
+                Some(std::path::PathBuf::from(s("file")))
+            };
+            let catalog = if s("catalog").is_empty() {
+                None
+            } else {
+                Some(std::path::PathBuf::from(s("catalog")))
+            };
+            let situation = if s("situation").is_empty() {
+                None
+            } else {
+                Some(s("situation"))
+            };
+            Ok(serde_json::to_value(crate::forms::install(crate::forms::InstallOpts {
+                state: s("state"),
+                situation,
+                catalog,
+                file,
+                root: None,
+                allow_network: false,
+            })?)
+            .unwrap())
+        }
+        "packs_remove" => Ok(json!({"removed": crate::forms::remove_pack(&s("state"), None)?})),
+        "packs_verify" => {
+            let state = if s("state").is_empty() {
+                None
+            } else {
+                Some(s("state"))
+            };
+            Ok(serde_json::to_value(crate::forms::verify_pack(state.as_deref(), None)?).unwrap())
+        }
+        "guide_questions" => Ok(serde_json::to_value(crate::guide::questions()?).unwrap()),
+        "guide_find" => {
+            let court = if s("court").is_empty() {
+                None
+            } else {
+                Some(s("court"))
+            };
+            let trigger = if s("trigger_date").is_empty() {
+                None
+            } else {
+                Some(s("trigger_date"))
+            };
+            Ok(serde_json::to_value(crate::guide::find(&s("state"), court.as_deref(), &s("situation"), trigger.as_deref())?).unwrap())
+        }
+        "help_links" => Ok(serde_json::to_value(crate::help_links::HelpLinks::load()?).unwrap()),
         "gaps_add" => Ok(serde_json::to_value(crate::gaps::add(
             std::path::Path::new(&s("path")),
             &s("title"),
@@ -290,6 +350,10 @@ mod tests {
             "check_all",
             "export_court",
             "packs_list",
+            "packs_install",
+            "packs_verify",
+            "guide_find",
+            "help_links",
         ] {
             assert!(names.contains(&required), "missing {required} in {names:?}");
         }
@@ -383,6 +447,17 @@ mod tests {
         let env: Value = serde_json::from_str(text).unwrap();
         assert_eq!(env["never_files"], true);
         assert_eq!(env["ok"], true);
+        let guide = call_tool(
+            "guide_find",
+            &json!({"state": "NJ", "situation": "reconsideration", "trigger_date": "2026-01-09"}),
+        )
+        .unwrap();
+        assert_eq!(guide["never_files"], true);
+        assert_eq!(guide["citation"], "R. 2:11-6");
+        assert_eq!(guide["deadline"]["due"], "2026-01-20");
+        assert!(guide["help_links"].as_array().unwrap().iter().any(|l| l["id"] == "find-legal-help"));
+        let links = call_tool("help_links", &json!({})).unwrap();
+        assert_eq!(links["opens_browser"], false);
         let _ = std::fs::remove_dir_all(dir);
     }
 }

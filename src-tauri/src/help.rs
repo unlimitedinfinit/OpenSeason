@@ -28,6 +28,10 @@ Read AGENTS.md first. Never invent facts, arguments, or citations. Never file or
 16. Stop. Tell the user they must read every page, sign, file, and serve.
 
 If a tool returns ok=false, read issues[].message. It says how to fix the field. Do not guess a cite to clear an issue.
+
+## What do I need to file?
+
+Call `guide_questions` then `guide_find` with the user's state, court, situation, and optional trigger date. Recommend only forms the pack lists. If citation_status is not pack_source, tell the user it needs verification. Do not invent a deadline. `help_links` is data only — never open a browser. The window confirms before opening JustLegal.
 "#;
 
 #[derive(Debug, Clone, Serialize)]
