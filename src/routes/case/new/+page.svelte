@@ -95,6 +95,16 @@
     busy = true;
     error = "";
     try {
+      if (["reconsideration", "enlargement", "stay", "amend_findings"].includes(draft.document_kind)) {
+        draft.motion_kind = draft.document_kind;
+        draft.rule_pack_id = "nj-app-div";
+      }
+      if (draft.document_kind === "mandamus") {
+        draft.rule_pack_id = "co-mandamus";
+      }
+      if (draft.document_kind === "appellate_brief" || draft.document_kind === "appellate_motion") {
+        draft.rule_pack_id = "nj-app-div";
+      }
       const created = await ipc<CaseProfile>("create_case", {
         title: draft.title.trim(),
         documentKind: draft.document_kind,
@@ -202,12 +212,36 @@
       <span><strong>Notice of Appeal</strong> <span class="text-sm text-muted-foreground">Ready Word and PDF export.</span></span>
     </label>
     <label class="flex gap-3 items-start border rounded-md p-4">
-      <input type="radio" bind:group={draft.document_kind} value="complaint" />
-      <span><strong>Complaint</strong> <span class="text-sm text-muted-foreground">Basic template.</span></span>
+      <input type="radio" bind:group={draft.document_kind} value="reconsideration" />
+      <span><strong>Motion for reconsideration</strong> <span class="text-sm text-muted-foreground">Basic. NJ R. 2:11-6 / R. 4:49-2 deadline table.</span></span>
     </label>
     <label class="flex gap-3 items-start border rounded-md p-4">
-      <input type="radio" bind:group={draft.document_kind} value="motion" />
-      <span><strong>Motion</strong> <span class="text-sm text-muted-foreground">Basic template.</span></span>
+      <input type="radio" bind:group={draft.document_kind} value="enlargement" />
+      <span><strong>Motion for enlargement of time</strong> <span class="text-sm text-muted-foreground">Basic template.</span></span>
+    </label>
+    <label class="flex gap-3 items-start border rounded-md p-4">
+      <input type="radio" bind:group={draft.document_kind} value="stay" />
+      <span><strong>Motion for a stay</strong> <span class="text-sm text-muted-foreground">Basic template.</span></span>
+    </label>
+    <label class="flex gap-3 items-start border rounded-md p-4">
+      <input type="radio" bind:group={draft.document_kind} value="amend_findings" />
+      <span><strong>Motion to amend findings</strong> <span class="text-sm text-muted-foreground">Basic template.</span></span>
+    </label>
+    <label class="flex gap-3 items-start border rounded-md p-4">
+      <input type="radio" bind:group={draft.document_kind} value="appellate_brief" />
+      <span><strong>Appellate brief</strong> <span class="text-sm text-muted-foreground">Basic scaffold.</span></span>
+    </label>
+    <label class="flex gap-3 items-start border rounded-md p-4">
+      <input type="radio" bind:group={draft.document_kind} value="appellate_motion" />
+      <span><strong>Motion in the appellate court</strong> <span class="text-sm text-muted-foreground">Basic. R. 2:8-1 form.</span></span>
+    </label>
+    <label class="flex gap-3 items-start border rounded-md p-4">
+      <input type="radio" bind:group={draft.document_kind} value="mandamus" />
+      <span><strong>Mandamus (Colorado)</strong> <span class="text-sm text-muted-foreground">Basic C.A.R. 21 scaffold.</span></span>
+    </label>
+    <label class="flex gap-3 items-start border rounded-md p-4">
+      <input type="radio" bind:group={draft.document_kind} value="complaint" />
+      <span><strong>Complaint</strong> <span class="text-sm text-muted-foreground">Basic template.</span></span>
     </label>
   {/if}
 

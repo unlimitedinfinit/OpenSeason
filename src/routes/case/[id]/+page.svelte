@@ -20,7 +20,19 @@
   let profile = $state<CaseProfile | null>(null);
   let parties = $state<Party[]>([]);
   let addressText = $state("");
-  let tab = $state<"overview" | "parties" | "documents" | "evidence" | "timeline" | "files" | "confidential">("overview");
+  let tab = $state<"overview" | "parties" | "documents" | "evidence" | "timeline" | "files" | "check" | "confidential">("overview");
+  let checkReport = $state<{
+    ok?: boolean;
+    never_files?: boolean;
+    issues?: { field: string; message: string }[];
+    fact?: { rows: { id: number; assertion: string; record_cite: string; verified: boolean }[] };
+    authority?: { rows: { id: number; cite: string; status: string }[] };
+    deadline?: { due: string; math: string; rule: string };
+  } | null>(null);
+  let deadlinePack = $state("nj-app-div");
+  let deadlineRule = $state("reconsideration-appellate");
+  let triggerDate = $state("");
+  let mdDraft = $state("");
   let error = $state("");
   let status = $state("");
   let report = $state<ValidationReport | null>(null);
@@ -64,6 +76,9 @@
     addressText = next.filer.address_lines.join("\n");
     if (!next.complaint) next.complaint = { title: "", user_text: "" };
     if (!next.motion) next.motion = { title: "", user_text: "" };
+    if (!next.brief) next.brief = { title: "", user_text: "" };
+    if (!next.appellate_motion) next.appellate_motion = { title: "", user_text: "" };
+    if (!next.mandamus) next.mandamus = { title: "", user_text: "" };
     if (!next.timeline) next.timeline = [];
     hydrated = next.id + next.updated_at;
   }
@@ -242,6 +257,36 @@
     }
   }
 
+  async function importMarkdown() {
+    if (!mdDraft.trim()) {
+      error = "Paste a Markdown draft first.";
+      return;
+    }
+    try {
+      await ipc("import_markdown_cmd", { caseId, markdown: mdDraft });
+      status = "Imported Markdown into drafts/draft.md. The checker will not invent cites from this text.";
+      await load();
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function runChecks() {
+    try {
+      checkReport = await ipc("check_case_cmd", {
+        caseId,
+        pack: deadlinePack,
+        rule: deadlineRule,
+        triggerDate: triggerDate || null,
+      });
+      status = checkReport?.ok
+        ? "Check gates passed. The app still did not file or serve."
+        : "Check found issues. See the list. The app never invents cites.";
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
   async function exportOsb() {
     const path = prompt("Optional target path for the .osb file. Leave empty to save in Downloads.");
     try {
@@ -285,7 +330,7 @@
     {/if}
 
     <nav class="flex flex-wrap gap-2 text-sm">
-      {#each [["overview", "Overview"], ["parties", "Parties"], ["documents", "Documents"], ["evidence", "Evidence"], ["timeline", "Timeline"], ["files", "Drafts and exports"]] as [id, label]}
+      {#each [["overview", "Overview"], ["parties", "Parties"], ["documents", "Documents"], ["evidence", "Evidence"], ["timeline", "Timeline"], ["check", "Check"], ["files", "Drafts and exports"]] as [id, label]}
         <button
           onclick={() => (tab = id as typeof tab)}
           class="px-3 py-1.5 rounded-md border {tab === id ? 'bg-primary text-primary-foreground border-transparent' : 'border-border'}"
@@ -402,6 +447,49 @@
         <textarea bind:value={profile.motion.user_text} class="w-full h-32 rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Your motion text"></textarea>
         <button onclick={() => exportKind("motion")} disabled={busy} class="border border-border px-4 py-2 rounded-md text-sm">Export motion (Word and PDF)</button>
       </section>
+
+      <section class="space-y-4 bg-card border rounded-lg p-6">
+        <div class="flex justify-between">
+          <h2 class="font-semibold">Appellate brief</h2>
+          <span class="text-[10px] uppercase tracking-wide text-amber-300">Basic scaffold</span>
+        </div>
+        <input bind:value={profile.brief.title} class="w-full h-10 rounded-md border border-input bg-background px-3 text-sm" placeholder="Brief title" />
+        <textarea bind:value={profile.brief.user_text} class="w-full h-32 rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Your brief text. The scaffold will not invent argument."></textarea>
+        <button onclick={() => exportKind("appellate_brief")} disabled={busy} class="border border-border px-4 py-2 rounded-md text-sm">Export brief (Word and PDF)</button>
+      </section>
+
+      <section class="space-y-4 bg-card border rounded-lg p-6">
+        <div class="flex justify-between">
+          <h2 class="font-semibold">Motion in the appellate court</h2>
+          <span class="text-[10px] uppercase tracking-wide text-amber-300">Basic template</span>
+        </div>
+        <input bind:value={profile.appellate_motion.title} class="w-full h-10 rounded-md border border-input bg-background px-3 text-sm" placeholder="Appellate motion title" />
+        <textarea bind:value={profile.appellate_motion.user_text} class="w-full h-32 rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Your R. 2:8-1 motion text"></textarea>
+        <button onclick={() => exportKind("appellate_motion")} disabled={busy} class="border border-border px-4 py-2 rounded-md text-sm">Export appellate motion (Word and PDF)</button>
+      </section>
+
+      <section class="space-y-4 bg-card border rounded-lg p-6">
+        <div class="flex justify-between">
+          <h2 class="font-semibold">Mandamus (Colorado)</h2>
+          <span class="text-[10px] uppercase tracking-wide text-amber-300">Basic C.A.R. 21</span>
+        </div>
+        <input bind:value={profile.mandamus.title} class="w-full h-10 rounded-md border border-input bg-background px-3 text-sm" placeholder="Petition title" />
+        <textarea bind:value={profile.mandamus.user_text} class="w-full h-32 rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Your petition text"></textarea>
+        <button onclick={() => exportKind("mandamus")} disabled={busy} class="border border-border px-4 py-2 rounded-md text-sm">Export mandamus (Word and PDF)</button>
+      </section>
+
+      <section class="space-y-4 bg-card border rounded-lg p-6">
+        <div class="flex justify-between">
+          <h2 class="font-semibold">Court Markdown</h2>
+          <span class="text-[10px] uppercase tracking-wide text-muted-foreground">Same engine as the CLI</span>
+        </div>
+        <p class="text-xs text-muted-foreground">Paste an md2court subset draft (YAML front matter, ::: signature, ::: certificate). Import writes drafts/draft.md. Export uses the same renderer as `openseason export court-md`.</p>
+        <textarea bind:value={mdDraft} class="w-full h-36 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono" placeholder={"---\ncourt: ...\nplaintiff: ...\ndefendant: ...\ncase_no: ...\n---\n"}></textarea>
+        <div class="flex flex-wrap gap-2">
+          <button onclick={importMarkdown} disabled={busy} class="border border-border px-4 py-2 rounded-md text-sm">Import Markdown</button>
+          <button onclick={() => exportKind("court_md")} disabled={busy} class="border border-border px-4 py-2 rounded-md text-sm">Export court Markdown (Word and PDF)</button>
+        </div>
+      </section>
     {:else if tab === "evidence"}
       <section class="space-y-4 bg-card border rounded-lg p-6">
         <h2 class="font-semibold">Evidence</h2>
@@ -449,6 +537,65 @@
               </li>
             {/each}
           </ul>
+        {/if}
+      </section>
+    {:else if tab === "check"}
+      <section class="space-y-4 bg-card border rounded-lg p-6">
+        <h2 class="font-semibold">Check stage</h2>
+        <p class="text-sm text-muted-foreground">Record fact-check, authority status, deadline math, and sign-off. The app never invents citations and never files or serves.</p>
+        <div class="grid md:grid-cols-3 gap-3">
+          <label class="block space-y-1">
+            <span class="text-xs text-muted-foreground">Rule pack</span>
+            <select bind:value={deadlinePack} class="w-full h-10 rounded-md border border-input bg-background px-3 text-sm">
+              <option value="nj-app-div">New Jersey Appellate Division</option>
+              <option value="co-mandamus">Colorado mandamus (C.A.R. 21)</option>
+              <option value="generic-us-appellate">Generic US appellate</option>
+            </select>
+          </label>
+          <label class="block space-y-1">
+            <span class="text-xs text-muted-foreground">Deadline rule</span>
+            <select bind:value={deadlineRule} class="w-full h-10 rounded-md border border-input bg-background px-3 text-sm">
+              <option value="reconsideration-appellate">R. 2:11-6 (10 days from entry)</option>
+              <option value="reconsideration-trial">R. 4:49-2 (20 days from service)</option>
+              <option value="motion-appellate">R. 2:8-1 (appellate motion)</option>
+              <option value="toll-time-to-appeal">R. 2:4-3(e) (tolling note)</option>
+              <option value="car-21-petition">C.A.R. 21 (no automatic day count)</option>
+            </select>
+          </label>
+          <label class="block space-y-1">
+            <span class="text-xs text-muted-foreground">Trigger date (YYYY-MM-DD)</span>
+            <input bind:value={triggerDate} class="w-full h-10 rounded-md border border-input bg-background px-3 text-sm" placeholder="2026-01-09" />
+          </label>
+        </div>
+        <button onclick={runChecks} class="bg-secondary text-secondary-foreground px-4 py-2 rounded-md text-sm">Run checks</button>
+        {#if checkReport}
+          <p class="text-sm">{checkReport.never_files ? "Never files. " : ""}{checkReport.ok ? "Gates passed." : "Issues remain."}</p>
+          {#if checkReport.deadline}
+            <p class="text-xs font-mono">{checkReport.deadline.rule}: {checkReport.deadline.math}</p>
+          {/if}
+          {#if checkReport.fact?.rows?.length}
+            <ul class="text-sm space-y-1">
+              {#each checkReport.fact.rows as row}
+                <li>{row.id}. [{row.verified ? "Y" : "N"}] {row.assertion} {row.record_cite ? `(${row.record_cite})` : "(no cite)"}</li>
+              {/each}
+            </ul>
+          {/if}
+          {#if checkReport.authority?.rows?.length}
+            <ul class="text-sm space-y-1">
+              {#each checkReport.authority.rows as row}
+                <li>{row.id}. {row.status} {row.cite}</li>
+              {/each}
+            </ul>
+          {/if}
+          {#if checkReport.issues?.length}
+            <ul class="text-sm text-destructive list-disc pl-5">
+              {#each checkReport.issues as issue}
+                <li>{issue.field}: {issue.message}</li>
+              {/each}
+            </ul>
+          {/if}
+        {:else}
+          <p class="text-sm text-muted-foreground border border-dashed rounded-md p-4">No check run yet. Import a Markdown draft or paste text, then run checks.</p>
         {/if}
       </section>
     {:else if tab === "files"}

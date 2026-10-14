@@ -188,6 +188,29 @@ async function mockInvoke<T>(cmd: string, args: Record<string, unknown> = {}): P
       return [
         { recipient_name: String(args.name || "Sample Agency"), award_amount: 120000, description: "Mock award (browser preview)" },
       ] as T;
+    case "list_rule_packs":
+      return [
+        { id: "nj-app-div", name: "New Jersey Appellate Division", jurisdiction: "NJ" },
+        { id: "co-mandamus", name: "Colorado original proceeding (C.A.R. 21)", jurisdiction: "CO" },
+        { id: "generic-us-appellate", name: "Generic United States appellate", jurisdiction: "US" },
+      ] as T;
+    case "import_markdown_cmd":
+      return { meta: { doc_title: "Imported draft" }, body: String(args.markdown || ""), lines: [] } as T;
+    case "check_case_cmd":
+    case "deadline_cmd":
+      return {
+        ok: false,
+        never_files: true,
+        never_serves: true,
+        notice: "Browser preview uses mocked checks. Run the CLI or the desktop app for real results.",
+        issues: [{ field: "preview", message: "Mocked invoke. Use npm run cli -- check all <case>." }],
+        fact: { ok: false, never_files: true, rows: [], issues: [] },
+        authority: { ok: false, never_files: true, invented: false, rows: [], issues: [] },
+        deadline: args.triggerDate
+          ? { due: "preview-only", math: "Mocked deadline", rule: String(args.rule || "") }
+          : null,
+        signoff: { ok: false, never_files: true, never_serves: true, items: [], issues: [] },
+      } as T;
     case "sync_case_cmd":
       return {
         action: String(args.action || "backup"),

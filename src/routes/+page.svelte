@@ -71,12 +71,12 @@
 <main class="container mx-auto p-8 space-y-8 max-w-6xl">
   <div class="flex justify-between items-start gap-6 border-b pb-6">
     <div class="space-y-2">
-      <p class="text-xs uppercase tracking-widest text-muted-foreground">Local desktop builder</p>
-      <h1 class="text-3xl font-bold tracking-tight">OpenSeason</h1>
+      <p class="text-xs uppercase tracking-widest text-muted-foreground">Offline Case Builder</p>
+      <h1 class="text-3xl font-bold tracking-tight">Document Builder</h1>
       <p class="text-muted-foreground max-w-2xl">
-        One case list. Standard cases live in a folder you can copy. Confidential cases use the Legal Airlock and a local vault.
-        Fill the profile once. The builder puts caption, court, docket, parties, and your signature block into the document.
-        You bring the research. The software only formats it.
+        Draft, check, and produce court-shaped motions, appeals, and complaints on this computer. The app never files or serves.
+        New Jersey Appellate Division is the first rule pack. Confidential (encrypted vault) is one case type, not the whole product.
+        Agents use the same engine through the CLI. See docs/AGENT-INTERFACE.md.
       </p>
     </div>
     <div class="text-right space-y-2 shrink-0">
@@ -100,8 +100,10 @@
       <button onclick={openFolder} class="border border-border px-4 py-2 rounded-md text-sm">Open a case folder</button>
       <button onclick={importOsb} class="border border-border px-4 py-2 rounded-md text-sm">Import .osb</button>
       <button onclick={() => startNew("notice_of_appeal")} class="border border-indigo-500/40 text-indigo-200 px-4 py-2 rounded-md text-sm">Notice of Appeal</button>
+      <button onclick={() => startNew("reconsideration")} class="border border-border px-4 py-2 rounded-md text-sm">Motion (NJ)</button>
+      <button onclick={() => startNew("appellate_brief")} class="border border-border px-4 py-2 rounded-md text-sm">Appellate brief (basic)</button>
+      <button onclick={() => startNew("mandamus")} class="border border-border px-4 py-2 rounded-md text-sm">Mandamus (CO, basic)</button>
       <button onclick={() => startNew("complaint")} class="border border-border px-4 py-2 rounded-md text-sm">Complaint (basic)</button>
-      <button onclick={() => startNew("motion")} class="border border-border px-4 py-2 rounded-md text-sm">Motion (basic)</button>
     </div>
     {#if actionError}
       <p class="text-sm text-destructive">{actionError}</p>
@@ -124,20 +126,38 @@
         </button>
       </GlassOSPanel>
       <GlassOSPanel borderRadius={8} scale={12} depth={15} enableSpecular={true}>
-        <button onclick={() => startNew("complaint")} class="w-full h-full p-6 text-left space-y-2 hover:bg-accent/10 transition-colors">
-          <p class="text-xs font-mono text-amber-300">Basic template</p>
-          <h3 class="text-xl font-semibold">Complaint</h3>
+        <button onclick={() => startNew("reconsideration")} class="w-full h-full p-6 text-left space-y-2 hover:bg-accent/10 transition-colors">
+          <p class="text-xs font-mono text-amber-300">Basic template · NJ pack</p>
+          <h3 class="text-xl font-semibold">Motions</h3>
           <p class="text-sm text-muted-foreground">
-            A working basic complaint: caption, parties, and signature from the profile, plus your own claim text. Not a full interview.
+            Reconsideration, enlargement of time, stay, or amend findings. The NJ Appellate Division pack computes deadlines. You write the grounds.
           </p>
         </button>
       </GlassOSPanel>
       <GlassOSPanel borderRadius={8} scale={12} depth={15} enableSpecular={true}>
-        <button onclick={() => startNew("motion")} class="w-full h-full p-6 text-left space-y-2 hover:bg-accent/10 transition-colors">
-          <p class="text-xs font-mono text-amber-300">Basic template</p>
-          <h3 class="text-xl font-semibold">Motion</h3>
+        <button onclick={() => startNew("appellate_brief")} class="w-full h-full p-6 text-left space-y-2 hover:bg-accent/10 transition-colors">
+          <p class="text-xs font-mono text-amber-300">Basic scaffold</p>
+          <h3 class="text-xl font-semibold">Appeals</h3>
           <p class="text-sm text-muted-foreground">
-            A working basic motion: same fill-once profile, plus the request you write. Not a motion library.
+            Notice of Appeal is ready. Appellate brief and motion-in-the-appellate-court are scaffolds. Check stage runs on the same draft.
+          </p>
+        </button>
+      </GlassOSPanel>
+      <GlassOSPanel borderRadius={8} scale={12} depth={15} enableSpecular={true}>
+        <button onclick={() => startNew("mandamus")} class="w-full h-full p-6 text-left space-y-2 hover:bg-accent/10 transition-colors">
+          <p class="text-xs font-mono text-amber-300">Basic template · CO</p>
+          <h3 class="text-xl font-semibold">Mandamus</h3>
+          <p class="text-sm text-muted-foreground">
+            C.A.R. 21 original-proceeding scaffold. The Mandamus-Colorado repo was not readable here, so this is a public-rule pack, not the original wizard dump.
+          </p>
+        </button>
+      </GlassOSPanel>
+      <GlassOSPanel borderRadius={8} scale={12} depth={15} enableSpecular={true}>
+        <button onclick={() => startNew("complaint")} class="w-full h-full p-6 text-left space-y-2 hover:bg-accent/10 transition-colors">
+          <p class="text-xs font-mono text-amber-300">Basic template</p>
+          <h3 class="text-xl font-semibold">Complaint</h3>
+          <p class="text-sm text-muted-foreground">
+            Caption, parties, and signature from the profile, plus your own claim text. Not a full interview.
           </p>
         </button>
       </GlassOSPanel>

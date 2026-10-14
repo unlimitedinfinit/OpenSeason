@@ -68,6 +68,12 @@ export interface CaseProfile {
   complaint: PleadingDraft;
   motion: PleadingDraft;
   timeline: TimelineEvent[];
+  rule_pack_id?: string;
+  motion_kind?: string;
+  brief?: PleadingDraft;
+  appellate_motion?: PleadingDraft;
+  mandamus?: PleadingDraft;
+  court_markdown?: string;
 }
 
 export interface WorkspaceCase {
@@ -153,6 +159,12 @@ export function emptyProfile(title = "", kind = "notice_of_appeal"): CaseProfile
     complaint: { title: "", user_text: "" },
     motion: { title: "", user_text: "" },
     timeline: [],
+    rule_pack_id: "generic-us-appellate",
+    motion_kind: "",
+    brief: { title: "", user_text: "" },
+    appellate_motion: { title: "", user_text: "" },
+    mandamus: { title: "", user_text: "" },
+    court_markdown: "",
   };
 }
 
