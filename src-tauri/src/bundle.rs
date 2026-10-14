@@ -6,7 +6,11 @@ use zip::write::SimpleFileOptions;
 use walkdir::WalkDir;
 
 pub fn export_hunt(hunt_path: &Path, output_path: &Path) -> Result<(), String> {
-    let file = File::create(output_path).map_err(|e| e.to_string())?;
+    let file = crate::sandbox::create_new_file(output_path)?;
+    export_hunt_to_writer(hunt_path, file)
+}
+
+pub fn export_hunt_to_writer(hunt_path: &Path, file: File) -> Result<(), String> {
     let mut zip = ZipWriter::new(file);
     let options = SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated)
@@ -45,15 +49,12 @@ pub fn import_hunt(osb_path: &Path, vaults_root: &Path) -> Result<String, String
     // Determine hunt name from zip root or filename?
     // Let's use the filename of the OSB as the hunt name if possible, or check for metadata.
     // For MVP, use the OSB filename stem (e.g. "operation_x.osb" -> "operation_x").
-    let hunt_name = osb_path.file_stem()
-        .and_then(|s| s.to_str())
-        .ok_or("Invalid OSB filename")?
-        .to_string();
-
-    let target_dir = vaults_root.join(&hunt_name);
+    // Folder id must be a UUID so later hunt commands stay inside the vault root.
+    let hunt_id = uuid::Uuid::new_v4().to_string();
+    let target_dir = crate::sandbox::resolve_id_under_root(vaults_root, &hunt_id)?;
 
     if target_dir.exists() {
-        return Err(format!("Hunt '{}' already exists in vault.", hunt_name));
+        return Err(format!("Hunt '{}' already exists in vault.", hunt_id));
     }
 
     // Extract
@@ -79,5 +80,5 @@ pub fn import_hunt(osb_path: &Path, vaults_root: &Path) -> Result<String, String
         }
     }
 
-    Ok(hunt_name)
+    Ok(hunt_id)
 }

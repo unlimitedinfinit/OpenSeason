@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
+  import { ipc } from "$lib/ipc";
 
   let { onLaunch } = $props();
   
@@ -8,11 +8,9 @@
   let status = $state("Checking Vault...");
   let isChecking = $state(true);
   let error = $state("");
-  let salt = $state("");
-
   onMount(async () => {
     try {
-      salt = await invoke("get_salt");
+      await ipc("get_salt");
       status = "Vault Locked";
     } catch (e) {
       error = "Failed to access Vault Storage: " + e;
@@ -31,7 +29,7 @@
     error = "";
     
     try {
-      const success = await invoke("unlock_vault", { password, salt });
+      const success = await ipc("unlock_vault", { password });
       if (success) {
         onLaunch();
       } else {
@@ -46,8 +44,8 @@
 
 <div class="max-w-md mx-auto mt-20 p-8 bg-card border rounded-lg shadow-lg space-y-6">
   <div class="text-center">
-    <h2 class="text-2xl font-bold">Hunter's Vault</h2>
-    <p class="text-muted-foreground text-sm mt-1">Session-Only Encryption</p>
+    <h2 class="text-2xl font-bold">Confidential vault</h2>
+    <p class="text-muted-foreground text-sm mt-1">Session-only encryption</p>
   </div>
 
   {#if isChecking}
@@ -88,7 +86,7 @@
         </p>
         <p class="mt-1 opacity-90">
           If you lose this password, your data is lost forever. 
-          Open Season uses zero-knowledge encryption. We cannot reset it for you.
+          OpenSeason uses session-only encryption. We cannot reset it for you.
         </p>
       </div>
 

@@ -1,9 +1,30 @@
 pub mod crypto;
 pub mod commands;
+pub mod case_commands;
+pub mod case_profile;
+pub mod sandbox;
+pub mod court_rules;
+pub mod documents;
+pub mod seal;
+pub mod sync;
 pub mod db;
 pub mod bundle;
 pub mod usaspending;
 pub mod pdf;
+pub mod holidays;
+pub mod rule_pack;
+pub mod deadlines;
+pub mod check;
+pub mod court_md;
+pub mod agent;
+pub mod mcp;
+pub mod guided;
+pub mod exhibits;
+pub mod calendar;
+pub mod gaps;
+pub mod help;
+pub mod seed;
+pub mod packet;
 
 use crypto::AppState;
 
@@ -38,7 +59,39 @@ pub fn run() {
             commands::add_hunt_evidence,
             commands::add_hunt_evidence_bytes,
             commands::delete_hunt_evidence,
-            commands::purge_vault_cache
+            commands::purge_vault_cache,
+            case_commands::get_cases_root,
+            case_commands::list_cases,
+            case_commands::list_workspace_cases,
+            case_commands::create_case,
+            case_commands::get_case,
+            case_commands::save_case,
+            case_commands::validate_case_cmd,
+            case_commands::export_notice_of_appeal_cmd,
+            case_commands::export_pleading_cmd,
+            case_commands::open_case_folder,
+            case_commands::list_case_artifacts,
+            case_commands::add_case_evidence,
+            case_commands::convert_case_to_confidential,
+            case_commands::sync_case_cmd,
+            case_commands::list_rule_packs,
+            case_commands::import_markdown_cmd,
+            case_commands::check_case_cmd,
+            case_commands::deadline_cmd,
+            case_commands::guided_sections_cmd,
+            case_commands::guided_fill_cmd,
+            case_commands::exhibit_index_cmd,
+            case_commands::link_fact_cmd,
+            case_commands::set_fact_cite_cmd,
+            case_commands::set_authority_cmd,
+            case_commands::set_signoff_cmd,
+            case_commands::export_packet_cmd,
+            case_commands::export_ics_cmd,
+            case_commands::seed_sample_cmd,
+            case_commands::gap_add_cmd,
+            case_commands::gap_export_cmd,
+            case_commands::field_help_cmd,
+            case_commands::playbook_cmd
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

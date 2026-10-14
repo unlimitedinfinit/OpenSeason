@@ -2,52 +2,52 @@
 
 ## Prerequisites
 
-Before setting up the project, make sure you have the following installed:
-
-| Tool | Version | Install |
+| Tool | Version | Notes |
 |---|---|---|
-| Node.js | v18+ (LTS preferred) | [nodejs.org](https://nodejs.org) |
-| Rust / Cargo | v1.75+ (stable) | [rustup.rs](https://rustup.rs) |
-| VS Build Tools | 2022 (C++ workload) | [visualstudio.com](https://visualstudio.microsoft.com/downloads/) (Windows only) |
+| Node.js | 18+ | `npm install --legacy-peer-deps` (Svelte 5 peers disagree with a few UI packages) |
+| Rust / Cargo | 1.85+ stable (1.98 used in this run) | [rustup.rs](https://rustup.rs). Older 1.83 cannot parse some Tauri crates that use edition 2024. |
+| VS Build Tools | 2022 C++ | Windows only |
+| Xcode CLT | current | macOS only |
 
 ## Setup
 
 ```bash
-# Clone the repository
 git clone https://github.com/unlimitedinfinit/OpenSeason.git
 cd OpenSeason
-
-# Install frontend dependencies
-npm install
+npm install --legacy-peer-deps
 ```
 
-## Build & Development
+## Run
 
 ```bash
-# Run in development mode (launches Svelte frontend + compiles Rust backend dynamically)
 npm run tauri dev
-
-# Build the production executable (.msi / .exe on Windows)
-npm run tauri build
 ```
 
 ## Test
 
 ```bash
-# Run Svelte frontend TypeScript checks
-npm run check
-
-# Run Cargo test suite in backend
 cd src-tauri
 cargo test
+cd ..
+npm run check
+npm run build
 ```
 
-## Project Rules
-- **Runes for Reactivity**: Always use Svelte 5 state management runes (`$state`, `$derived`, `$effect`).
-- **Memory Security**: All raw password strings and derived key arrays must implement `zeroize` upon completion.
-- **Tauri Scopes**: File system reading and writing must occur strictly inside the sandbox directory `C:\Users\<user>\AppData\Local\com.openseason.app\vaults\`.
+CLI smoke test using the fake fixture:
 
-## Deployment
-Open Season is distributed as a standalone desktop binary:
-- **Windows**: Outputs to `src-tauri/target/release/bundle/msi/Open Season_0.1.0_x64_en-US.msi`
-- **Mac/Linux**: Outputs to corresponding `.dmg` or `.deb` packages inside `src-tauri/target/release/bundle/`.
+```bash
+cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- case validate fixtures/sample-appeal-case
+```
+
+## Rules
+
+- Use Svelte 5 runes (`$state`, `$derived`, `$effect`).
+- Zeroize passwords and session keys.
+- Confidential data stays out of `sync.rs`.
+- Court names and margins belong in JSON under `templates/court-rules/`, not in scattered string literals.
+- Do not add analytics or new cloud SDKs.
+- Docs and UI copy: no em dashes.
+
+## Bundles
+
+`npm run tauri build` is the intended path for Windows (`.msi` / `.exe`) and macOS (`.dmg`). That step needs the native WebView and code-signing toolchain. It was not run in the environment that produced this foundation.

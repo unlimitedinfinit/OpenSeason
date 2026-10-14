@@ -1,0 +1,86 @@
+{
+  "id": "nj-app-div",
+  "name": "New Jersey Appellate Division",
+  "jurisdiction": "NJ",
+  "court": "Superior Court of New Jersey, Appellate Division",
+  "holiday_set": "us-nj",
+  "source_url": "https://www.njcourts.gov/attorneys/rules-of-court",
+  "source_retrieved_on": "2026-10-14",
+  "source_note": "Rule numbers and day counts are a deadline table, not legal advice. Confirm the current New Jersey Court Rules before relying on a date. This pack never files or serves.",
+  "never_files": true,
+  "never_serves": true,
+  "deadlines": [
+    {
+      "id": "reconsideration-appellate",
+      "label": "Motion for reconsideration in the Appellate Division",
+      "rule": "R. 2:11-6",
+      "trigger": "entry",
+      "days": 10,
+      "count": "calendar",
+      "weekend_holiday_roll": "next_business",
+      "enlargeable_under": "R. 1:3-4(a)",
+      "tolls_appeal_under": "R. 2:4-3(e)",
+      "notes": "Within 10 days of the date of entry of the judgment or order. The time may be enlarged under R. 1:3-4(a)."
+    },
+    {
+      "id": "motion-appellate",
+      "label": "Motion in the appellate court",
+      "rule": "R. 2:8-1",
+      "trigger": "custom",
+      "days": 0,
+      "count": "calendar",
+      "weekend_holiday_roll": "next_business",
+      "enlargeable_under": "R. 1:3-4(a)",
+      "tolls_appeal_under": null,
+      "notes": "Governs form and service of motions in the Appellate Division. Use the deadline that belongs to the relief requested."
+    },
+    {
+      "id": "reconsideration-trial",
+      "label": "Motion to alter or amend a trial-court judgment",
+      "rule": "R. 4:49-2",
+      "trigger": "service",
+      "days": 20,
+      "count": "calendar",
+      "weekend_holiday_roll": "next_business",
+      "enlargeable_under": "R. 1:3-4(a)",
+      "tolls_appeal_under": "R. 2:4-3(e)",
+      "notes": "Not later than 20 days after service of the judgment. Trial-level clock."
+    },
+    {
+      "id": "enlarge-time",
+      "label": "Enlargement of time",
+      "rule": "R. 1:3-4(a)",
+      "trigger": "custom",
+      "days": 0,
+      "count": "calendar",
+      "weekend_holiday_roll": "next_business",
+      "enlargeable_under": null,
+      "tolls_appeal_under": null,
+      "notes": "The court may enlarge the time for taking action except where a rule says the time may not be enlarged."
+    },
+    {
+      "id": "stay-pending-appeal",
+      "label": "Stay pending appeal (motion)",
+      "rule": "R. 2:9-5",
+      "trigger": "custom",
+      "days": 0,
+      "count": "calendar",
+      "weekend_holiday_roll": "next_business",
+      "enlargeable_under": "R. 1:3-4(a)",
+      "tolls_appeal_under": null,
+      "notes": "Stay practice is motion-driven. Confirm the current rule text before using a date."
+    },
+    {
+      "id": "toll-time-to-appeal",
+      "label": "Tolling of time to appeal",
+      "rule": "R. 2:4-3(e)",
+      "trigger": "timely_motion",
+      "days": 0,
+      "count": "calendar",
+      "weekend_holiday_roll": "next_business",
+      "enlargeable_under": null,
+      "tolls_appeal_under": "R. 2:4-3(e)",
+      "notes": "A timely motion of the listed kinds tolls the time for appeal until entry of the order deciding the motion. Confirm the current list of tolling motions."
+    }
+  ]
+}

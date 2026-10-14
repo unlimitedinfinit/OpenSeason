@@ -139,6 +139,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore = "hits the live USAspending API and does not assert"]
     fn test_fetch_feeding_our_future() {
         let result = check_target("Feeding Our Future");
         match result {

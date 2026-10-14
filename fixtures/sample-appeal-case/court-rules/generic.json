@@ -1,0 +1,26 @@
+{
+  "id": "generic-us-appellate",
+  "name": "Generic United States appellate formatting",
+  "description": "Default court formatting when no jurisdiction file is installed. Replace this file with local rules for a specific court. Do not treat these defaults as legal advice.",
+  "paper": "us-letter",
+  "page_width_twips": 12240,
+  "page_height_twips": 15840,
+  "margins_inches": {
+    "top": 1.0,
+    "bottom": 1.0,
+    "left": 1.0,
+    "right": 1.0
+  },
+  "font_family": "Times New Roman",
+  "font_fallbacks": [
+    "Liberation Serif",
+    "DejaVu Serif",
+    "Georgia",
+    "Arial"
+  ],
+  "font_size_pt": 12,
+  "line_spacing": 2.0,
+  "caption_align": "center",
+  "source_url": null,
+  "source_retrieved_on": null
+}

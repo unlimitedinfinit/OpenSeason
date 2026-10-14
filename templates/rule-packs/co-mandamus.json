@@ -1,0 +1,48 @@
+{
+  "id": "co-mandamus",
+  "name": "Colorado original proceeding (C.A.R. 21)",
+  "jurisdiction": "CO",
+  "court": "Supreme Court of Colorado",
+  "holiday_set": "us-federal",
+  "source_url": "https://www.courts.state.co.us/Courts/Supreme_Court/Rule_Changes.cfm",
+  "source_retrieved_on": "2026-10-14",
+  "source_note": "The Mandamus-Colorado-09-2026 repository was not readable from this environment (repository not found). This pack is a public-rule scaffold for C.A.R. 21 original proceedings. It is not the original wizard dump. Confirm current Colorado Appellate Rules before filing. This pack never files or serves.",
+  "never_files": true,
+  "never_serves": true,
+  "deadlines": [
+    {
+      "id": "car-21-petition",
+      "label": "Petition for rule to show cause (original proceeding)",
+      "rule": "C.A.R. 21",
+      "trigger": "custom",
+      "days": 0,
+      "count": "calendar",
+      "weekend_holiday_roll": "next_business",
+      "enlargeable_under": null,
+      "tolls_appeal_under": null,
+      "notes": "C.A.R. 21 is an extraordinary original proceeding. There is no automatic day-count in this pack. The user supplies the trigger they want calculated."
+    }
+  ],
+  "knowledge_base": [
+    {
+      "id": "jurisdiction",
+      "title": "Jurisdiction",
+      "text": "C.A.R. 21 authorizes an original proceeding in the Supreme Court of Colorado. Relief is extraordinary. The user must write why the ordinary appellate path is not adequate. This app will not invent that showing."
+    },
+    {
+      "id": "parties",
+      "title": "Parties",
+      "text": "Caption the petitioner and the respondent (often a court or officer). Use the names from the case profile. Do not invent additional parties."
+    },
+    {
+      "id": "issues",
+      "title": "Issues presented",
+      "text": "List only issues the user wrote. Each issue should point at a record exhibit when it states a fact."
+    },
+    {
+      "id": "relief",
+      "title": "Relief",
+      "text": "State the precise order the user wants (for example a rule to show cause). The app does not file the petition."
+    }
+  ]
+}

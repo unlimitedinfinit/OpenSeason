@@ -1,0 +1,26 @@
+{
+  "id": "generic-us-appellate",
+  "name": "Generic United States appellate",
+  "jurisdiction": "US",
+  "court": "Generic United States appellate court",
+  "holiday_set": "us-federal",
+  "source_url": null,
+  "source_retrieved_on": null,
+  "source_note": "Default pack when no state file is selected. Replace with a state pack. Not legal advice. Never files or serves.",
+  "never_files": true,
+  "never_serves": true,
+  "deadlines": [
+    {
+      "id": "notice-of-appeal-generic",
+      "label": "Notice of appeal (placeholder day count)",
+      "rule": "user-supplied",
+      "trigger": "entry",
+      "days": 30,
+      "count": "calendar",
+      "weekend_holiday_roll": "next_business",
+      "enlargeable_under": null,
+      "tolls_appeal_under": null,
+      "notes": "30 calendar days is a common federal civil default. Confirm the governing rule before using this date."
+    }
+  ]
+}
