@@ -1,0 +1,28 @@
+{
+  "name": "openseason",
+  "version": "0.1.0",
+  "description": "Offline Document Builder MCP. Same engine as the window. Never files or serves.",
+  "transport": "stdio",
+  "command": ["cargo", "run", "--quiet", "--manifest-path", "src-tauri/Cargo.toml", "--bin", "openseason", "--", "mcp"],
+  "tools": [
+    "playbook",
+    "case_create",
+    "case_seed",
+    "draft_import",
+    "draft_sections",
+    "draft_fill",
+    "evidence_add",
+    "evidence_index",
+    "evidence_link",
+    "check_fact",
+    "check_authority",
+    "check_deadline",
+    "check_all",
+    "export_court",
+    "export_packet",
+    "export_ics",
+    "packs_list",
+    "packs_validate",
+    "gaps_add"
+  ]
+}

@@ -50,6 +50,15 @@ enum Commands {
         #[command(subcommand)]
         action: PacksCmd,
     },
+    Gaps {
+        #[command(subcommand)]
+        action: GapsCmd,
+    },
+    /// Print the agent playbook or field help
+    Docs {
+        #[command(subcommand)]
+        action: DocsCmd,
+    },
     /// MCP stdio server (same engine as the CLI)
     Mcp,
     Sync {
@@ -81,6 +90,13 @@ enum CaseCmd {
     Seal {
         path: PathBuf,
     },
+    /// Copy the fake Lucille Example reconsideration case
+    Seed {
+        #[arg(long)]
+        path: PathBuf,
+        #[arg(long, default_value = "lucille")]
+        template: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -89,6 +105,16 @@ enum DraftCmd {
         path: PathBuf,
         #[arg(long)]
         md: PathBuf,
+    },
+    Sections {
+        path: PathBuf,
+    },
+    Fill {
+        path: PathBuf,
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        text: String,
     },
 }
 
@@ -100,6 +126,16 @@ enum EvidenceCmd {
         file: PathBuf,
         #[arg(long, default_value = "")]
         description: String,
+    },
+    Index {
+        path: PathBuf,
+    },
+    Link {
+        path: PathBuf,
+        #[arg(long)]
+        fact_id: u32,
+        #[arg(long)]
+        letter: String,
     },
 }
 
@@ -173,11 +209,52 @@ enum ExportCmd {
         #[arg(long)]
         out: Option<PathBuf>,
     },
+    Packet {
+        path: PathBuf,
+    },
+    Ics {
+        path: PathBuf,
+        #[arg(long)]
+        pack: String,
+        #[arg(long)]
+        rule: String,
+        #[arg(long)]
+        trigger_date: String,
+    },
 }
 
 #[derive(Subcommand)]
 enum PacksCmd {
     List,
+    Validate {
+        path: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum GapsCmd {
+    Add {
+        path: PathBuf,
+        #[arg(long)]
+        title: String,
+        #[arg(long, default_value = "")]
+        court: String,
+        #[arg(long, default_value = "")]
+        rule: String,
+        #[arg(long, default_value = "")]
+        happened: String,
+        #[arg(long, default_value = "")]
+        hard: String,
+    },
+    Export {
+        path: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum DocsCmd {
+    Playbook,
+    Fields,
 }
 
 fn main() -> ExitCode {
@@ -230,6 +307,74 @@ fn run(cli: Cli) -> Result<(), String> {
             } else {
                 for p in RulePack::list_builtin() {
                     println!("{}  {}  ({})", p.id, p.name, p.jurisdiction);
+                }
+            }
+            Ok(())
+        }
+        Commands::Packs {
+            action: PacksCmd::Validate { path },
+        } => {
+            let report = RulePack::validate_file(&path)?;
+            if json {
+                emit(true, &report, report.issues.clone());
+            } else if report.ok {
+                println!("Rule pack is valid.");
+            } else {
+                for issue in &report.issues {
+                    println!("  - {}: {}", issue.field, issue.message);
+                }
+            }
+            Ok(())
+        }
+        Commands::Gaps {
+            action: GapsCmd::Add {
+                path,
+                title,
+                court,
+                rule,
+                happened,
+                hard,
+            },
+        } => {
+            let log = open_season_lib::gaps::add(&path, &title, &court, &rule, &happened, &hard)?;
+            if json {
+                emit(true, &log, vec![]);
+            } else {
+                println!("Saved gap note. {} note(s).", log.notes.len());
+            }
+            Ok(())
+        }
+        Commands::Gaps {
+            action: GapsCmd::Export { path },
+        } => {
+            let dest = open_season_lib::gaps::export_markdown(&path)?;
+            if json {
+                emit(true, dest.display().to_string(), vec![]);
+            } else {
+                println!("Wrote {}", dest.display());
+            }
+            Ok(())
+        }
+        Commands::Docs {
+            action: DocsCmd::Playbook,
+        } => {
+            let text = open_season_lib::help::playbook();
+            if json {
+                emit(true, text, vec![]);
+            } else {
+                println!("{text}");
+            }
+            Ok(())
+        }
+        Commands::Docs {
+            action: DocsCmd::Fields,
+        } => {
+            let fields = open_season_lib::help::field_help();
+            if json {
+                emit(true, fields, vec![]);
+            } else {
+                for f in fields {
+                    println!("{}  {}", f.id, f.help);
                 }
             }
             Ok(())
@@ -295,6 +440,22 @@ fn run(cli: Cli) -> Result<(), String> {
                 }
                 Ok(())
             }
+            CaseCmd::Seed { path, template } => {
+                if template != "lucille" {
+                    return Err("Unknown template. Use lucille (fake names only).".into());
+                }
+                let (dir, profile) = open_season_lib::seed::seed_lucille(&path)?;
+                if json {
+                    emit(
+                        true,
+                        serde_json::json!({"folder": dir, "id": profile.id, "title": profile.title}),
+                        vec![],
+                    );
+                } else {
+                    println!("Seeded fake case {} at {}", profile.title, dir.display());
+                }
+                Ok(())
+            }
         },
         Commands::Draft { action: DraftCmd::Import { path, md } } => {
             let text = std::fs::read_to_string(&md).map_err(|e| e.to_string())?;
@@ -303,6 +464,30 @@ fn run(cli: Cli) -> Result<(), String> {
                 emit(true, &doc.meta, vec![]);
             } else {
                 println!("Imported {} ({} lines).", md.display(), doc.lines.len());
+            }
+            Ok(())
+        }
+        Commands::Draft { action: DraftCmd::Sections { path } } => {
+            let profile = case_profile::load_case(&path)?;
+            let draft = open_season_lib::guided::load_or_init(&path, &profile.document_kind)?;
+            if json {
+                emit(true, &draft, vec![]);
+            } else {
+                for s in &draft.sections {
+                    println!("{}. {}  empty={}", s.id, s.heading, s.user_text.trim().is_empty());
+                    println!("    {}", s.hint);
+                }
+            }
+            Ok(())
+        }
+        Commands::Draft {
+            action: DraftCmd::Fill { path, id, text },
+        } => {
+            let draft = open_season_lib::guided::set_section(&path, &id, &text)?;
+            if json {
+                emit(true, &draft, vec![]);
+            } else {
+                println!("Saved section {id}.");
             }
             Ok(())
         }
@@ -323,6 +508,34 @@ fn run(cli: Cli) -> Result<(), String> {
                 emit(true, dest.display().to_string(), vec![]);
             } else {
                 println!("Copied exhibit to {}", dest.display());
+            }
+            Ok(())
+        }
+        Commands::Evidence {
+            action: EvidenceCmd::Index { path },
+        } => {
+            let index = open_season_lib::exhibits::rebuild(&path)?;
+            if json {
+                emit(true, &index, vec![]);
+            } else {
+                for row in &index.items {
+                    println!("Ex. {}  {}  {}", row.letter, row.filename, row.description);
+                }
+            }
+            Ok(())
+        }
+        Commands::Evidence {
+            action: EvidenceCmd::Link {
+                path,
+                fact_id,
+                letter,
+            },
+        } => {
+            let report = open_season_lib::exhibits::link_fact(&path, fact_id, &letter)?;
+            if json {
+                emit(true, &report, report.issues.clone());
+            } else {
+                println!("Linked fact {fact_id} to Ex. {letter}.");
             }
             Ok(())
         }
@@ -509,6 +722,34 @@ fn run(cli: Cli) -> Result<(), String> {
                 } else {
                     println!("Wrote {}", exported.docx.display());
                     println!("Wrote {}", exported.pdf.display());
+                }
+                Ok(())
+            }
+            ExportCmd::Packet { path } => {
+                let report = open_season_lib::packet::assemble_for_case(&path)?;
+                if json {
+                    emit(true, &report, vec![]);
+                } else {
+                    println!("{}", report.notice);
+                    for item in &report.items {
+                        println!("{}  {}", item.label, item.docx);
+                    }
+                }
+                Ok(())
+            }
+            ExportCmd::Ics {
+                path,
+                pack,
+                rule,
+                trigger_date,
+            } => {
+                let result = check::run_deadline(&path, &pack, &rule, &trigger_date)?;
+                let ics = open_season_lib::calendar::write_ics(&path, &result)?;
+                if json {
+                    emit(true, ics.display().to_string(), vec![]);
+                } else {
+                    println!("Wrote {}", ics.display());
+                    println!("{}", result.math);
                 }
                 Ok(())
             }

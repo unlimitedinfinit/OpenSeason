@@ -11,29 +11,36 @@ use crate::court_md;
 use crate::documents;
 use crate::rule_pack::RulePack;
 
+fn tool(name: &str, description: &str, props: Value, required: &[&str]) -> Value {
+    json!({
+        "name": name,
+        "description": description,
+        "inputSchema": {"type": "object", "properties": props, "required": required}
+    })
+}
+
 fn tool_list() -> Value {
+    let path = json!({"type": "string", "description": "Absolute path to the case folder (contains case.json)."});
     json!([
-        {"name": "case_create", "description": "Create a local case folder. Never files.", "inputSchema": {"type": "object", "properties": {
-            "path": {"type": "string"}, "title": {"type": "string"}, "kind": {"type": "string"}, "pack": {"type": "string"}
-        }, "required": ["path", "title"]}},
-        {"name": "draft_import", "description": "Import a court-markdown draft into the case.", "inputSchema": {"type": "object", "properties": {
-            "path": {"type": "string"}, "markdown": {"type": "string"}
-        }, "required": ["path", "markdown"]}},
-        {"name": "evidence_add", "description": "Copy an exhibit into the case evidence folder.", "inputSchema": {"type": "object", "properties": {
-            "path": {"type": "string"}, "file": {"type": "string"}, "description": {"type": "string"}
-        }, "required": ["path", "file"]}},
-        {"name": "check_fact", "description": "Record fact-check. Does not invent cites.", "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}},
-        {"name": "check_authority", "description": "List cites already in the draft. Status starts unverified.", "inputSchema": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}},
-        {"name": "check_deadline", "description": "Compute a deadline from a rule pack.", "inputSchema": {"type": "object", "properties": {
-            "path": {"type": "string"}, "pack": {"type": "string"}, "rule": {"type": "string"}, "trigger_date": {"type": "string"}
-        }, "required": ["path", "pack", "rule", "trigger_date"]}},
-        {"name": "check_all", "description": "Run fact, authority, deadline, and sign-off.", "inputSchema": {"type": "object", "properties": {
-            "path": {"type": "string"}, "pack": {"type": "string"}, "rule": {"type": "string"}, "trigger_date": {"type": "string"}
-        }, "required": ["path"]}},
-        {"name": "export_court", "description": "Render Word and PDF. Never files or serves.", "inputSchema": {"type": "object", "properties": {
-            "path": {"type": "string"}, "kind": {"type": "string"}
-        }, "required": ["path"]}},
-        {"name": "packs_list", "description": "List bundled rule packs.", "inputSchema": {"type": "object", "properties": {}}}
+        tool("playbook", "Return the offline motion playbook. Read this first. Never invent cites. Never file.", json!({}), &[]),
+        tool("case_create", "Create a local case folder. kind: reconsideration|enlargement|stay|amend_findings|appellate_motion|appellate_brief|notice_of_appeal. Never files.", json!({"path": path, "title": {"type": "string", "description": "Caption like Lucille Example v. Sample County Board"}, "kind": {"type": "string"}, "pack": {"type": "string", "description": "nj-app-div, co-mandamus, or generic-us-appellate"}}), &["path", "title"]),
+        tool("case_seed", "Copy the fake Lucille Example reconsideration case into path. For tests only.", json!({"path": path}), &["path"]),
+        tool("draft_import", "Import a court-markdown draft (YAML caption, ::: signature, ::: certificate).", json!({"path": path, "markdown": {"type": "string"}}), &["path", "markdown"]),
+        tool("draft_sections", "List guided drafting sections and hints for this case kind.", json!({"path": path}), &["path"]),
+        tool("draft_fill", "Fill one guided section with the user's own words. Do not invent text.", json!({"path": path, "id": {"type": "string", "description": "Section id from draft_sections"}, "text": {"type": "string"}}), &["path", "id", "text"]),
+        tool("evidence_add", "Copy an exhibit into evidence/. First file becomes Ex. A after evidence_index.", json!({"path": path, "file": {"type": "string"}, "description": {"type": "string"}}), &["path", "file"]),
+        tool("evidence_index", "Rebuild the exhibit index (Ex. A, Ex. B).", json!({"path": path}), &["path"]),
+        tool("evidence_link", "Link a fact-check row to an exhibit letter. Does not invent a cite.", json!({"path": path, "fact_id": {"type": "integer"}, "letter": {"type": "string"}}), &["path", "fact_id", "letter"]),
+        tool("check_fact", "Split the draft into sentences. Missing cites stay issues. Optional id/cite/exhibit to attach a user cite.", json!({"path": path, "id": {"type": "integer"}, "cite": {"type": "string"}, "exhibit": {"type": "string"}, "verified": {"type": "boolean"}}), &["path"]),
+        tool("check_authority", "List cites already in the draft. Status starts unverified. Never invents a cite.", json!({"path": path, "id": {"type": "integer"}, "status": {"type": "string", "description": "verified|unverified|not_found"}, "source": {"type": "string"}}), &["path"]),
+        tool("check_deadline", "Compute a deadline from a rule pack. Weekend/holiday roll. Does not file.", json!({"path": path, "pack": {"type": "string"}, "rule": {"type": "string"}, "trigger_date": {"type": "string", "description": "YYYY-MM-DD"}}), &["path", "pack", "rule", "trigger_date"]),
+        tool("check_all", "Run fact, authority, deadline, and sign-off. ok=false until a human checks every box.", json!({"path": path, "pack": {"type": "string"}, "rule": {"type": "string"}, "trigger_date": {"type": "string"}}), &["path"]),
+        tool("export_court", "Render Word and PDF. Never files or serves.", json!({"path": path, "kind": {"type": "string"}}), &["path"]),
+        tool("export_packet", "Assemble notice of motion, motion, certification, proposed order, certificate of service.", json!({"path": path}), &["path"]),
+        tool("export_ics", "Write a .ics reminder for a computed deadline.", json!({"path": path, "pack": {"type": "string"}, "rule": {"type": "string"}, "trigger_date": {"type": "string"}}), &["path", "pack", "rule", "trigger_date"]),
+        tool("packs_list", "List bundled rule packs.", json!({}), &[]),
+        tool("packs_validate", "Validate a rule-pack JSON file. New states are data, not code.", json!({"file": {"type": "string"}}), &["file"]),
+        tool("gaps_add", "Capture a justice-gap note. Fake names only.", json!({"path": path, "title": {"type": "string"}, "court": {"type": "string"}, "rule": {"type": "string"}, "happened": {"type": "string"}, "hard": {"type": "string"}}), &["path", "title"]),
     ])
 }
 
@@ -112,11 +119,60 @@ fn call_tool(name: &str, args: &Value) -> Result<Value, String> {
             let exported = documents::export_pleading(&path, &profile, &kind, None)?;
             Ok(json!({"docx": exported.docx, "pdf": exported.pdf, "never_files": true}))
         }
+        "playbook" => Ok(json!({"playbook": crate::help::playbook()})),
+        "case_seed" => {
+            let (dir, profile) = crate::seed::seed_lucille(std::path::Path::new(&s("path")))?;
+            Ok(json!({"folder": dir, "id": profile.id, "title": profile.title, "never_files": true}))
+        }
+        "draft_sections" => {
+            let profile = case_profile::load_case(std::path::Path::new(&s("path")))?;
+            let draft = crate::guided::load_or_init(std::path::Path::new(&s("path")), &profile.document_kind)?;
+            Ok(serde_json::to_value(draft).unwrap())
+        }
+        "draft_fill" => {
+            let draft = crate::guided::set_section(std::path::Path::new(&s("path")), &s("id"), &s("text"))?;
+            Ok(serde_json::to_value(draft).unwrap())
+        }
+        "evidence_index" => {
+            Ok(serde_json::to_value(crate::exhibits::rebuild(std::path::Path::new(&s("path")))?).unwrap())
+        }
+        "evidence_link" => {
+            let fact_id = args.get("fact_id").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+            Ok(serde_json::to_value(crate::exhibits::link_fact(
+                std::path::Path::new(&s("path")),
+                fact_id,
+                &s("letter"),
+            )?)
+            .unwrap())
+        }
+        "export_packet" => {
+            Ok(serde_json::to_value(crate::packet::assemble_for_case(std::path::Path::new(&s("path")))?).unwrap())
+        }
+        "export_ics" => {
+            let dir = std::path::PathBuf::from(s("path"));
+            let result = check::run_deadline(&dir, &s("pack"), &s("rule"), &s("trigger_date"))?;
+            let ics = crate::calendar::write_ics(&dir, &result)?;
+            Ok(json!({"ics": ics, "due": result.due, "never_files": true}))
+        }
         "packs_list" => Ok(json!(RulePack::list_builtin()
             .iter()
             .map(|p| json!({"id": p.id, "name": p.name, "jurisdiction": p.jurisdiction}))
             .collect::<Vec<_>>())),
-        other => Err(format!("Unknown tool '{other}'")),
+        "packs_validate" => {
+            Ok(serde_json::to_value(RulePack::validate_file(std::path::Path::new(&s("file")))?).unwrap())
+        }
+        "gaps_add" => Ok(serde_json::to_value(crate::gaps::add(
+            std::path::Path::new(&s("path")),
+            &s("title"),
+            &s("court"),
+            &s("rule"),
+            &s("happened"),
+            &s("hard"),
+        )?)
+        .unwrap()),
+        other => Err(format!(
+            "Unknown tool '{other}'. Call playbook or packs_list. Known tools are listed by tools/list."
+        )),
     }
 }
 

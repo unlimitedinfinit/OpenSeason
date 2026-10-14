@@ -70,6 +70,23 @@ assert obj["ok"] is False
 print("check-all issues:", len(obj["issues"]))
 '
 
+echo "== exhibit index =="
+"${CLI[@]}" evidence index "$CASE" | python3 -c '
+import json, sys
+obj = json.loads(sys.stdin.read())
+letters = [i.get("letter") for i in obj["data"]["items"]]
+assert "A" in letters, letters
+print("exhibits", letters)
+'
+
+echo "== playbook =="
+"${CLI[@]}" docs playbook | python3 -c '
+import json, sys
+obj = json.loads(sys.stdin.read())
+assert "Never invent" in obj["data"]
+print("playbook ok")
+'
+
 echo "== export =="
 "${CLI[@]}" export court-md "$CASE" | python3 -c '
 import json, sys, os
