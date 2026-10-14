@@ -90,6 +90,25 @@ export interface CaseArtifact {
   path: string;
 }
 
+export interface GuidedSection {
+  id: string;
+  heading: string;
+  hint: string;
+  user_text: string;
+}
+
+export interface GuidedDraft {
+  kind: string;
+  sections: GuidedSection[];
+}
+
+export interface ExhibitRow {
+  letter: string;
+  filename: string;
+  description: string;
+  path: string;
+}
+
 export interface ValidationIssue {
   field: string;
   message: string;

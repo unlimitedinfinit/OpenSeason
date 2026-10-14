@@ -4,6 +4,7 @@
   import { onMount } from "svelte";
   import ReviewNotice from "$lib/components/ReviewNotice.svelte";
   import PartyEditor from "$lib/components/PartyEditor.svelte";
+  import FieldHelp from "$lib/components/FieldHelp.svelte";
   import { ipc } from "$lib/ipc";
   import { session } from "$lib/session.svelte";
   import type {
@@ -14,6 +15,7 @@
     SyncRefusal,
     TimelineEvent,
     ValidationReport,
+    GuidedDraft,
   } from "$lib/types/case";
 
   let caseId = $derived($page.params.id || "");
@@ -25,10 +27,15 @@
     ok?: boolean;
     never_files?: boolean;
     issues?: { field: string; message: string }[];
-    fact?: { rows: { id: number; assertion: string; record_cite: string; verified: boolean }[] };
+    fact?: { rows: { id: number; assertion: string; record_cite: string; exhibit?: string; verified: boolean }[] };
     authority?: { rows: { id: number; cite: string; status: string }[] };
     deadline?: { due: string; math: string; rule: string };
+    signoff?: { items: { id: string; label: string; checked: boolean }[]; ok?: boolean };
   } | null>(null);
+  let guided = $state<{ kind: string; sections: { id: string; heading: string; hint: string; user_text: string }[] } | null>(null);
+  let exhibits = $state<{ letter: string; filename: string; description: string }[]>([]);
+  let gapTitle = $state("");
+  let gapHard = $state("");
   let deadlinePack = $state("nj-app-div");
   let deadlineRule = $state("reconsideration-appellate");
   let triggerDate = $state("");
@@ -56,6 +63,9 @@
       profile = await ipc<CaseProfile>("get_case", { caseId });
       hydrate(profile);
       artifacts = await ipc<CaseArtifact[]>("list_case_artifacts", { caseId }).catch(() => []);
+      guided = await ipc<GuidedDraft>("guided_sections_cmd", { caseId }).catch(() => null);
+      const idx = await ipc<{ items?: { letter: string; filename: string; description: string }[] }>("exhibit_index_cmd", { caseId }).catch(() => ({ items: [] }));
+      exhibits = idx.items || [];
     } catch (e) {
       error = String(e);
     }
@@ -271,6 +281,77 @@
     }
   }
 
+  async function fillSection(id: string, text: string) {
+    try {
+      guided = await ipc<GuidedDraft>("guided_fill_cmd", { caseId, id, text });
+      status = "Saved that section. The checker still will not invent cites.";
+      await load();
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function linkFact(factId: number, letter: string) {
+    try {
+      await ipc("link_fact_cmd", { caseId, factId, letter });
+      await runChecks();
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function toggleSignoff(id: string, checked: boolean) {
+    try {
+      await ipc("set_signoff_cmd", { caseId, id, checked });
+      await runChecks();
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function exportPacket() {
+    try {
+      const report = await ipc<{ items?: { label: string; docx: string }[] }>("export_packet_cmd", { caseId });
+      status = `Packet written. ${(report.items || []).map((i) => i.label).join(", ")}. You still file and serve.`;
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function exportIcs() {
+    try {
+      const path = await ipc<string>("export_ics_cmd", {
+        caseId,
+        pack: deadlinePack,
+        rule: deadlineRule,
+        triggerDate,
+      });
+      status = `Calendar file: ${path}`;
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function addGap() {
+    if (!gapTitle.trim()) return;
+    try {
+      await ipc("gap_add_cmd", {
+        caseId,
+        title: gapTitle,
+        court: profile?.court.name || "",
+        rule: deadlineRule,
+        whatHappened: gapTitle,
+        whatWasHard: gapHard,
+      });
+      const dest = await ipc<string>("gap_export_cmd", { caseId });
+      status = `Gap note saved. ${dest}`;
+      gapTitle = "";
+      gapHard = "";
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
   async function runChecks() {
     try {
       checkReport = await ipc("check_case_cmd", {
@@ -356,11 +437,11 @@
           <input bind:value={profile.title} class="w-full h-10 rounded-md border border-input bg-background px-3 text-sm" />
         </label>
         <label class="block space-y-1">
-          <span class="text-xs text-muted-foreground">Court name</span>
+          <span class="text-xs text-muted-foreground">Court name <FieldHelp text="Copy the court name from a paper you already have. Do not guess a court." /></span>
           <input bind:value={profile.court.name} class="w-full h-10 rounded-md border border-input bg-background px-3 text-sm" />
         </label>
         <label class="block space-y-1">
-          <span class="text-xs text-muted-foreground">Docket number</span>
+          <span class="text-xs text-muted-foreground">Docket number <FieldHelp text="Copy the case number exactly. If you do not have it, leave this blank." /></span>
           <input bind:value={profile.docket_number} class="w-full h-10 rounded-md border border-input bg-background px-3 text-sm" />
         </label>
         <div class="grid md:grid-cols-2 gap-3">
@@ -398,6 +479,27 @@
         <PartyEditor bind:parties />
       </section>
     {:else if tab === "documents"}
+      {#if guided}
+        <section class="space-y-4 bg-card border rounded-lg p-6">
+          <h2 class="font-semibold">Write this paper (guided)</h2>
+          <p class="text-sm text-muted-foreground">Answer each prompt in your own words. Leave a box blank rather than guessing. The app will not invent facts or citations.</p>
+          {#each guided.sections as section}
+            <label class="block space-y-1">
+              <span class="text-sm font-medium">{section.heading} <FieldHelp text={section.hint} /></span>
+              <p class="text-xs text-muted-foreground">{section.hint}</p>
+              <textarea
+                class="w-full h-24 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={section.user_text}
+                onblur={(e) => fillSection(section.id, (e.currentTarget as HTMLTextAreaElement).value)}
+              ></textarea>
+            </label>
+          {/each}
+          <div class="flex flex-wrap gap-2">
+            <button onclick={() => exportKind(profile?.document_kind || "motion")} disabled={busy} class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm">Export this paper (Word and PDF)</button>
+            <button onclick={exportPacket} disabled={busy} class="border border-border px-4 py-2 rounded-md text-sm">Export filing packet</button>
+          </div>
+        </section>
+      {/if}
       <section class="space-y-4 bg-card border rounded-lg p-6">
         <h2 class="font-semibold">Notice of Appeal</h2>
         <p class="text-xs text-muted-foreground">OpenSeason will not invent grounds, facts, or citations. Paste only text you wrote or researched.</p>
@@ -541,8 +643,8 @@
       </section>
     {:else if tab === "check"}
       <section class="space-y-4 bg-card border rounded-lg p-6">
-        <h2 class="font-semibold">Check stage</h2>
-        <p class="text-sm text-muted-foreground">Record fact-check, authority status, deadline math, and sign-off. The app never invents citations and never files or serves.</p>
+        <h2 class="font-semibold">Check and fix</h2>
+        <p class="text-sm text-muted-foreground">Issues sit next to the draft. The app never invents a cite and never files or serves. <FieldHelp text="Run checks after you write. Link each fact to Ex. A, Ex. B. You check every sign-off box." /></p>
         <div class="grid md:grid-cols-3 gap-3">
           <label class="block space-y-1">
             <span class="text-xs text-muted-foreground">Rule pack</span>
@@ -563,20 +665,35 @@
             </select>
           </label>
           <label class="block space-y-1">
-            <span class="text-xs text-muted-foreground">Trigger date (YYYY-MM-DD)</span>
+            <span class="text-xs text-muted-foreground">Trigger date (YYYY-MM-DD) <FieldHelp text="The date the order was entered or served. Use YYYY-MM-DD. Example: 2026-01-09." /></span>
             <input bind:value={triggerDate} class="w-full h-10 rounded-md border border-input bg-background px-3 text-sm" placeholder="2026-01-09" />
           </label>
         </div>
-        <button onclick={runChecks} class="bg-secondary text-secondary-foreground px-4 py-2 rounded-md text-sm">Run checks</button>
+        <div class="flex flex-wrap gap-2">
+          <button onclick={runChecks} class="bg-secondary text-secondary-foreground px-4 py-2 rounded-md text-sm">Run checks</button>
+          <button onclick={exportIcs} class="border border-border px-4 py-2 rounded-md text-sm">Save deadline on calendar (.ics)</button>
+          <button onclick={exportPacket} class="border border-border px-4 py-2 rounded-md text-sm">Export filing packet</button>
+        </div>
+        {#if exhibits.length}
+          <p class="text-xs text-muted-foreground">Exhibits: {exhibits.map((e) => `Ex. ${e.letter} ${e.filename}`).join(" · ")}</p>
+        {/if}
         {#if checkReport}
-          <p class="text-sm">{checkReport.never_files ? "Never files. " : ""}{checkReport.ok ? "Gates passed." : "Issues remain."}</p>
+          <p class="text-sm">{checkReport.never_files ? "Never files. " : ""}{checkReport.ok ? "Gates passed." : "Issues remain. Fix them below. Do not invent a cite."}</p>
           {#if checkReport.deadline}
             <p class="text-xs font-mono">{checkReport.deadline.rule}: {checkReport.deadline.math}</p>
           {/if}
           {#if checkReport.fact?.rows?.length}
-            <ul class="text-sm space-y-1">
+            <ul class="text-sm space-y-3">
               {#each checkReport.fact.rows as row}
-                <li>{row.id}. [{row.verified ? "Y" : "N"}] {row.assertion} {row.record_cite ? `(${row.record_cite})` : "(no cite)"}</li>
+                <li class="border rounded-md p-3 space-y-2">
+                  <p>{row.id}. {row.assertion}</p>
+                  <p class="text-xs text-muted-foreground">{row.record_cite || "No record cite yet."}</p>
+                  <div class="flex flex-wrap gap-2">
+                    {#each exhibits as ex}
+                      <button onclick={() => linkFact(row.id, ex.letter)} class="text-xs border border-border px-2 py-1 rounded-md">Link Ex. {ex.letter}</button>
+                    {/each}
+                  </div>
+                </li>
               {/each}
             </ul>
           {/if}
@@ -584,6 +701,18 @@
             <ul class="text-sm space-y-1">
               {#each checkReport.authority.rows as row}
                 <li>{row.id}. {row.status} {row.cite}</li>
+              {/each}
+            </ul>
+          {/if}
+          {#if checkReport.signoff?.items?.length}
+            <ul class="text-sm space-y-1">
+              {#each checkReport.signoff.items as item}
+                <li>
+                  <label class="flex gap-2 items-start">
+                    <input type="checkbox" checked={item.checked} onchange={(e) => toggleSignoff(item.id, (e.currentTarget as HTMLInputElement).checked)} />
+                    <span>{item.label}</span>
+                  </label>
+                </li>
               {/each}
             </ul>
           {/if}
@@ -595,8 +724,15 @@
             </ul>
           {/if}
         {:else}
-          <p class="text-sm text-muted-foreground border border-dashed rounded-md p-4">No check run yet. Import a Markdown draft or paste text, then run checks.</p>
+          <p class="text-sm text-muted-foreground border border-dashed rounded-md p-4">No check run yet. Write the guided sections or import Markdown, add an exhibit, then run checks.</p>
         {/if}
+        <div class="border-t pt-4 space-y-2">
+          <h3 class="text-sm font-semibold">Justice-gap note</h3>
+          <p class="text-xs text-muted-foreground">What was hard? Fake names only. This is for later content, not the court paper.</p>
+          <input bind:value={gapTitle} class="w-full h-10 rounded-md border border-input bg-background px-3 text-sm" placeholder="Short title" />
+          <textarea bind:value={gapHard} class="w-full h-16 rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="What was hard"></textarea>
+          <button onclick={addGap} class="border border-border px-3 py-1.5 rounded-md text-sm">Save gap note</button>
+        </div>
       </section>
     {:else if tab === "files"}
       <section class="space-y-4 bg-card border rounded-lg p-6">

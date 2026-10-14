@@ -3,6 +3,7 @@
   import { goto } from "$app/navigation";
   import GlassOSPanel from "$lib/components/GlassOSPanel.svelte";
   import ReviewNotice from "$lib/components/ReviewNotice.svelte";
+  import GettingStarted from "$lib/components/GettingStarted.svelte";
   import { ipc, runningInTauri } from "$lib/ipc";
   import { session } from "$lib/session.svelte";
   import type { WorkspaceCase } from "$lib/types/case";
@@ -66,6 +67,18 @@
       actionError = String(e);
     }
   }
+
+  async function trySample() {
+    actionError = "";
+    try {
+      const profile = await ipc<{ id: string }>("seed_sample_cmd");
+      status = "Opened the fake Lucille Example sample. Nothing was filed.";
+      await load();
+      goto(`/case/${profile.id}`);
+    } catch (e) {
+      actionError = String(e);
+    }
+  }
 </script>
 
 <main class="container mx-auto p-8 space-y-8 max-w-6xl">
@@ -74,9 +87,8 @@
       <p class="text-xs uppercase tracking-widest text-muted-foreground">Offline Case Builder</p>
       <h1 class="text-3xl font-bold tracking-tight">Document Builder</h1>
       <p class="text-muted-foreground max-w-2xl">
-        Draft, check, and produce court-shaped motions, appeals, and complaints on this computer. The app never files or serves.
-        New Jersey Appellate Division is the first rule pack. Confidential (encrypted vault) is one case type, not the whole product.
-        Agents use the same engine through the CLI. See docs/AGENT-INTERFACE.md.
+        Draft, check, and produce court-shaped motions on this computer. You write the words. The app formats the paper. It never files or serves.
+        Confidential (encrypted False Claims vault) is one case type, not the whole product.
       </p>
     </div>
     <div class="text-right space-y-2 shrink-0">
@@ -92,16 +104,40 @@
   </div>
 
   <ReviewNotice />
+  <GettingStarted />
+
+  <section class="space-y-3">
+    <h2 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">What do you need?</h2>
+    <div class="grid gap-2 md:grid-cols-2">
+      <button onclick={() => startNew("reconsideration")} class="text-left border border-border rounded-md p-3 hover:border-indigo-500/40">
+        <p class="font-medium">I lost and want the court to look again</p>
+        <p class="text-xs text-muted-foreground">Motion for reconsideration. Guided prompts. NJ deadline table included.</p>
+      </button>
+      <button onclick={() => startNew("enlargement")} class="text-left border border-border rounded-md p-3 hover:border-indigo-500/40">
+        <p class="font-medium">I need more time</p>
+        <p class="text-xs text-muted-foreground">Motion for enlargement of time. You write why.</p>
+      </button>
+      <button onclick={() => startNew("stay")} class="text-left border border-border rounded-md p-3 hover:border-indigo-500/40">
+        <p class="font-medium">I need the order paused</p>
+        <p class="text-xs text-muted-foreground">Motion for a stay. You write the terms.</p>
+      </button>
+      <button onclick={() => startNew("notice_of_appeal")} class="text-left border border-border rounded-md p-3 hover:border-indigo-500/40">
+        <p class="font-medium">I am appealing</p>
+        <p class="text-xs text-muted-foreground">Notice of Appeal is ready. Brief and appellate motion are scaffolds.</p>
+      </button>
+    </div>
+  </section>
 
   <section class="space-y-3">
     <h2 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Start</h2>
     <div class="flex flex-wrap gap-2">
-      <button onclick={() => startNew("notice_of_appeal")} class="bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm">Create a case</button>
+      <button onclick={() => startNew("reconsideration")} class="bg-primary text-primary-foreground px-4 py-2 rounded-md text-sm">Start a motion</button>
+      <button onclick={trySample} class="border border-indigo-500/40 text-indigo-200 px-4 py-2 rounded-md text-sm">Try a sample (Lucille Example)</button>
       <button onclick={openFolder} class="border border-border px-4 py-2 rounded-md text-sm">Open a case folder</button>
       <button onclick={importOsb} class="border border-border px-4 py-2 rounded-md text-sm">Import .osb</button>
-      <button onclick={() => startNew("notice_of_appeal")} class="border border-indigo-500/40 text-indigo-200 px-4 py-2 rounded-md text-sm">Notice of Appeal</button>
-      <button onclick={() => startNew("reconsideration")} class="border border-border px-4 py-2 rounded-md text-sm">Motion (NJ)</button>
+      <button onclick={() => startNew("notice_of_appeal")} class="border border-border px-4 py-2 rounded-md text-sm">Notice of Appeal</button>
       <button onclick={() => startNew("appellate_brief")} class="border border-border px-4 py-2 rounded-md text-sm">Appellate brief (basic)</button>
+      <button onclick={() => startNew("amend_findings")} class="border border-border px-4 py-2 rounded-md text-sm">Amend findings</button>
       <button onclick={() => startNew("mandamus")} class="border border-border px-4 py-2 rounded-md text-sm">Mandamus (CO, basic)</button>
       <button onclick={() => startNew("complaint")} class="border border-border px-4 py-2 rounded-md text-sm">Complaint (basic)</button>
     </div>

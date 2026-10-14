@@ -196,6 +196,37 @@ async function mockInvoke<T>(cmd: string, args: Record<string, unknown> = {}): P
       ] as T;
     case "import_markdown_cmd":
       return { meta: { doc_title: "Imported draft" }, body: String(args.markdown || ""), lines: [] } as T;
+    case "seed_sample_cmd": {
+      const sample = sampleProfile();
+      sample.id = "00000000-0000-4000-8000-000000000101";
+      sample.title = "Lucille Example v. Sample County Board";
+      sample.document_kind = "reconsideration";
+      store.cases.unshift(sample);
+      saveStore(store);
+      return sample as T;
+    }
+    case "guided_sections_cmd":
+      return {
+        kind: "reconsideration",
+        sections: [
+          { id: "order", heading: "The order", hint: "Date and what it did.", user_text: "" },
+          { id: "grounds", heading: "Grounds", hint: "Your own words.", user_text: "" },
+        ],
+      } as T;
+    case "guided_fill_cmd":
+    case "exhibit_index_cmd":
+      return { never_files: true, items: [{ letter: "A", filename: "order.txt", description: "Dkt. 12", path: "/mock/A" }] } as T;
+    case "link_fact_cmd":
+    case "set_fact_cite_cmd":
+    case "set_authority_cmd":
+    case "set_signoff_cmd":
+    case "export_packet_cmd":
+    case "export_ics_cmd":
+    case "gap_add_cmd":
+    case "gap_export_cmd":
+    case "field_help_cmd":
+    case "playbook_cmd":
+      return (cmd === "playbook_cmd" ? "Mock playbook" : cmd === "export_ics_cmd" || cmd === "gap_export_cmd" ? "/mock/out" : { ok: false, items: [], notes: [], checklist: [] }) as T;
     case "check_case_cmd":
     case "deadline_cmd":
       return {
