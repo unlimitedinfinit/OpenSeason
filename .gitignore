@@ -15,3 +15,4 @@ src-tauri/ok
 *.osb
 *.jldb
 target/
+tmp-agent-e2e/
