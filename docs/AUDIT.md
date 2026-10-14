@@ -19,7 +19,10 @@ Frontend: **Svelte 5 + TypeScript + Tailwind CSS**, served by SvelteKit in SPA m
 | Typst disclosure PDF | **Partial** | Compiler is real. Template is a qui tam disclosure statement. It hard-codes Arial, so Linux hosts without Arial can fail. Dashboard sometimes used mock totals. |
 | `.osb` import/export | **Works** | Zip write/read with zip-slip protection. Import creates a new UUID folder under `vaults/` so later hunt commands stay inside the sandbox. Export refuses app data, the cases root, a file named `.sealed`, relative/UNC/symlink targets, and drive-relative download names. Repeat downloads get a numeric suffix and are created with O_EXCL. |
 | SQLite metadata encryption | **Missing** | `metadata.db` is plaintext. Roadmap already notes this. |
-| Tests | **Partial** | Case-mode, seal, evidence (including sealed add/delete), unlock, path sandbox, Notice of Appeal, and basic complaint/motion assembly tests are in `cargo test`. The live USAspending test is `#[ignore]` because it hits the network. There are no end-to-end UI tests. |
+| Tests | **Partial** | Prior vault/case tests plus NJ deadline math, fact-check (no invented cites), authority extraction, sign-off gate, court-markdown import, appellate brief scaffold, and an agent e2e library run. The live USAspending test is `#[ignore]`. There are no end-to-end UI tests. |
+| Rule packs / check stage | **Partial** | NJ Appellate Division deadline table (R. 2:11-6, R. 2:8-1, R. 4:49-2, R. 2:4-3(e), R. 1:3-4(a)) and a Colorado C.A.R. 21 scaffold. Check writes JSON under `checks/`. Authority is never auto-verified. |
+| Agent interface | **Works** | `openseason --json` plus `openseason mcp`. Same engine as the UI. |
+| Windows installer | **Partial** | Workflow `.github/workflows/windows-installer.yml` uploads `.msi`/`.exe` artifacts. This environment did not run that job. |
 | Windows / macOS bundles | **Could not inspect** | `tauri.conf.json` has `targets: all`. This environment did not run `tauri build` or produce `.msi` / `.dmg`. |
 | Telemetry | **Works (absent)** | No analytics SDK. USAspending is the only outbound HTTP client. |
 

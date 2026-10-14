@@ -1,30 +1,30 @@
 # Architecture
 
-OpenSeason is one local engine with two front doors: a human wizard in the desktop window, and a command-line tool that a local AI can call. Both doors read the same case folder and the same Rust rules.
+OpenSeason is one local engine with two first-class front doors: a human wizard in the desktop window, and a headless agent interface (CLI `--json` plus optional stdio MCP). Both doors call the same Rust functions. Neither files nor serves.
 
 ## Components
 
 ### Svelte frontend
 
-- **Responsibility**: Home screen, case profile form, Notice of Appeal editor, Confidential vault UI (Legal Airlock, hunts, evidence).
+- **Responsibility**: Home screen, case profile form, Notice of Appeal editor, Check tab, Confidential vault UI (Legal Airlock, hunts, evidence).
 - **Key files**: `src/routes/+page.svelte`, `src/routes/case/`, `src/routes/confidential/`, `src/routes/hunt/`
-- **Depends on**: Tauri IPC (`invoke`)
+- **Depends on**: Tauri IPC (`invoke`) into the shared engine
 
-### Rust backend
+### Rust backend (shared engine)
 
-- **Responsibility**: Case folders, mode enforcement, document assembly, vault crypto, optional USAspending lookup.
-- **Key files**: `src-tauri/src/case_profile.rs`, `sync.rs`, `documents.rs`, `court_rules.rs`, `case_commands.rs`, `crypto.rs`, `commands.rs`, `pdf.rs`
+- **Responsibility**: Case folders, mode enforcement, document assembly, check pipeline, vault crypto, optional USAspending lookup.
+- **Key files**: `src-tauri/src/case_profile.rs`, `check.rs`, `court_md.rs`, `deadlines.rs`, `rule_pack.rs`, `documents.rs`, `sync.rs`, `case_commands.rs`, `crypto.rs`, `commands.rs`, `pdf.rs`
 - **Depends on**: `rusqlite`, `chacha20poly1305`, `argon2`, `typst`, `zip`
 
-### CLI (`openseason`)
+### CLI (`openseason`) and MCP
 
-- **Responsibility**: Create, validate, export, seal, and hit the sync stub without opening the window.
-- **Key file**: `src-tauri/src/bin/openseason.rs`
+- **Responsibility**: Headless create, Markdown import, exhibit add, each check stage, JSON issue lists, Word/PDF export. MCP stdio is the same tool list.
+- **Key files**: `src-tauri/src/bin/openseason.rs`, `agent.rs`, `mcp.rs`
+- **Docs**: [AGENT-INTERFACE.md](AGENT-INTERFACE.md), example `examples/agent-e2e.sh`
 
-### Court rules data
+### Court rules and rule packs
 
-- **Responsibility**: Paper size, margins, font, line spacing. Not legal holdings.
-- **Key file**: `templates/court-rules/generic.json`
+- **Responsibility**: Paper size, margins, font, line spacing (`templates/court-rules/`). Deadline tables and knowledge notes (`templates/rule-packs/`). Not legal holdings.
 
 ## Modes
 

@@ -55,14 +55,49 @@ Still available: `get_salt`, `unlock_vault`, `lock_vault`, `is_locked`, hunt CRU
 
 `create_new_hunt` now initializes the full SQLite schema (info, events, parties, evidence, complaint_sections).
 
-## CLI
+## Document builder commands (shared with CLI)
 
-Binary name: `openseason`
+The window and the CLI call the same functions (`check::run_all`, `court_md::import_markdown`, `documents::export_court_markdown`, `documents::export_pleading`).
+
+### `list_rule_packs`
+
+Returns bundled packs: `nj-app-div`, `co-mandamus`, `generic-us-appellate`.
+
+### `import_markdown_cmd`
+
+Arguments: `{ "caseId": "<uuid>", "markdown": "---\n..." }`
+
+Writes `drafts/draft.md` and fills empty caption fields from YAML front matter.
+
+### `check_case_cmd`
+
+Arguments: `{ "caseId", "pack"?, "rule"?, "triggerDate"? }`
+
+Runs fact-check, authority list, optional deadline, and sign-off. Returns a `CheckAllReport` with `never_files`, `never_serves`, `ok`, `issues`.
+
+### `deadline_cmd`
+
+Arguments: `{ "caseId", "pack", "rule", "triggerDate" }`
+
+### `export_pleading_cmd`
+
+`kind` may be `notice_of_appeal`, `complaint`, `motion`, `reconsideration`, `appellate_brief`, `appellate_motion`, `mandamus`, or `court_md`.
+
+## CLI and MCP (agent interface)
+
+Binary name: `openseason`. `--json` prints the stable envelope documented in [AGENT-INTERFACE.md](AGENT-INTERFACE.md). `openseason mcp` is a local stdio MCP server with the same tools. Both are offline.
 
 ```
-openseason case create --path DIR --title TEXT [--mode standard|confidential] [--kind notice_of_appeal]
+openseason --json case create --path DIR --title TEXT [--mode standard|confidential] [--kind reconsideration] [--pack nj-app-div]
+openseason --json draft import DIR --md FILE
+openseason --json evidence add DIR --file FILE [--description TEXT]
+openseason --json check fact|authority|deadline|signoff|all DIR
+openseason --json export court-md|pleading|notice-of-appeal DIR
+openseason --json packs list
+openseason mcp
 openseason case validate DIR
 openseason case seal DIR
-openseason export notice-of-appeal DIR [--out DIR]
 openseason sync DIR [--action backup|publish|pull]
 ```
+
+Example headless run: `bash examples/agent-e2e.sh`.

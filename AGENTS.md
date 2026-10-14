@@ -22,23 +22,33 @@ OpenSeason is a **formatting and assembly engine**, not a research engine. It tu
 - Export a Notice of Appeal to Word and PDF after validation passes.
 - Point the user at `templates/court-rules/` for formatting data. Rules are data files, not hard-coded court advice.
 
-## Command line
+## Command line (agent interface)
+
+The CLI is a first-class surface. `--json` returns a structured envelope (`ok`, `issues`, `never_files`). Full list: [docs/AGENT-INTERFACE.md](docs/AGENT-INTERFACE.md). Example: `bash examples/agent-e2e.sh`.
 
 From the repository root (Rust toolchain required):
 
 ```bash
-# Create a case folder
-cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- case create \
+# Create a case folder (NJ reconsideration)
+cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- --json case create \
   --path ./my-case \
   --title "Example v. Sample County Clerk" \
   --mode standard \
-  --kind notice_of_appeal
+  --kind reconsideration \
+  --pack nj-app-div
 
-# Check missing fields and leftover placeholders
-cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- case validate ./my-case
+# Import a Markdown draft (md2court subset)
+cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- --json draft import ./my-case --md fixtures/sample-reconsideration.md
 
-# Export Notice of Appeal (Word + PDF)
-cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- export notice-of-appeal ./my-case
+# Checks (never invent cites; never file)
+cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- --json check all ./my-case \
+  --pack nj-app-div --rule reconsideration-appellate --trigger-date 2026-01-09
+
+# Export court-formatted Word + PDF
+cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- --json export court-md ./my-case
+
+# Optional local MCP stdio server (same engine)
+cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- mcp
 
 # Seal a standard case (writes .sealed; cannot be undone by editing case.json)
 # CLI seal does not encrypt files. Use the desktop vault path for encryption.
@@ -74,6 +84,8 @@ Use only obviously fake names in tests and examples (Jordan Example, Sample Coun
 
 ## Product boundaries
 
-- Home screen builders for complaints and motions are planned, not shipped.
+- Motions and appeals are priority. Complaint, brief, and mandamus are basic templates or scaffolds.
+- Confidential (False Claims vault) is one case type inside the builder.
 - justlegal.me account sync is planned for standard cases only, and is stubbed.
 - USAspending lookup is a public-records search used by Confidential mode. It does not upload the case folder.
+- The tool never files or serves.

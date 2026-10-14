@@ -31,13 +31,22 @@ The first run compiles the Rust backend and can take several minutes. A desktop 
 
 If `npm run tauri dev` fails on missing WebView2, install the Evergreen WebView2 runtime from Microsoft and try again.
 
-## Build an installer (optional)
+## Build an installer
 
 ```powershell
 npm run tauri build
 ```
 
-This needs the same C++ toolchain. Output lands under `src-tauri/target/release/bundle/` (`.msi` and/or `.exe`). This repository does not ship those binaries.
+This needs the same C++ toolchain. Output lands under `src-tauri/target/release/bundle/` (`.msi` and/or `.exe`). GitHub Actions workflow `.github/workflows/windows-installer.yml` builds those files as artifacts on `windows-latest`. It does not create a GitHub Release.
+
+### Agent / CLI on Windows
+
+```powershell
+npm run cli -- --json packs list
+bash examples/agent-e2e.sh
+```
+
+If `bash` is missing, run the same `npm run cli -- --json ...` lines from `examples/agent-e2e.sh` in PowerShell.
 
 ## Manual test checklist
 
@@ -64,6 +73,8 @@ Work with fake names only (for example Jordan Example). Do not put real people, 
 - [ ] Parties tab uses the same editor as the wizard.
 - [ ] Documents tab exports Notice of Appeal to Word and PDF under `exports/`.
 - [ ] Complaint and Motion export Word and PDF. The UI says they are basic templates.
+- [ ] Documents tab imports a Markdown draft and exports court Markdown Word/PDF.
+- [ ] Check tab runs fact, authority, and deadline (NJ R. 2:11-6 from 2026-01-09 should due 2026-01-20). Issues list appears. The app never invents cites.
 - [ ] Evidence copies a file into the case `evidence/` folder.
 - [ ] Timeline add/remove persists after Save.
 - [ ] Drafts and exports lists the files that were written.
