@@ -65,6 +65,16 @@ Equivalent without npm: `cargo run --manifest-path src-tauri/Cargo.toml --bin op
 | `export court-md DIR [--out DIR]` | Court-formatted Word + PDF |
 | `export pleading DIR --kind KIND` | Notice, motion, brief, mandamus, complaint |
 | `export notice-of-appeal DIR` | Notice of Appeal Word + PDF |
+| `draft sections DIR` | List guided prompts for this case kind |
+| `draft fill DIR --id ID --text TEXT` | Fill one section with the user's words |
+| `evidence index DIR` | Number exhibits Ex. A, Ex. B |
+| `evidence link DIR --fact-id N --letter A` | Attach a fact to an exhibit |
+| `case seed --path DIR --template lucille` | Fake Lucille Example sample |
+| `export packet DIR` | Notice of motion, motion, certification, proposed order, certificate of service |
+| `export ics DIR --pack --rule --trigger-date` | Deadline calendar (.ics) |
+| `packs validate FILE` | Validate a rule-pack JSON file |
+| `gaps add DIR --title TEXT` / `gaps export DIR` | Justice-gap notes |
+| `docs playbook` / `docs fields` | Agent playbook and field help |
 | `packs list` | Bundled rule packs |
 | `mcp` | Stdio MCP server (same tools) |
 | `sync DIR --action backup` | Stub. Standard: `not_implemented`. Confidential: refused |

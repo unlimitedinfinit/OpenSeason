@@ -20,9 +20,10 @@ Frontend: **Svelte 5 + TypeScript + Tailwind CSS**, served by SvelteKit in SPA m
 | `.osb` import/export | **Works** | Zip write/read with zip-slip protection. Import creates a new UUID folder under `vaults/` so later hunt commands stay inside the sandbox. Export refuses app data, the cases root, a file named `.sealed`, relative/UNC/symlink targets, and drive-relative download names. Repeat downloads get a numeric suffix and are created with O_EXCL. |
 | SQLite metadata encryption | **Missing** | `metadata.db` is plaintext. Roadmap already notes this. |
 | Tests | **Partial** | Prior vault/case tests plus NJ deadline math, fact-check (no invented cites), authority extraction, sign-off gate, court-markdown import, appellate brief scaffold, and an agent e2e library run. The live USAspending test is `#[ignore]`. There are no end-to-end UI tests. |
-| Rule packs / check stage | **Partial** | NJ Appellate Division deadline table (R. 2:11-6, R. 2:8-1, R. 4:49-2, R. 2:4-3(e), R. 1:3-4(a)) and a Colorado C.A.R. 21 scaffold. Check writes JSON under `checks/`. Authority is never auto-verified. |
-| Agent interface | **Works** | `openseason --json` plus `openseason mcp`. Same engine as the UI. |
-| Windows installer | **Partial** | Workflow `.github/workflows/windows-installer.yml` uploads `.msi`/`.exe` artifacts. This environment did not run that job. |
+| Rule packs / check stage | **Works (manual verify)** | NJ deadline table plus Colorado C.A.R. 21 scaffold. Fact/authority/deadline/sign-off run from the Check tab and from the CLI/MCP. Authority is never auto-verified. |
+| Guided motion drafting | **Works (basic)** | Per-kind section prompts for reconsideration, enlargement, stay, amend findings, appellate motion, brief, mandamus, complaint. One textarea per prompt in the UI; `draft sections` / `draft fill` on the CLI. Not a lawyer interview. |
+| Agent interface | **Works** | `openseason --json` plus `openseason mcp`. Playbook, schemas, and `issues[].message` say how to fix. Same engine as the UI. |
+| Windows installer | **Partial** | Workflow uploads `.msi`/`.exe`. First run failed until `default-run = open-season`. Josh's laptop lacks MSVC (`link.exe not found`); the documented path is the CI artifact, not a local cargo build. |
 | Windows / macOS bundles | **Could not inspect** | `tauri.conf.json` has `targets: all`. This environment did not run `tauri build` or produce `.msi` / `.dmg`. |
 | Telemetry | **Works (absent)** | No analytics SDK. USAspending is the only outbound HTTP client. |
 

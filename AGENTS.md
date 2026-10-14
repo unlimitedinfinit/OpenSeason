@@ -24,7 +24,7 @@ OpenSeason is a **formatting and assembly engine**, not a research engine. It tu
 
 ## Command line (agent interface)
 
-The CLI is a first-class surface. `--json` returns a structured envelope (`ok`, `issues`, `never_files`). Full list: [docs/AGENT-INTERFACE.md](docs/AGENT-INTERFACE.md). Example: `bash examples/agent-e2e.sh`.
+The CLI and MCP are a first-class surface, equal to the window. `--json` returns a structured envelope (`ok`, `issues`, `never_files`). Read [docs/AGENT-INTERFACE.md](docs/AGENT-INTERFACE.md). Call `openseason --json docs playbook` or MCP `playbook` before a motion. Skill file: [docs/skills/openseason-motion/SKILL.md](docs/skills/openseason-motion/SKILL.md). Example: `bash examples/agent-e2e.sh`. Fake sample: `openseason --json case seed --path ./tmp-lucille --template lucille`.
 
 From the repository root (Rust toolchain required):
 

@@ -10,8 +10,9 @@ This is the checklist for a local desktop run. The app is offline-first. It does
 2. **Rust 1.85 or later**  
    Install from [https://rustup.rs](https://rustup.rs). In PowerShell: `rustc -V` should print `rustc 1.85` or newer. If it is older, run `rustup update stable`.
 
-3. **Visual Studio Build Tools (C++)**  
-   Install [Build Tools for Visual Studio](https://visualstudio.microsoft.com/visual-cpp-build-tools/) and select the **Desktop development with C++** workload. WebView2 is required for Tauri on Windows. Current Windows 10/11 machines usually already have it.
+3. **Visual Studio Build Tools (C++) if you compile locally**  
+   If PowerShell prints `link.exe not found` or `linker 'link.exe' not found`, the laptop does not have MSVC. Install [Build Tools for Visual Studio](https://visualstudio.microsoft.com/visual-cpp-build-tools/), pick the **Desktop development with C++** workload, then open a **new** Developer PowerShell.  
+   **You do not have to compile on the laptop.** GitHub Actions workflow `.github/workflows/windows-installer.yml` builds the `.msi` / `.exe` on `windows-latest` and uploads them as the `openseason-windows-installer` artifact. Download that artifact. It is not a GitHub Release. WebView2 is required to run the app. Current Windows 10/11 machines usually already have it.
 
 4. **Git** if you are cloning the repository.
 
@@ -37,7 +38,7 @@ If `npm run tauri dev` fails on missing WebView2, install the Evergreen WebView2
 npm run tauri build
 ```
 
-This needs the same C++ toolchain. Output lands under `src-tauri/target/release/bundle/` (`.msi` and/or `.exe`). GitHub Actions workflow `.github/workflows/windows-installer.yml` builds those files as artifacts on `windows-latest`. It does not create a GitHub Release.
+This needs the same C++ toolchain (`link.exe`). If that toolchain is missing, skip this step and download the `openseason-windows-installer` artifact from the Actions tab. Output from a local build lands under `src-tauri/target/release/bundle/` (`.msi` and/or `.exe`). The workflow does not create a GitHub Release.
 
 ### Agent / CLI on Windows
 
@@ -104,6 +105,7 @@ Work with fake names only (for example Jordan Example). Do not put real people, 
 
 ## If something fails
 
+- `link.exe not found`: install Visual Studio Build Tools (Desktop C++) or stop compiling and use the CI installer artifact instead.
 - `npm run tauri dev` compile errors: confirm `rustc -V` is 1.85+ and the C++ workload is installed.
 - Window opens but case list is empty: look at `Documents\JustLegal\Cases\` and the app data vault folder (`%LOCALAPPDATA%\com.openseason.app\vaults\`).
 - PDF export fails: install a common system font (the generic court rules prefer Times New Roman / Liberation Serif / Arial).
