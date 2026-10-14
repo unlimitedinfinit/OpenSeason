@@ -75,13 +75,18 @@ Equivalent without npm: `cargo run --manifest-path src-tauri/Cargo.toml --bin op
 | `packs validate FILE` | Validate a rule-pack JSON file |
 | `gaps add DIR --title TEXT` / `gaps export DIR` | Justice-gap notes |
 | `docs playbook` / `docs fields` | Agent playbook and field help |
-| `packs list` | Bundled rule packs |
+| `packs list` | Bundled rule packs plus form-pack catalog (sizes first) |
+| `packs install STATE [--situation NAME] [--file ZIP]` | Download or copy a forms pack; verify SHA-256; offline afterward |
+| `packs remove STATE` / `packs verify [STATE]` | Uninstall or re-check hashes |
+| `packs catalog --url URL` | Cache a catalog JSON (JustLegal registry or your host) |
+| `guide questions` / `guide find --state --situation [--court] [--trigger-date]` | What do I need to file? Teaching from packs. Never invents rules |
+| `docs links` | JustLegal help/resource URLs as data. Never opens a browser |
 | `mcp` | Stdio MCP server (same tools) |
 | `sync DIR --action backup` | Stub. Standard: `not_implemented`. Confidential: refused |
 
 ## MCP (stdio)
 
-`openseason mcp` speaks JSON-RPC 2.0 with `Content-Length` framing. Tools: `case_create`, `draft_import`, `evidence_add`, `check_fact`, `check_authority`, `check_deadline`, `check_all`, `export_court`, `packs_list`.
+`openseason mcp` speaks JSON-RPC 2.0 with `Content-Length` framing. Tools include the motion path plus `packs_install`, `packs_verify`, `guide_find`, and `help_links`. `guide_find` and `help_links` return `help_links` as data and never open a browser.
 
 Each `tools/call` result is a text block whose JSON is the same envelope as `--json`. The server is offline. It does not talk to a cloud model host.
 

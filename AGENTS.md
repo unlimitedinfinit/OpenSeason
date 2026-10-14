@@ -26,6 +26,8 @@ OpenSeason is a **formatting and assembly engine**, not a research engine. It tu
 
 The CLI and MCP are a first-class surface, equal to the window. `--json` returns a structured envelope (`ok`, `issues`, `never_files`). Read [docs/AGENT-INTERFACE.md](docs/AGENT-INTERFACE.md). Call `openseason --json docs playbook` or MCP `playbook` before a motion. Skill file: [docs/skills/openseason-motion/SKILL.md](docs/skills/openseason-motion/SKILL.md). Example: `bash examples/agent-e2e.sh`. Fake sample: `openseason --json case seed --path ./tmp-lucille --template lucille`.
 
+To figure out **what to file**, call `openseason --json guide questions` then `guide find --state NJ --situation reconsideration`. Recommend only forms the pack lists. If `citation_status` is not `pack_source`, say it needs verification. Do not invent a deadline. `docs links` / MCP `help_links` return JustLegal URLs as data — never open a browser. The window confirms first. Forms packs: [docs/FORMS-PACKS.md](docs/FORMS-PACKS.md).
+
 From the repository root (Rust toolchain required):
 
 ```bash

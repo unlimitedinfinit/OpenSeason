@@ -194,6 +194,120 @@ async function mockInvoke<T>(cmd: string, args: Record<string, unknown> = {}): P
         { id: "co-mandamus", name: "Colorado original proceeding (C.A.R. 21)", jurisdiction: "CO" },
         { id: "generic-us-appellate", name: "Generic United States appellate", jurisdiction: "US" },
       ] as T;
+    case "help_links_cmd":
+      return {
+        confirm: "This will open your web browser to JustLegal's online resources. You need an internet connection. Continue?",
+        offline_note: "Skip these links and the app still works offline.",
+        source_note: "Browser preview uses the bundled JustLegal URLs.",
+        verified_on: "2026-10-14",
+        opens_browser: false,
+        links: [
+          { id: "find-legal-help", kind: "get-legal-help", label: "Get legal help", description: "Find free help.", url: "https://justlegal.me/find-legal-help", verified: true },
+          { id: "knowledge-hub", kind: "find-resources", label: "Find resources", description: "Knowledge hub.", url: "https://justlegal.me/resources/knowledge-hub", verified: true },
+          { id: "registry", kind: "online-database", label: "Online forms database", description: "Registry index.", url: "https://justlegal.me/registry/index.json", verified: true },
+        ],
+      } as T;
+    case "guide_questions_cmd":
+      return {
+        disclaimer: "Legal information, not legal advice.",
+        legal_information_not_advice: true,
+        confirm_before_open: "This will open your web browser to JustLegal's online resources. You need an internet connection. Continue?",
+        help_links: [],
+        questions: [
+          { id: "state", prompt: "Which state?", why: "", choices: [{ id: "NJ", label: "NJ — New Jersey Appellate Division", detail: "" }] },
+          { id: "court", prompt: "Which court?", why: "", choices: [{ id: "nj-app-div", label: "Appellate Division", detail: "" }] },
+          { id: "situation", prompt: "What happened?", why: "", choices: [{ id: "reconsideration", label: "I lost and want the same court to look again", detail: "" }] },
+          { id: "trigger_date", prompt: "Date?", why: "", choices: [] },
+        ],
+      } as T;
+    case "guide_find_cmd":
+      return {
+        disclaimer: "Legal information, not legal advice.",
+        never_files: true,
+        legal_information_not_advice: true,
+        state: "NJ",
+        court: "Appellate Division",
+        situation: "reconsideration",
+        situation_label: "I lost and want the same court to look again",
+        pack_id: "nj-app-div",
+        why: "Browser preview of the NJ reconsideration situation.",
+        forms: [
+          {
+            id: "nj-reconsideration-motion",
+            title: "Motion for reconsideration",
+            form_number: "",
+            state: "NJ",
+            court: "Appellate Division",
+            situation: "reconsideration",
+            size_bytes: 0,
+            download_url: "",
+            official_url: "",
+            sha256: "",
+            citation: "R. 2:11-6",
+            citation_status: "pack_source",
+            teach: {
+              what_it_is: "A request that the same court look again.",
+              when_used: "After an Appellate Division order is entered.",
+              common_mistakes: ["Counting from the day you opened the mail."],
+              learn_more: "Confirm R. 2:11-6 on the court site.",
+            },
+          },
+        ],
+        steps: [],
+        deadline: args.triggerDate ? { due: "preview-only", rule: "R. 2:11-6", math: "Mocked" } : null,
+        citation: "R. 2:11-6",
+        citation_status: "pack_source",
+        unverified: [],
+        stuck: false,
+        teach: { what_it_is: "", when_used: "", common_mistakes: [], learn_more: "" },
+        help_links: [
+          { id: "find-legal-help", kind: "get-legal-help", label: "Get legal help", description: "Find free help.", url: "https://justlegal.me/find-legal-help", verified: true },
+        ],
+        confirm_before_open: "This will open your web browser to JustLegal's online resources. You need an internet connection. Continue?",
+        notice: "Browser preview.",
+      } as T;
+    case "list_form_packs_cmd":
+      return {
+        packs_root: "Documents/JustLegal/Packs",
+        catalog_id: "openseason-fixture",
+        notice: "Fixture catalog. Official PDFs are not bundled.",
+        available: [
+          {
+            id: "nj-appeal-fixture",
+            state: "NJ",
+            court: "Appellate Division",
+            title: "New Jersey appeal fixture pack",
+            situations: ["appeal"],
+            size_bytes: 120,
+            size_label: "120 B",
+            sha256: "",
+            installed: false,
+            rule_pack_id: "nj-app-div",
+            source_note: "FIXTURE",
+          },
+        ],
+        installed: [],
+        rule_packs: [
+          { id: "nj-app-div", name: "New Jersey Appellate Division", jurisdiction: "NJ", forms: 4, situations: 4 },
+        ],
+      } as T;
+    case "install_form_pack_cmd":
+      return {
+        ok: true,
+        pack_id: "nj-appeal-fixture",
+        state: "NJ",
+        bytes_planned: 120,
+        size_label: "120 B",
+        dest: "/mock/packs/nj-appeal-fixture",
+        files: ["pack.json"],
+        sha256_ok: true,
+        offline_after: true,
+        notice: "Browser preview install.",
+      } as T;
+    case "remove_form_pack_cmd":
+      return "/mock/removed" as T;
+    case "verify_form_pack_cmd":
+      return [{ pack_id: "nj-appeal-fixture", ok: true }] as T;
     case "import_markdown_cmd":
       return { meta: { doc_title: "Imported draft" }, body: String(args.markdown || ""), lines: [] } as T;
     case "seed_sample_cmd": {

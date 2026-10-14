@@ -1,5 +1,6 @@
 <script lang="ts">
   const steps = [
+    "If you are unsure what to file, open What do I need to file? and answer the questions.",
     "Choose what you need in plain language (look again, more time, pause, appeal).",
     "Fill your name, the other side, the court, and the case number from papers you already have.",
     "Answer the short writing prompts. Leave a box blank rather than guessing.",

@@ -1,0 +1,84 @@
+{
+  "id": "nj-appeal-fixture",
+  "name": "New Jersey appeal fixture pack",
+  "jurisdiction": "NJ",
+  "court": "Superior Court of New Jersey, Appellate Division",
+  "holiday_set": "us-nj",
+  "source_url": "https://example.test/official/never-a-real-court",
+  "source_retrieved_on": "2026-10-14",
+  "source_note": "FIXTURE pack. Files are fake. Merge teaching with the bundled nj-app-div rule pack. Never files or serves.",
+  "never_files": true,
+  "never_serves": true,
+  "rule_pack_id": "nj-app-div",
+  "deadlines": [
+    {
+      "id": "reconsideration-appellate",
+      "label": "Motion for reconsideration in the Appellate Division",
+      "rule": "R. 2:11-6",
+      "trigger": "entry",
+      "days": 10,
+      "count": "calendar",
+      "weekend_holiday_roll": "next_business",
+      "enlargeable_under": "R. 1:3-4(a)",
+      "tolls_appeal_under": "R. 2:4-3(e)",
+      "notes": "Copied from the bundled nj-app-div pack so this archive can stand alone in tests."
+    }
+  ],
+  "forms": [
+    {
+      "id": "fixture-nj-appeal-kit",
+      "title": "Fake Notice of Appeal cover sheet (fixture)",
+      "form_number": "FIXTURE-NJ-APPEAL",
+      "state": "NJ",
+      "court": "Superior Court of New Jersey, Appellate Division",
+      "situation": "appeal",
+      "size_bytes": 0,
+      "download_url": "https://example.test/forms/fixture-nj-appeal-kit.txt",
+      "official_url": "https://example.test/official/never-a-real-court",
+      "sha256": "",
+      "path_in_pack": "forms/notice-of-appeal.txt",
+      "citation": "",
+      "citation_status": "needs_verification",
+      "teach": {
+        "what_it_is": "A placeholder cover sheet used only in OpenSeason tests. It is not a New Jersey court form.",
+        "when_used": "When an automated test installs the NJ appeal fixture pack.",
+        "common_mistakes": [
+          "Treating this file as something you can file.",
+          "Using example.test URLs as if they were the court."
+        ],
+        "learn_more": "Install a real state pack when Josh hosts one. Confirm every form on the court's own site."
+      }
+    }
+  ],
+  "situations": [
+    {
+      "id": "appeal",
+      "label": "I need to appeal a decision",
+      "question": "Did a trial court enter a final order you want a higher court to review?",
+      "aliases": ["appeal", "notice of appeal"],
+      "court": "Superior Court of New Jersey, Appellate Division",
+      "form_ids": ["fixture-nj-appeal-kit"],
+      "packet_id": "nj-appeal-fixture",
+      "deadline_id": null,
+      "why": "The fixture pack only has a fake cover sheet. A real notice-of-appeal deadline is not in this fixture; do not invent one.",
+      "citation": "",
+      "citation_status": "needs_verification",
+      "steps": [
+        {
+          "id": "read-kit",
+          "title": "Read the court's own appeal kit",
+          "why": "The fixture file is not the official kit.",
+          "form_ids": ["fixture-nj-appeal-kit"],
+          "citation": "",
+          "citation_status": "needs_verification",
+          "teach": {
+            "what_it_is": "A reminder to use the official New Jersey pro se appellate materials, not this fixture.",
+            "when_used": "After a final trial-court order, if you are considering an appeal.",
+            "common_mistakes": ["Missing the notice-of-appeal deadline. Confirm the current rule; this fixture does not state a day count."],
+            "learn_more": "JustLegal lists CN 10837 as the NJ pro se appellate kit. Confirm on njcourts.gov."
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -44,5 +44,62 @@
       "title": "Relief",
       "text": "State the precise order the user wants (for example a rule to show cause). The app does not file the petition."
     }
+  ],
+  "forms": [
+    {
+      "id": "co-car-21-petition",
+      "title": "Petition for rule to show cause (C.A.R. 21)",
+      "form_number": "",
+      "state": "CO",
+      "court": "Supreme Court of Colorado",
+      "situation": "mandamus",
+      "size_bytes": 0,
+      "download_url": "",
+      "official_url": "https://www.courts.state.co.us/Courts/Supreme_Court/Rule_Changes.cfm",
+      "sha256": "",
+      "path_in_pack": "",
+      "citation": "C.A.R. 21",
+      "citation_status": "pack_source",
+      "teach": {
+        "what_it_is": "A petition asking the Supreme Court of Colorado to issue a rule to show cause in an original proceeding. This pack is a public-rule scaffold, not the private Mandamus-Colorado wizard dump.",
+        "when_used": "When the user believes the ordinary appellate path is not adequate. The user must write that showing. The app will not invent it.",
+        "common_mistakes": [
+          "Treating C.A.R. 21 as a routine appeal with an automatic day count. This pack has no automatic day count.",
+          "Inventing extra parties or issues."
+        ],
+        "learn_more": "Confirm the current Colorado Appellate Rules. The Mandamus-Colorado-09-2026 repository was not readable from the environment that authored this pack."
+      }
+    }
+  ],
+  "situations": [
+    {
+      "id": "mandamus",
+      "label": "I need an original proceeding in the Colorado Supreme Court",
+      "question": "Are you asking the Supreme Court of Colorado for extraordinary relief because the ordinary appeal is not enough?",
+      "aliases": ["mandamus", "rule to show cause", "original proceeding", "car-21"],
+      "court": "Supreme Court of Colorado",
+      "form_ids": ["co-car-21-petition"],
+      "packet_id": null,
+      "deadline_id": "car-21-petition",
+      "why": "The bundled pack is a C.A.R. 21 scaffold. Relief is extraordinary. There is no automatic day count.",
+      "citation": "C.A.R. 21",
+      "citation_status": "pack_source",
+      "steps": [
+        {
+          "id": "write-why-extraordinary",
+          "title": "Write why the ordinary appellate path is not adequate",
+          "why": "C.A.R. 21 is not a substitute for a timely appeal. The user supplies that showing.",
+          "form_ids": ["co-car-21-petition"],
+          "citation": "C.A.R. 21",
+          "citation_status": "pack_source",
+          "teach": {
+            "what_it_is": "The heart of an original proceeding: why extraordinary relief is needed.",
+            "when_used": "Only when the user, not the app, has that reason.",
+            "common_mistakes": ["Letting an agent invent the inadequacy of the ordinary remedy."],
+            "learn_more": "Read C.A.R. 21 on the Colorado Judicial Branch rules page."
+          }
+        }
+      ]
+    }
   ]
 }

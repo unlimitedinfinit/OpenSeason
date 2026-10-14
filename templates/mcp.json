@@ -23,6 +23,12 @@
     "export_ics",
     "packs_list",
     "packs_validate",
+    "packs_install",
+    "packs_remove",
+    "packs_verify",
+    "guide_questions",
+    "guide_find",
+    "help_links",
     "gaps_add"
   ]
 }

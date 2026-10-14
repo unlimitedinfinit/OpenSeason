@@ -38,10 +38,14 @@ The validator requires `id`, `name`, `never_files`, `never_serves`, and at least
       "notes": "Confirm the current rule text."
     }
   ],
-  "knowledge_base": []
+  "knowledge_base": [],
+  "forms": [],
+  "situations": []
 }
 ```
 
 `holiday_set` is `us-federal` or `us-nj`. Put the file in `templates/rule-packs/` and add a `RulePack::builtin` arm if you want it bundled.
+
+Optional `forms[]` and `situations[]` are teaching data for the **What do I need to file?** finder. Each form and step should include `what_it_is`, `when_used`, `common_mistakes`, `learn_more`, a `citation`, and `citation_status` of `pack_source` or `needs_verification`. Never invent a deadline that is not already in `deadlines[]`. Official PDFs belong in an installable forms pack, not in this git repo. See [FORMS-PACKS.md](FORMS-PACKS.md).
 
 Colorado C.A.R. 21 is a public-rule scaffold. Mandamus-Colorado-09-2026 is private and was not readable here.

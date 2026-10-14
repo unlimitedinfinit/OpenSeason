@@ -79,6 +79,28 @@ assert "A" in letters, letters
 print("exhibits", letters)
 '
 
+echo "== guide =="
+"${CLI[@]}" guide find --state NJ --situation reconsideration --trigger-date 2026-01-09 | python3 -c '
+import json, sys
+obj = json.loads(sys.stdin.read())
+assert obj["never_files"] is True
+data = obj["data"]
+assert data["citation"] == "R. 2:11-6"
+assert data["deadline"]["due"] == "2026-01-20"
+assert data["help_links"], "help_links must be data"
+assert all("justlegal.me" in l["url"] for l in data["help_links"])
+print("guide", data["situation"], data["deadline"]["due"])
+'
+
+echo "== help links (data only) =="
+"${CLI[@]}" docs links | python3 -c '
+import json, sys
+obj = json.loads(sys.stdin.read())
+assert obj["data"]["opens_browser"] is False
+assert obj["data"]["confirm"]
+print("links", len(obj["data"]["links"]))
+'
+
 echo "== playbook =="
 "${CLI[@]}" docs playbook | python3 -c '
 import json, sys

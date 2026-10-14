@@ -109,6 +109,14 @@
   <section class="space-y-3">
     <h2 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">What do you need?</h2>
     <div class="grid gap-2 md:grid-cols-2">
+      <button onclick={() => goto("/guide")} class="text-left border border-indigo-500/40 rounded-md p-3 hover:border-indigo-400">
+        <p class="font-medium">What do I need to file?</p>
+        <p class="text-xs text-muted-foreground">Answer a few plain-language questions. The pack lists the forms and explains each step. Not legal advice.</p>
+      </button>
+      <button onclick={() => goto("/packs")} class="text-left border border-border rounded-md p-3 hover:border-indigo-500/40">
+        <p class="font-medium">Install a forms pack</p>
+        <p class="text-xs text-muted-foreground">Download official form files to this computer. Sizes and SHA-256 shown first. Then work offline.</p>
+      </button>
       <button onclick={() => startNew("reconsideration")} class="text-left border border-border rounded-md p-3 hover:border-indigo-500/40">
         <p class="font-medium">I lost and want the court to look again</p>
         <p class="text-xs text-muted-foreground">Motion for reconsideration. Guided prompts. NJ deadline table included.</p>

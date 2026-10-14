@@ -25,6 +25,9 @@ pub mod gaps;
 pub mod help;
 pub mod seed;
 pub mod packet;
+pub mod forms;
+pub mod guide;
+pub mod help_links;
 
 use crypto::AppState;
 
@@ -91,7 +94,14 @@ pub fn run() {
             case_commands::gap_add_cmd,
             case_commands::gap_export_cmd,
             case_commands::field_help_cmd,
-            case_commands::playbook_cmd
+            case_commands::playbook_cmd,
+            case_commands::list_form_packs_cmd,
+            case_commands::install_form_pack_cmd,
+            case_commands::remove_form_pack_cmd,
+            case_commands::verify_form_pack_cmd,
+            case_commands::guide_questions_cmd,
+            case_commands::guide_find_cmd,
+            case_commands::help_links_cmd
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

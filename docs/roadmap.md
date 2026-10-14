@@ -10,6 +10,14 @@
 - [x] Home screen with document types plus Confidential mode
 - [x] Remove debug leftovers (`api_debug.log`, `src-tauri/ok`)
 
+## Forms packs (this run)
+
+- [x] Catalog format compatible with JustLegal `/registry` (index + state JSON) without bundling PDFs
+- [x] Pack installer (list / install / remove / verify) on CLI, MCP, and UI
+- [x] Teaching + situations on rule packs; "What do I need to file?" finder
+- [x] Configurable JustLegal help links with confirmation; CLI/MCP data only
+- [x] Builder script and hosting notes (HTTP, GitHub Releases, R2/S3)
+
 ## Next run (planned)
 
 These items are intentionally not built here:

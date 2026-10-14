@@ -50,11 +50,16 @@ enum Commands {
         #[command(subcommand)]
         action: PacksCmd,
     },
+    /// What do I need to file? Plain-language finder. Legal information, not advice.
+    Guide {
+        #[command(subcommand)]
+        action: GuideCmd,
+    },
     Gaps {
         #[command(subcommand)]
         action: GapsCmd,
     },
-    /// Print the agent playbook or field help
+    /// Print the agent playbook, field help, or JustLegal resource links (data only)
     Docs {
         #[command(subcommand)]
         action: DocsCmd,
@@ -225,9 +230,48 @@ enum ExportCmd {
 
 #[derive(Subcommand)]
 enum PacksCmd {
-    List,
+    List {
+        #[arg(long)]
+        catalog: Option<PathBuf>,
+    },
+    Install {
+        state: String,
+        #[arg(long)]
+        situation: Option<String>,
+        #[arg(long)]
+        catalog: Option<PathBuf>,
+        #[arg(long)]
+        file: Option<PathBuf>,
+    },
+    Remove {
+        state: String,
+    },
+    Verify {
+        state: Option<String>,
+    },
     Validate {
         path: PathBuf,
+    },
+    Catalog {
+        #[arg(long)]
+        url: Option<String>,
+        #[arg(long)]
+        file: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum GuideCmd {
+    Questions,
+    Find {
+        #[arg(long)]
+        state: String,
+        #[arg(long)]
+        court: Option<String>,
+        #[arg(long)]
+        situation: String,
+        #[arg(long)]
+        trigger_date: Option<String>,
     },
 }
 
@@ -255,6 +299,8 @@ enum GapsCmd {
 enum DocsCmd {
     Playbook,
     Fields,
+    /// JustLegal help/resource URLs as data. Never opens a browser.
+    Links,
 }
 
 fn main() -> ExitCode {
@@ -295,18 +341,168 @@ fn run(cli: Cli) -> Result<(), String> {
     let json = cli.json;
     match cli.command {
         Commands::Mcp => open_season_lib::mcp::serve_stdio(),
-        Commands::Packs { action: PacksCmd::List } => {
-            let packs: Vec<_> = RulePack::list_builtin()
-                .into_iter()
-                .map(|p| {
-                    serde_json::json!({"id": p.id, "name": p.name, "jurisdiction": p.jurisdiction})
+        Commands::Packs {
+            action: PacksCmd::List { catalog },
+        } => {
+            let list = open_season_lib::forms::list_packs(catalog.as_deref(), None)?;
+            if json {
+                emit(true, &list, vec![]);
+            } else {
+                println!("Packs root: {}", list.packs_root);
+                println!("Rule packs:");
+                for p in RulePack::list_builtin() {
+                    println!("  {}  {}  ({})", p.id, p.name, p.jurisdiction);
+                }
+                println!("Available form packs (sizes shown before download):");
+                for p in &list.available {
+                    println!(
+                        "  {}  {}  {}  {}{}",
+                        p.id,
+                        p.state,
+                        p.size_label,
+                        p.title,
+                        if p.installed { "  [installed]" } else { "" }
+                    );
+                }
+                if list.available.is_empty() {
+                    println!("  (none in catalog)");
+                }
+            }
+            Ok(())
+        }
+        Commands::Packs {
+            action: PacksCmd::Install {
+                state,
+                situation,
+                catalog,
+                file,
+            },
+        } => {
+            let report = open_season_lib::forms::install(open_season_lib::forms::InstallOpts {
+                state,
+                situation,
+                catalog,
+                file,
+                root: None,
+                allow_network: false,
+            })?;
+            if json {
+                emit(true, &report, vec![]);
+            } else {
+                println!(
+                    "Installed {} ({}). Offline afterward. Never files.",
+                    report.pack_id, report.size_label
+                );
+                println!("{}", report.dest);
+            }
+            Ok(())
+        }
+        Commands::Packs {
+            action: PacksCmd::Remove { state },
+        } => {
+            let dest = open_season_lib::forms::remove_pack(&state, None)?;
+            if json {
+                emit(true, dest, vec![]);
+            } else {
+                println!("Removed {dest}");
+            }
+            Ok(())
+        }
+        Commands::Packs {
+            action: PacksCmd::Verify { state },
+        } => {
+            let reports = open_season_lib::forms::verify_pack(state.as_deref(), None)?;
+            let issues = reports
+                .iter()
+                .filter(|r| !r.ok)
+                .map(|r| case_profile::ValidationIssue {
+                    field: r.pack_id.clone(),
+                    message: "SHA-256 check failed. Re-download the pack.".into(),
                 })
                 .collect();
             if json {
-                emit(true, packs, vec![]);
+                emit(true, &reports, issues);
             } else {
-                for p in RulePack::list_builtin() {
-                    println!("{}  {}  ({})", p.id, p.name, p.jurisdiction);
+                for r in &reports {
+                    println!("{}  ok={}", r.pack_id, r.ok);
+                    for row in &r.checked {
+                        println!("  {}  {}", if row.ok { "ok" } else { "FAIL" }, row.path);
+                    }
+                }
+            }
+            Ok(())
+        }
+        Commands::Packs {
+            action: PacksCmd::Catalog { url, file },
+        } => {
+            let src = url
+                .or_else(|| file.map(|p| p.display().to_string()))
+                .ok_or_else(|| "Pass --url or --file for the catalog JSON.".to_string())?;
+            let dest = open_season_lib::forms::cache_remote_catalog(&src, None)?;
+            if json {
+                emit(true, dest.display().to_string(), vec![]);
+            } else {
+                println!("Cached catalog at {}", dest.display());
+            }
+            Ok(())
+        }
+        Commands::Guide {
+            action: GuideCmd::Questions,
+        } => {
+            let q = open_season_lib::guide::questions()?;
+            if json {
+                emit(true, &q, vec![]);
+            } else {
+                println!("{}", q.disclaimer);
+                for item in &q.questions {
+                    println!("\n{}  {}", item.id, item.prompt);
+                    for c in &item.choices {
+                        println!("  - {}  {}", c.id, c.label);
+                    }
+                }
+                println!("\nHelp links are returned as data. This command does not open a browser.");
+            }
+            Ok(())
+        }
+        Commands::Guide {
+            action: GuideCmd::Find {
+                state,
+                court,
+                situation,
+                trigger_date,
+            },
+        } => {
+            let result = open_season_lib::guide::find(
+                &state,
+                court.as_deref(),
+                &situation,
+                trigger_date.as_deref(),
+            )?;
+            let issues = open_season_lib::guide::issues_from(&result);
+            if json {
+                emit(true, &result, issues);
+            } else {
+                println!("{}", result.disclaimer);
+                if result.stuck {
+                    println!("No matching packet. The finder did not invent a form.");
+                } else {
+                    println!("{} — {}", result.situation_label, result.why);
+                    for form in &result.forms {
+                        println!("  form  {}  {}", form.id, form.title);
+                        if !form.teach.what_it_is.is_empty() {
+                            println!("        {}", form.teach.what_it_is);
+                        }
+                    }
+                    if let Some(d) = &result.deadline {
+                        println!("  due {}  ({})", d.due, d.rule);
+                    }
+                }
+                for note in &result.unverified {
+                    println!("  needs verification: {note}");
+                }
+                println!("Help links (not opened):");
+                for link in &result.help_links {
+                    println!("  {}  {}", link.label, link.url);
                 }
             }
             Ok(())
@@ -375,6 +571,21 @@ fn run(cli: Cli) -> Result<(), String> {
             } else {
                 for f in fields {
                     println!("{}  {}", f.id, f.help);
+                }
+            }
+            Ok(())
+        }
+        Commands::Docs {
+            action: DocsCmd::Links,
+        } => {
+            let links = open_season_lib::help_links::HelpLinks::load()?;
+            if json {
+                emit(true, &links, vec![]);
+            } else {
+                println!("{}", links.confirm);
+                println!("This command does not open a browser.");
+                for link in &links.links {
+                    println!("{}  {}  {}", link.id, link.label, link.url);
                 }
             }
             Ok(())
