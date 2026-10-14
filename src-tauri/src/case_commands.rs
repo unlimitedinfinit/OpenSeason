@@ -512,6 +512,121 @@ pub fn deadline_cmd(
     crate::check::run_deadline(&case_dir_from_id(&case_id)?, &pack, &rule, &trigger_date)
 }
 
+#[tauri::command]
+pub fn guided_sections_cmd(case_id: String) -> Result<crate::guided::GuidedDraft, String> {
+    let dir = case_dir_from_id(&case_id)?;
+    let profile = case_profile::load_case(&dir)?;
+    crate::guided::load_or_init(&dir, &profile.document_kind)
+}
+
+#[tauri::command]
+pub fn guided_fill_cmd(case_id: String, id: String, text: String) -> Result<crate::guided::GuidedDraft, String> {
+    crate::guided::set_section(&case_dir_from_id(&case_id)?, &id, &text)
+}
+
+#[tauri::command]
+pub fn exhibit_index_cmd(case_id: String) -> Result<crate::exhibits::ExhibitIndex, String> {
+    crate::exhibits::rebuild(&case_dir_from_id(&case_id)?)
+}
+
+#[tauri::command]
+pub fn link_fact_cmd(case_id: String, fact_id: u32, letter: String) -> Result<crate::check::FactCheckReport, String> {
+    crate::exhibits::link_fact(&case_dir_from_id(&case_id)?, fact_id, &letter)
+}
+
+#[tauri::command]
+pub fn set_fact_cite_cmd(
+    case_id: String,
+    fact_id: u32,
+    cite: String,
+    exhibit: String,
+    verified: bool,
+) -> Result<crate::check::FactCheckReport, String> {
+    crate::check::set_fact_cite(&case_dir_from_id(&case_id)?, fact_id, &cite, &exhibit, verified)
+}
+
+#[tauri::command]
+pub fn set_authority_cmd(
+    case_id: String,
+    authority_id: u32,
+    status: String,
+    source: String,
+    note: String,
+) -> Result<crate::check::AuthorityReport, String> {
+    let st = match status.as_str() {
+        "verified" => crate::check::AuthorityStatus::Verified,
+        "not_found" => crate::check::AuthorityStatus::NotFound,
+        _ => crate::check::AuthorityStatus::Unverified,
+    };
+    crate::check::set_authority_status(&case_dir_from_id(&case_id)?, authority_id, st, &source, &note)
+}
+
+#[tauri::command]
+pub fn set_signoff_cmd(case_id: String, id: String, checked: bool) -> Result<crate::check::SignoffReport, String> {
+    crate::check::set_signoff(&case_dir_from_id(&case_id)?, &id, checked)
+}
+
+#[tauri::command]
+pub fn export_packet_cmd(case_id: String) -> Result<crate::packet::PacketReport, String> {
+    crate::packet::assemble_for_case(&case_dir_from_id(&case_id)?)
+}
+
+#[tauri::command]
+pub fn export_ics_cmd(
+    case_id: String,
+    pack: String,
+    rule: String,
+    trigger_date: String,
+) -> Result<String, String> {
+    let dir = case_dir_from_id(&case_id)?;
+    let result = crate::check::run_deadline(&dir, &pack, &rule, &trigger_date)?;
+    Ok(crate::calendar::write_ics(&dir, &result)?.display().to_string())
+}
+
+#[tauri::command]
+pub fn seed_sample_cmd() -> Result<CaseProfile, String> {
+    let dest = cases_root().join("lucille-example");
+    if dest.join("case.json").is_file() {
+        return case_profile::load_case(&dest);
+    }
+    let (_dir, profile) = crate::seed::seed_lucille(&dest)?;
+    Ok(profile)
+}
+
+#[tauri::command]
+pub fn gap_add_cmd(
+    case_id: String,
+    title: String,
+    court: String,
+    rule: String,
+    what_happened: String,
+    what_was_hard: String,
+) -> Result<crate::gaps::GapLog, String> {
+    crate::gaps::add(
+        &case_dir_from_id(&case_id)?,
+        &title,
+        &court,
+        &rule,
+        &what_happened,
+        &what_was_hard,
+    )
+}
+
+#[tauri::command]
+pub fn gap_export_cmd(case_id: String) -> Result<String, String> {
+    Ok(crate::gaps::export_markdown(&case_dir_from_id(&case_id)?)?.display().to_string())
+}
+
+#[tauri::command]
+pub fn field_help_cmd() -> Result<Vec<crate::help::FieldHelp>, String> {
+    Ok(crate::help::field_help())
+}
+
+#[tauri::command]
+pub fn playbook_cmd() -> Result<String, String> {
+    Ok(crate::help::playbook())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

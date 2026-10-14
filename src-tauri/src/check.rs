@@ -159,7 +159,7 @@ pub fn run_fact_check(case_dir: &Path, draft: &str) -> Result<FactCheckReport, S
         if row.record_cite.trim().is_empty() {
             issues.push(ValidationIssue {
                 field: format!("fact.{}", row.id),
-                message: "Factual sentence has no record cite. The checker will not invent one."
+                message: "Factual sentence has no record cite. The checker will not invent one. Fix: add an exhibit, then evidence link --fact-id N --letter A (or check fact --id N --cite \"Ex. A\" --exhibit A)."
                     .into(),
             });
         } else if !row.verified {
@@ -207,7 +207,7 @@ pub fn set_fact_cite(
             if r.record_cite.trim().is_empty() {
                 Some(ValidationIssue {
                     field: format!("fact.{}", r.id),
-                    message: "Factual sentence has no record cite. The checker will not invent one."
+                    message: "Factual sentence has no record cite. The checker will not invent one. Fix: evidence link --fact-id N --letter A."
                         .into(),
                 })
             } else if !r.verified {
@@ -462,7 +462,7 @@ pub fn run_all(
     if deadline.is_none() {
         issues.push(ValidationIssue {
             field: "deadline".into(),
-            message: "No deadline computed yet. Pass --pack, --rule, and --trigger-date.".into(),
+            message: "No deadline computed yet. Fix: check deadline --pack nj-app-div --rule reconsideration-appellate --trigger-date YYYY-MM-DD.".into(),
         });
     }
     Ok(CheckAllReport {
@@ -502,6 +502,7 @@ pub fn add_exhibit(
     if !description.trim().is_empty() {
         let _ = fs::write(evidence.join(format!("{safe}.txt")), description);
     }
+    let _ = crate::exhibits::rebuild(case_dir);
     Ok(dest)
 }
 

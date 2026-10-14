@@ -123,6 +123,53 @@ impl RulePack {
     pub fn list_builtin() -> Vec<Self> {
         vec![Self::generic(), Self::nj_app_div(), Self::co_mandamus()]
     }
+
+    /// Validate a pack file. New states are data, not code.
+    pub fn validate_file(path: &Path) -> Result<crate::case_profile::ValidationReport, String> {
+        let pack = Self::load_from_path(path)?;
+        Ok(pack.validate())
+    }
+
+    pub fn validate(&self) -> crate::case_profile::ValidationReport {
+        use crate::case_profile::{ValidationIssue, ValidationReport};
+        let mut issues = Vec::new();
+        if self.id.trim().is_empty() {
+            issues.push(ValidationIssue {
+                field: "id".into(),
+                message: "Pack needs an id such as nj-app-div.".into(),
+            });
+        }
+        if self.name.trim().is_empty() {
+            issues.push(ValidationIssue {
+                field: "name".into(),
+                message: "Pack needs a human-readable name.".into(),
+            });
+        }
+        if !self.never_files || !self.never_serves {
+            issues.push(ValidationIssue {
+                field: "never_files".into(),
+                message: "Packs must set never_files and never_serves to true.".into(),
+            });
+        }
+        if self.deadlines.is_empty() {
+            issues.push(ValidationIssue {
+                field: "deadlines".into(),
+                message: "Add at least one deadline object with id, rule, trigger, and days.".into(),
+            });
+        }
+        for (i, d) in self.deadlines.iter().enumerate() {
+            if d.id.trim().is_empty() || d.rule.trim().is_empty() {
+                issues.push(ValidationIssue {
+                    field: format!("deadlines.{i}"),
+                    message: "Each deadline needs id and rule. See docs/RULE-PACKS.md.".into(),
+                });
+            }
+        }
+        ValidationReport {
+            ok: issues.is_empty(),
+            issues,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -151,5 +198,13 @@ mod tests {
         let pack = RulePack::co_mandamus();
         assert!(pack.source_note.contains("not readable"));
         assert!(!pack.knowledge_base.is_empty());
+    }
+
+    #[test]
+    fn bundled_packs_validate() {
+        for pack in RulePack::list_builtin() {
+            let report = pack.validate();
+            assert!(report.ok, "{}: {:?}", pack.id, report.issues);
+        }
     }
 }

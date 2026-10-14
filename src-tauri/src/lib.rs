@@ -18,6 +18,13 @@ pub mod check;
 pub mod court_md;
 pub mod agent;
 pub mod mcp;
+pub mod guided;
+pub mod exhibits;
+pub mod calendar;
+pub mod gaps;
+pub mod help;
+pub mod seed;
+pub mod packet;
 
 use crypto::AppState;
 
@@ -70,7 +77,21 @@ pub fn run() {
             case_commands::list_rule_packs,
             case_commands::import_markdown_cmd,
             case_commands::check_case_cmd,
-            case_commands::deadline_cmd
+            case_commands::deadline_cmd,
+            case_commands::guided_sections_cmd,
+            case_commands::guided_fill_cmd,
+            case_commands::exhibit_index_cmd,
+            case_commands::link_fact_cmd,
+            case_commands::set_fact_cite_cmd,
+            case_commands::set_authority_cmd,
+            case_commands::set_signoff_cmd,
+            case_commands::export_packet_cmd,
+            case_commands::export_ics_cmd,
+            case_commands::seed_sample_cmd,
+            case_commands::gap_add_cmd,
+            case_commands::gap_export_cmd,
+            case_commands::field_help_cmd,
+            case_commands::playbook_cmd
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

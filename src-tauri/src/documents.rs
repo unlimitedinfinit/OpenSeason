@@ -646,11 +646,6 @@ pub fn export_court_markdown(
     if doc.lines.is_empty() {
         return Err("Markdown draft is empty.".into());
     }
-    let rules = CourtRules::load_for_case(case_dir);
-    let dest = out_dir
-        .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| case_dir.join("exports"));
-    fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
     let stem = format!(
         "court-md-{}",
         profile
@@ -664,11 +659,36 @@ pub fn export_court_markdown(
     } else {
         doc.meta.doc_title.as_str()
     };
+    write_lines_as_docx_pdf(case_dir, &stem, heading, &doc.lines, out_dir)
+}
+
+/// Write court-shaped Word and PDF from already-assembled lines.
+pub fn write_lines_as_docx_pdf(
+    case_dir: &Path,
+    stem: &str,
+    heading: &str,
+    lines: &[String],
+    out_dir: Option<&Path>,
+) -> Result<ExportPaths, String> {
+    if crate::seal::is_dir_sealed(case_dir) {
+        return Err("This case is sealed. Export from the Documents pointer is refused.".to_string());
+    }
+    if let Some(out) = out_dir {
+        assert_notice_out_dir(out)?;
+    }
+    if lines.is_empty() {
+        return Err("Nothing to export. Fill a guided section or import Markdown first.".into());
+    }
+    let rules = CourtRules::load_for_case(case_dir);
+    let dest = out_dir
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| case_dir.join("exports"));
+    fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
     let docx_path = dest.join(format!("{stem}.docx"));
     let pdf_path = dest.join(format!("{stem}.pdf"));
-    let docx_bytes = build_docx_bytes_from_lines(&doc.lines, heading, &rules)?;
+    let docx_bytes = build_docx_bytes_from_lines(lines, heading, &rules)?;
     fs::write(&docx_path, &docx_bytes).map_err(|e| e.to_string())?;
-    let typst_src = build_typst_source_from_lines(&doc.lines, heading, &rules);
+    let typst_src = build_typst_source_from_lines(lines, heading, &rules);
     let mut pdf_bytes = crate::pdf::compile_typst(typst_src)?;
     pdf_bytes.extend_from_slice(b"\n% ");
     pdf_bytes.extend_from_slice(REVIEW_NOTICE.as_bytes());

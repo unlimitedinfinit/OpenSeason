@@ -404,6 +404,7 @@ pub fn create_case_folder(
 
     ensure_case_layout(&case_dir)?;
     save_case(&case_dir, &profile)?;
+    let _ = crate::guided::load_or_init(&case_dir, &profile.document_kind);
     let loaded = load_case(&case_dir)?;
     Ok((case_dir, loaded))
 }
