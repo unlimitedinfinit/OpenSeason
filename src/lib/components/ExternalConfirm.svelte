@@ -31,7 +31,7 @@
 
 {#if open && link}
   <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-    <button class="absolute inset-0 bg-background/80" onclick={cancel} aria-label="Cancel"></button>
+    <button class="absolute inset-0 bg-background/80" onclick={cancel} aria-label="Dismiss overlay"></button>
     <div class="relative w-full max-w-lg border border-amber-500/40 bg-card rounded-lg p-5 space-y-3 shadow-xl" role="dialog" aria-modal="true">
       <p class="text-xs uppercase tracking-wide text-amber-200">Open a website</p>
       <h2 class="text-lg font-semibold">{link.label}</h2>
