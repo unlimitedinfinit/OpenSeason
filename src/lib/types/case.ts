@@ -70,9 +70,9 @@ export interface CaseProfile {
   timeline: TimelineEvent[];
   rule_pack_id?: string;
   motion_kind?: string;
-  brief?: PleadingDraft;
-  appellate_motion?: PleadingDraft;
-  mandamus?: PleadingDraft;
+  brief: PleadingDraft;
+  appellate_motion: PleadingDraft;
+  mandamus: PleadingDraft;
   court_markdown?: string;
 }
 
