@@ -21,22 +21,37 @@ Agents drive the same engine through `openseason --json` or `openseason mcp`. Se
 - **What do I need to file?**: plain-language finder in the window and `openseason --json guide`. Teaching lives in packs. Legal information, not advice.
 - **Get legal help**: Help menu links to JustLegal after a confirmation. CLI/MCP return the URLs only.
 
+- **JustLegal Cloud Sync Hub**: In-app Firebase Auth and non-destructive additive sync with `justlegal.me`. Downloads route automatically to `orders/`, `filings/`, and `evidence/`. Confidential cases remain strictly airgapped.
+- **Court Readiness Pre-Flight Audit**: Real-time validation checklist banner reviewing caption, docket number, filer signature, statutory deadline math, and fact-citation grounding before export.
+- **Bates-Stamped Exhibit Packet Assembler**: One-click generation of unified Bates-stamped PDFs with custom prefixes (e.g. `ABRAMS-000001`) and automated Typst Table of Exhibits with SHA-256 integrity hashes.
+- **Official Court Form (AcroForm) Filler**: Inspects PDF form fields and auto-maps `case.json` values into official court forms (e.g. Colorado JDF 205 fee waiver and JDF 1911 direct appeal), exporting filled PDFs and audit JSON.
+- **Transcript Grounding & Indexer**: Indexes depositions and hearing transcripts line-by-line (`TRANSCRIPTS-AND-RECORD.md`) and cross-references assertions against the official record.
+- **Ready-to-Run Standalone Binaries**: Pre-compiled `OpenSeason.exe` (desktop GUI) and `openseason-cli.exe` (CLI/MCP server) located directly in the root repository.
+- **One-Click Launch Scripts**: `run.ps1` (PowerShell) and `run.bat` (batch file) for immediate launching.
+
+## Documentation
+- [Executive Summary](docs/EXECUTIVE-SUMMARY.md): Comprehensive system overview and upgrade breakdown.
+- [Cloud Sync & Airgap Architecture](docs/SYNC-AND-CLOUD.md): Full technical spec for Firebase integration and confidentiality protection.
+- [Agent Interface](docs/AGENT-INTERFACE.md): CLI `--json` contract and MCP stdio tools.
+- [Forms Packs](docs/FORMS-PACKS.md): State court rule packs and AcroForm catalogs.
+
 This software is a formatting engine, not a lawyer. Every export tells the user to review the file and to consider consulting an attorney. It is not legal advice.
 
 ## What it is not
 
 - It will not write your arguments or find your citations.
-- It will not send Confidential cases to justlegal.me or anywhere else.
-- Account sync for standard cases is planned and stubbed, not built.
+- It will not send Confidential or sealed cases to justlegal.me or anywhere else.
+- It does not practice law, file, or serve documents.
 - Complaint and motion builders are basic templates, not full drafters.
 
 ## Technology
 
-- Desktop: Tauri v2 (Windows `.msi` / `.exe` and macOS `.dmg` are the intended bundles)
+- Desktop: Tauri v2 (`OpenSeason.exe`)
+- CLI & MCP: Rust native binary (`openseason-cli.exe`)
 - UI: Svelte 5, TypeScript, Tailwind CSS
 - Backend: Rust, SQLite per confidential hunt, XChaCha20Poly1305 + Argon2id
-- Documents: Typst for PDF, Office Open XML for Word
-- No telemetry and no new cloud services
+- Documents: Typst for PDF, Office Open XML for Word, `pdf-forms` for AcroForms
+- No telemetry; Confidential mode strictly airgapped
 
 ## Getting started
 

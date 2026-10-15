@@ -81,12 +81,32 @@ Equivalent without npm: `cargo run --manifest-path src-tauri/Cargo.toml --bin op
 | `packs catalog --url URL` | Cache a catalog JSON (JustLegal registry or your host) |
 | `guide questions` / `guide find --state --situation [--court] [--trigger-date]` | What do I need to file? Teaching from packs. Never invents rules |
 | `docs links` | JustLegal help/resource URLs as data. Never opens a browser |
+| `check preflight DIR` | Live readiness audit across caption, docket, filer, deadline, facts, authorities, and packet parts |
+| `check transcripts DIR` | Line-index hearing and deposition transcripts and verify draft record citations |
+| `export exhibit-packet DIR [--prefix PREFIX] [--start N]` | Assemble Bates-stamped exhibit packet with SHA-256 Table of Exhibits |
+| `form inspect FILE` | Inspect PDF AcroForm fields, types, and detect standard court forms |
+| `form fill --case DIR FILE [--out OUT]` | Fill official PDF form with case profile data and export filled PDF + JSON |
+| `cloud login --email EMAIL --password PASS` | Authenticate with JustLegal Cloud |
+| `cloud status` | Check current JustLegal Cloud connection status |
+| `cloud pull [--case CASE_ID]` | Pull cloud matters and download associated orders, filings, and evidence |
+| `cloud push DIR` | Push local case profile and files to JustLegal Cloud (airgapped cases refused) |
+| `cloud logout` | Clear local session tokens |
 | `mcp` | Stdio MCP server (same tools) |
 | `sync DIR --action backup` | Stub. Standard: `not_implemented`. Confidential: refused |
 
 ## MCP (stdio)
 
-`openseason mcp` speaks JSON-RPC 2.0 with `Content-Length` framing. Tools include the motion path plus `packs_install`, `packs_verify`, `guide_find`, and `help_links`. `guide_find` and `help_links` return `help_links` as data and never open a browser.
+`openseason mcp` speaks JSON-RPC 2.0 with `Content-Length` framing. Tools include:
+- `check_preflight`: Run comprehensive court readiness pre-flight checklist.
+- `check_transcripts`: Index transcripts and cross-reference assertions against record lines.
+- `export_exhibit_packet`: Generate Bates-stamped exhibit packet and Table of Exhibits.
+- `form_inspect`: Inspect official court PDF forms and list AcroForm fields.
+- `form_fill`: Auto-map `case.json` profile values into official court forms.
+- `cloud_pull` & `cloud_push`: Autonomous additive sync with JustLegal Cloud (airgap protected).
+- Motion path tools: `case_create`, `draft_import`, `check_fact`, `check_authority`, `check_deadline`, `check_signoff`, `export_pleading`, `export_court_md`.
+- Form packs & guide: `packs_install`, `packs_verify`, `guide_find`, `help_links`.
+
+`guide_find` and `help_links` return `help_links` as data and never open a browser.
 
 Each `tools/call` result is a text block whose JSON is the same envelope as `--json`. The server is offline. It does not talk to a cloud model host.
 

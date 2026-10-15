@@ -4,17 +4,31 @@
   import GlassOSPanel from "$lib/components/GlassOSPanel.svelte";
   import ReviewNotice from "$lib/components/ReviewNotice.svelte";
   import GettingStarted from "$lib/components/GettingStarted.svelte";
+  import CloudSyncModal from "$lib/components/CloudSyncModal.svelte";
   import { ipc, runningInTauri } from "$lib/ipc";
   import { session } from "$lib/session.svelte";
-  import type { WorkspaceCase } from "$lib/types/case";
+  import type { WorkspaceCase, CloudSession } from "$lib/types/case";
 
   let cases = $state<WorkspaceCase[]>([]);
   let casesRoot = $state("");
   let loadError = $state("");
   let actionError = $state("");
   let status = $state("");
+  let showCloudModal = $state(false);
+  let cloudSession = $state<CloudSession | null>(null);
 
-  onMount(load);
+  onMount(() => {
+    load();
+    checkCloud();
+  });
+
+  async function checkCloud() {
+    try {
+      cloudSession = await ipc<CloudSession | null>("cloud_status_cmd");
+    } catch {
+      cloudSession = null;
+    }
+  }
 
   async function load() {
     try {
@@ -92,14 +106,25 @@
       </p>
     </div>
     <div class="text-right space-y-2 shrink-0">
+      <div class="flex items-center justify-end gap-2">
+        <button
+          onclick={() => showCloudModal = true}
+          class="text-xs border {cloudSession ? 'border-emerald-500/40 text-emerald-300 hover:bg-emerald-950/30' : 'border-indigo-500/40 text-indigo-300 hover:bg-indigo-950/30'} px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors"
+        >
+          <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 00-9.78 2.096A4.001 4.001 0 003 15z" />
+          </svg>
+          <span>{cloudSession ? `Cloud: ${cloudSession.email.split('@')[0]}` : "JustLegal Cloud"}</span>
+        </button>
+        <button onclick={() => goto("/confidential")} class="text-xs border border-red-500/40 text-red-200 px-3 py-1.5 rounded-md">
+          {session.unlocked ? "Confidential tools" : "Unlock Confidential"}
+        </button>
+      </div>
       {#if session.unlocked}
-        <p class="text-xs text-emerald-400">Confidential vault unlocked</p>
+        <p class="text-[11px] text-emerald-400">Confidential vault unlocked</p>
       {:else}
-        <p class="text-xs text-muted-foreground">Vault locked</p>
+        <p class="text-[11px] text-muted-foreground">Vault locked</p>
       {/if}
-      <button onclick={() => goto("/confidential")} class="text-sm border border-red-500/40 text-red-200 px-3 py-1.5 rounded-md">
-        {session.unlocked ? "Confidential tools" : "Unlock Confidential"}
-      </button>
     </div>
   </div>
 
@@ -250,9 +275,30 @@
               {item.profile.document_kind.replaceAll("_", " ") || "no document yet"}
               {#if item.has_vault} · vault{/if}
             </p>
+            <div class="flex items-center gap-2 pt-2 border-t border-border/40">
+              {#if item.profile.mode === 'confidential' || item.sealed}
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700 flex items-center gap-1">
+                  🔒 Airgapped (Strictly Local)
+                </span>
+              {:else if item.profile.cloud_matter_id}
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-indigo-950/60 text-indigo-300 border border-indigo-500/30 flex items-center gap-1">
+                  ☁ Cloud Synced: {item.profile.cloud_matter_id.slice(0, 10)}...
+                </span>
+              {:else}
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800/40 text-zinc-400 border border-zinc-700/40">
+                  Local Matter (Ready to Sync)
+                </span>
+              {/if}
+            </div>
           </button>
         {/each}
       </div>
     {/if}
   </section>
+
+  <CloudSyncModal
+    bind:open={showCloudModal}
+    onclose={() => showCloudModal = false}
+    onsynced={() => { load(); checkCloud(); }}
+  />
 </main>

@@ -101,7 +101,18 @@ pub fn run() {
             case_commands::verify_form_pack_cmd,
             case_commands::guide_questions_cmd,
             case_commands::guide_find_cmd,
-            case_commands::help_links_cmd
+            case_commands::help_links_cmd,
+            case_commands::cloud_login_cmd,
+            case_commands::cloud_status_cmd,
+            case_commands::cloud_logout_cmd,
+            case_commands::cloud_pull_cmd,
+            case_commands::cloud_push_cmd,
+            case_commands::cloud_get_case_sync_meta_cmd,
+            case_commands::preflight_audit_cmd,
+            case_commands::export_exhibit_packet_cmd,
+            case_commands::inspect_court_form_cmd,
+            case_commands::fill_court_form_cmd,
+            case_commands::check_transcripts_cmd
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

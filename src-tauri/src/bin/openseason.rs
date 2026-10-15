@@ -71,6 +71,16 @@ enum Commands {
         #[arg(long, default_value = "backup")]
         action: String,
     },
+    /// JustLegal Cloud sync and authentication
+    Cloud {
+        #[command(subcommand)]
+        action: CloudCmd,
+    },
+    /// Official court form AcroForm inspection and auto-filling
+    Form {
+        #[command(subcommand)]
+        action: FormCmd,
+    },
 }
 
 #[derive(Subcommand)]
@@ -193,6 +203,12 @@ enum CheckCmd {
         #[arg(long)]
         trigger_date: Option<String>,
     },
+    Preflight {
+        path: PathBuf,
+    },
+    Transcripts {
+        path: PathBuf,
+    },
 }
 
 #[derive(Subcommand)]
@@ -217,6 +233,13 @@ enum ExportCmd {
     Packet {
         path: PathBuf,
     },
+    ExhibitPacket {
+        path: PathBuf,
+        #[arg(long)]
+        prefix: Option<String>,
+        #[arg(long)]
+        start: Option<u32>,
+    },
     Ics {
         path: PathBuf,
         #[arg(long)]
@@ -225,6 +248,43 @@ enum ExportCmd {
         rule: String,
         #[arg(long)]
         trigger_date: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum CloudCmd {
+    Login {
+        #[arg(long)]
+        email: String,
+        #[arg(long)]
+        password: String,
+    },
+    Status,
+    Logout,
+    Pull {
+        #[arg(long)]
+        case: Option<String>,
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
+    Push {
+        path: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum FormCmd {
+    Inspect {
+        pdf: PathBuf,
+        #[arg(long)]
+        case: Option<PathBuf>,
+    },
+    Fill {
+        pdf: PathBuf,
+        #[arg(long)]
+        case: PathBuf,
+        #[arg(long)]
+        out: Option<PathBuf>,
     },
 }
 
@@ -887,6 +947,42 @@ fn run(cli: Cli) -> Result<(), String> {
                 }
                 Ok(())
             }
+            CheckCmd::Preflight { path } => {
+                let report = check::preflight_audit(&path)?;
+                if json {
+                    emit(true, &report, vec![]);
+                } else {
+                    println!("Court Readiness Pre-Flight Audit: {}", if report.ok { "READY" } else { "NOT READY" });
+                    println!("  Caption: {}", report.caption_summary);
+                    println!("  Docket: {}", report.docket_summary);
+                    println!("  Filer: {}", report.filer_summary);
+                    println!("  Deadline: {}", report.deadline_summary);
+                    println!("  Facts: {}/{} verified", report.facts_verified_count, report.facts_total_count);
+                    println!("  Authorities: {}/{} verified", report.authorities_verified_count, report.authorities_total_count);
+                    if !report.missing_requirements.is_empty() {
+                        println!("Missing requirements:");
+                        for m in &report.missing_requirements {
+                            println!("  - {}", m);
+                        }
+                    }
+                }
+                Ok(())
+            }
+            CheckCmd::Transcripts { path } => {
+                let profile = case_profile::load_case(&path)?;
+                let draft = profile.notice_of_appeal.user_text.as_str();
+                let report = check::check_transcripts(&path, draft)?;
+                if json {
+                    emit(true, &report, report.issues.clone());
+                } else {
+                    println!("Transcripts: {} indexed, {} total lines", report.indexed_files.len(), report.total_lines);
+                    println!("Citations found: {}", report.citations.len());
+                    for c in &report.citations {
+                        println!("  {} -> verified: {} ({})", c.raw, c.verified, c.quote_found.as_deref().unwrap_or("no match"));
+                    }
+                }
+                Ok(())
+            }
         },
         Commands::Export { action } => match action {
             ExportCmd::NoticeOfAppeal { path, out } => {
@@ -948,6 +1044,18 @@ fn run(cli: Cli) -> Result<(), String> {
                 }
                 Ok(())
             }
+            ExportCmd::ExhibitPacket { path, prefix, start } => {
+                let report = open_season_lib::packet::assemble_exhibit_packet(&path, prefix.as_deref(), start)?;
+                if json {
+                    emit(true, &report, vec![]);
+                } else {
+                    println!("{}", report.notice);
+                    println!("Table of Exhibits: {}", report.table_of_exhibits_pdf);
+                    println!("Exhibit Packet: {}", report.exhibit_packet_pdf);
+                    println!("Bates Range: {} - {} ({} exhibits, {} pages)", report.bates_start, report.bates_end, report.total_exhibits, report.total_pages);
+                }
+                Ok(())
+            }
             ExportCmd::Ics {
                 path,
                 pack,
@@ -992,5 +1100,83 @@ fn run(cli: Cli) -> Result<(), String> {
             }
             Ok(())
         }
+        Commands::Cloud { action } => match action {
+            CloudCmd::Login { email, password } => {
+                let session = sync::cloud_sign_in_password(&email, &password)?;
+                if json {
+                    emit(true, serde_json::json!({"email": session.email, "uid": session.uid, "expires_at": session.expires_at}), vec![]);
+                } else {
+                    println!("Logged in successfully to JustLegal Cloud as {}", session.email);
+                }
+                Ok(())
+            }
+            CloudCmd::Status => {
+                let session = sync::load_cloud_session();
+                if json {
+                    emit(true, &session, vec![]);
+                } else {
+                    match session {
+                        Some(s) => println!("Logged in as {} (UID: {})", s.email, s.uid),
+                        None => println!("Not logged in to JustLegal Cloud."),
+                    }
+                }
+                Ok(())
+            }
+            CloudCmd::Logout => {
+                sync::clear_cloud_session()?;
+                if json {
+                    emit(true, serde_json::json!({"logged_out": true}), vec![]);
+                } else {
+                    println!("Logged out of JustLegal Cloud.");
+                }
+                Ok(())
+            }
+            CloudCmd::Pull { case, root } => {
+                let session = sync::load_cloud_session().ok_or_else(|| "Not logged in to JustLegal Cloud. Run 'openseason cloud login' first.".to_string())?;
+                let cases_root = root.unwrap_or_else(case_profile::default_cases_root);
+                let report = sync::cloud_pull_all(&session, &cases_root, case.as_deref())?;
+                if json {
+                    emit(true, &report, vec![]);
+                } else {
+                    println!("Pulled {} case(s), downloaded {} file(s)", report.cases_pulled, report.files_downloaded);
+                }
+                Ok(())
+            }
+            CloudCmd::Push { path } => {
+                let session = sync::load_cloud_session().ok_or_else(|| "Not logged in to JustLegal Cloud. Run 'openseason cloud login' first.".to_string())?;
+                let report = sync::cloud_push_case(&path, &session)?;
+                if json {
+                    emit(true, &report, vec![]);
+                } else {
+                    println!("{}", report.message);
+                }
+                Ok(())
+            }
+        },
+        Commands::Form { action } => match action {
+            FormCmd::Inspect { pdf, case } => {
+                let report = open_season_lib::forms::inspect_court_form(&pdf, case.as_deref())?;
+                if json {
+                    emit(true, &report, vec![]);
+                } else {
+                    println!("Form: {} ({})", report.form_name, report.detected_form_number.as_deref().unwrap_or("Custom"));
+                    for f in &report.fields {
+                        println!("  {} [{}]: {}", f.label, f.key, f.value_from_case.as_deref().unwrap_or("<empty>"));
+                    }
+                }
+                Ok(())
+            }
+            FormCmd::Fill { pdf, case, out } => {
+                let report = open_season_lib::forms::fill_court_form(&pdf, &case, out.as_deref(), None)?;
+                if json {
+                    emit(true, &report, vec![]);
+                } else {
+                    println!("{}", report.notice);
+                    println!("Filled PDF written to: {}", report.output_pdf_path);
+                    println!("JSON fields written to: {}", report.output_json_path);
+                }
+                Ok(())
+            }
+        },
     }
 }

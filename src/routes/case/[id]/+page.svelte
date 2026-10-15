@@ -5,6 +5,8 @@
   import ReviewNotice from "$lib/components/ReviewNotice.svelte";
   import PartyEditor from "$lib/components/PartyEditor.svelte";
   import FieldHelp from "$lib/components/FieldHelp.svelte";
+  import PreFlightAuditCard from "$lib/components/PreFlightAuditCard.svelte";
+  import CloudSyncModal from "$lib/components/CloudSyncModal.svelte";
   import { ipc } from "$lib/ipc";
   import { session } from "$lib/session.svelte";
   import type {
@@ -16,6 +18,9 @@
     TimelineEvent,
     ValidationReport,
     GuidedDraft,
+    ExhibitPacketReport,
+    FormInspection,
+    FormFillResult,
   } from "$lib/types/case";
 
   let caseId = $derived($page.params.id || "");
@@ -23,6 +28,15 @@
   let parties = $state<Party[]>([]);
   let addressText = $state("");
   let tab = $state<"overview" | "parties" | "documents" | "evidence" | "timeline" | "files" | "check" | "confidential">("overview");
+  let showCloudModal = $state(false);
+  let exhibitPacketReport = $state<ExhibitPacketReport | null>(null);
+  let batesPrefix = $state("");
+  let batesStart = $state(1);
+  let assemblingPacket = $state(false);
+  let selectedFormPath = $state("");
+  let formInspection = $state<FormInspection | null>(null);
+  let formFillResult = $state<FormFillResult | null>(null);
+  let fillingForm = $state(false);
   let checkReport = $state<{
     ok?: boolean;
     never_files?: boolean;
@@ -380,6 +394,54 @@
       error = String(e);
     }
   }
+
+  async function generateExhibitPacket() {
+    assemblingPacket = true;
+    error = "";
+    try {
+      exhibitPacketReport = await ipc<ExhibitPacketReport>("assemble_exhibit_packet_cmd", {
+        caseId,
+        prefix: batesPrefix.trim() || null,
+        startNumber: batesStart || 1,
+      });
+      status = `Exhibit packet assembled!\nTable: ${exhibitPacketReport.table_of_exhibits_pdf}\nPacket: ${exhibitPacketReport.exhibit_packet_pdf}\nTotal pages: ${exhibitPacketReport.total_pages}`;
+      artifacts = await ipc<CaseArtifact[]>("list_case_artifacts", { caseId }).catch(() => artifacts);
+    } catch (e) {
+      error = String(e);
+    } finally {
+      assemblingPacket = false;
+    }
+  }
+
+  async function inspectSelectedForm(formPath: string) {
+    selectedFormPath = formPath;
+    error = "";
+    try {
+      formInspection = await ipc<FormInspection>("inspect_court_form_cmd", {
+        formPath,
+      });
+      status = `Inspected form: ${formInspection.detected_form_number || formInspection.form_name} (${formInspection.fields.length} fields)`;
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function fillSelectedForm(formPath: string) {
+    fillingForm = true;
+    error = "";
+    try {
+      formFillResult = await ipc<FormFillResult>("fill_court_form_cmd", {
+        caseId,
+        formPath,
+      });
+      status = `Filled form generated!\nPDF: ${formFillResult.output_pdf_path}\nJSON: ${formFillResult.output_json_path}\nMapped fields: ${formFillResult.mapped_fields}`;
+      artifacts = await ipc<CaseArtifact[]>("list_case_artifacts", { caseId }).catch(() => artifacts);
+    } catch (e) {
+      error = String(e);
+    } finally {
+      fillingForm = false;
+    }
+  }
 </script>
 
 <main class="container mx-auto max-w-5xl p-8 space-y-6">
@@ -397,12 +459,33 @@
         <h1 class="text-2xl font-bold">{profile.title || "Untitled case"}</h1>
         <p class="text-xs font-mono text-muted-foreground mt-1">{profile.id}</p>
       </div>
-      <span class="text-xs px-2 py-1 rounded border {profile.mode === 'confidential' ? 'border-red-500/40 text-red-300' : 'border-border'}">
-        {profile.mode}
-      </span>
+      <div class="flex items-center gap-2">
+        {#if profile.cloud_matter_id}
+          <span class="text-xs bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 px-2.5 py-1 rounded-md font-mono">
+            ☁ Synced ({profile.cloud_matter_id.slice(0, 8)})
+          </span>
+        {/if}
+        {#if profile.mode !== "confidential"}
+          <button
+            onclick={() => (showCloudModal = true)}
+            class="text-xs px-3 py-1.5 rounded-md bg-primary text-primary-foreground hover:opacity-90 flex items-center gap-1.5 font-medium shadow-sm"
+          >
+            <span>☁ JustLegal Cloud</span>
+          </button>
+        {:else}
+          <span class="text-xs text-red-400 border border-red-500/30 px-2 py-1 rounded bg-red-500/10">
+            Airgapped (Confidential)
+          </span>
+        {/if}
+        <span class="text-xs px-2 py-1 rounded border {profile.mode === 'confidential' ? 'border-red-500/40 text-red-300' : 'border-border'}">
+          {profile.mode}
+        </span>
+      </div>
     </div>
 
     <ReviewNotice />
+
+    <PreFlightAuditCard caseId={caseId} />
 
     {#if profile.sealed_at}
       <p class="text-sm border border-red-500/30 bg-red-500/10 rounded-md p-3">
@@ -592,6 +675,105 @@
           <button onclick={() => exportKind("court_md")} disabled={busy} class="border border-border px-4 py-2 rounded-md text-sm">Export court Markdown (Word and PDF)</button>
         </div>
       </section>
+
+      <section class="space-y-4 bg-card border rounded-lg p-6">
+        <div class="flex justify-between items-center">
+          <div>
+            <h2 class="font-semibold">Official Court Forms (AcroForms)</h2>
+            <p class="text-xs text-muted-foreground">Inspect official court PDF forms, auto-map case profile data into form fields, and export filled PDFs.</p>
+          </div>
+        </div>
+
+        {#if artifacts.filter((a) => a.kind === "form").length > 0}
+          <div class="space-y-2">
+            <span class="text-xs font-medium text-muted-foreground">Available Court Forms in Case:</span>
+            <div class="grid gap-2">
+              {#each artifacts.filter((a) => a.kind === "form") as form}
+                <div class="flex items-center justify-between border rounded-md p-3 bg-muted/10">
+                  <div>
+                    <p class="text-sm font-semibold">{form.name}</p>
+                    <p class="text-xs font-mono text-muted-foreground">{form.path}</p>
+                  </div>
+                  <div class="flex gap-2">
+                    <button
+                      onclick={() => inspectSelectedForm(form.path)}
+                      class="text-xs border border-border px-3 py-1.5 rounded-md hover:bg-muted"
+                    >
+                      Inspect Fields
+                    </button>
+                    <button
+                      onclick={() => fillSelectedForm(form.path)}
+                      disabled={fillingForm}
+                      class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md font-medium disabled:opacity-50"
+                    >
+                      {fillingForm && selectedFormPath === form.path ? "Filling..." : "Fill with Case Profile"}
+                    </button>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          </div>
+        {:else}
+          <p class="text-xs text-muted-foreground border border-dashed rounded-md p-3">
+            No forms found in case `forms/` directory. Place court-issued PDFs (e.g. JDF 205, JDF 1911) into `forms/` or inspect by path below.
+          </p>
+        {/if}
+
+        <div class="pt-2 border-t border-border space-y-2">
+          <span class="text-xs text-muted-foreground">Custom PDF Form Path:</span>
+          <div class="flex gap-2">
+            <input
+              bind:value={selectedFormPath}
+              placeholder="C:\path\to\court-form.pdf"
+              class="flex-1 h-9 rounded-md border border-input bg-background px-3 text-xs font-mono"
+            />
+            <button
+              onclick={() => inspectSelectedForm(selectedFormPath)}
+              disabled={!selectedFormPath.trim()}
+              class="text-xs border border-border px-3 py-1.5 rounded-md hover:bg-muted disabled:opacity-50"
+            >
+              Inspect
+            </button>
+            <button
+              onclick={() => fillSelectedForm(selectedFormPath)}
+              disabled={!selectedFormPath.trim() || fillingForm}
+              class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md font-medium disabled:opacity-50"
+            >
+              Fill Form
+            </button>
+          </div>
+        </div>
+
+        {#if formInspection}
+          <div class="mt-4 p-4 border rounded-md bg-muted/20 space-y-2">
+            <div class="flex justify-between items-center">
+              <p class="text-xs font-semibold">{formInspection.detected_form_number || formInspection.form_name} — {formInspection.fields.length} Fields</p>
+              <button onclick={() => formInspection = null} class="text-[10px] text-muted-foreground hover:text-foreground">Close</button>
+            </div>
+            <div class="max-h-48 overflow-y-auto space-y-1">
+              {#each formInspection.fields as f}
+                <div class="text-xs font-mono flex justify-between border-b border-border/40 py-1">
+                  <span class="text-foreground">{f.key} ({f.label})</span>
+                  <span class="text-muted-foreground text-[10px]">{f.field_type} {f.required ? '(required)' : ''}</span>
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        {#if formFillResult}
+          <div class="mt-4 p-4 border border-emerald-500/30 bg-emerald-500/10 rounded-md space-y-2">
+            <div class="flex justify-between items-center">
+              <p class="text-sm font-semibold text-emerald-400">Form Filled ({formFillResult.mapped_fields} fields mapped)</p>
+              <button onclick={() => formFillResult = null} class="text-[10px] text-muted-foreground hover:text-foreground">Dismiss</button>
+            </div>
+            <div class="text-xs font-mono space-y-1">
+              <p><span class="text-muted-foreground">Filled PDF:</span> {formFillResult.output_pdf_path}</p>
+              <p><span class="text-muted-foreground">Field Data JSON:</span> {formFillResult.output_json_path}</p>
+            </div>
+          </div>
+        {/if}
+      </section>
     {:else if tab === "evidence"}
       <section class="space-y-4 bg-card border rounded-lg p-6">
         <h2 class="font-semibold">Evidence</h2>
@@ -614,6 +796,76 @@
               </li>
             {/each}
           </ul>
+        {/if}
+      </section>
+
+      <section class="space-y-4 bg-card border rounded-lg p-6">
+        <div class="flex justify-between items-center">
+          <div>
+            <h2 class="font-semibold">Exhibit Packet Assembler</h2>
+            <p class="text-xs text-muted-foreground">Generates a court-ready Table of Exhibits with SHA-256 hashes and a unified Bates-stamped PDF.</p>
+          </div>
+          <button
+            onclick={generateExhibitPacket}
+            disabled={assemblingPacket || artifacts.filter((a) => a.kind === "evidence").length === 0}
+            class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50"
+          >
+            {assemblingPacket ? "Assembling..." : "Generate Bates Packet"}
+          </button>
+        </div>
+        
+        <div class="grid md:grid-cols-2 gap-3 pt-2">
+          <label class="block space-y-1">
+            <span class="text-xs text-muted-foreground">Bates Prefix (optional, e.g. ABRAMS- or ANDERSON-)</span>
+            <input
+              bind:value={batesPrefix}
+              placeholder="e.g. EX-"
+              class="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
+            />
+          </label>
+          <label class="block space-y-1">
+            <span class="text-xs text-muted-foreground">Starting Page Number</span>
+            <input
+              type="number"
+              bind:value={batesStart}
+              min="1"
+              class="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
+            />
+          </label>
+        </div>
+
+        {#if exhibitPacketReport}
+          <div class="mt-4 p-4 border border-indigo-500/30 bg-indigo-500/10 rounded-md space-y-2">
+            <p class="text-sm font-semibold text-indigo-300">Packet Assembly Complete ({exhibitPacketReport.total_pages} pages)</p>
+            <div class="text-xs font-mono space-y-1">
+              <p><span class="text-muted-foreground">Table of Exhibits:</span> {exhibitPacketReport.table_of_exhibits_pdf}</p>
+              <p><span class="text-muted-foreground">Bates Stamped Packet:</span> {exhibitPacketReport.exhibit_packet_pdf}</p>
+            </div>
+            {#if exhibitPacketReport.exhibits.length}
+              <div class="mt-3 overflow-x-auto">
+                <table class="w-full text-xs text-left">
+                  <thead class="border-b border-border text-muted-foreground">
+                    <tr>
+                      <th class="py-1">Ex #</th>
+                      <th class="py-1">Bates Range</th>
+                      <th class="py-1">Pages</th>
+                      <th class="py-1">Description</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each exhibitPacketReport.exhibits as ex}
+                      <tr class="border-b border-border/50">
+                        <td class="py-1 font-mono">{ex.letter}</td>
+                        <td class="py-1 font-mono text-indigo-400">{ex.bates_start} - {ex.bates_end}</td>
+                        <td class="py-1">{ex.page_count}</td>
+                        <td class="py-1">{ex.description}</td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+            {/if}
+          </div>
         {/if}
       </section>
     {:else if tab === "timeline"}
@@ -813,5 +1065,13 @@
     {#if syncResult}
       <p class="text-xs text-muted-foreground">{syncResult.kind}: {syncResult.reason}</p>
     {/if}
+
+    <CloudSyncModal
+      bind:open={showCloudModal}
+      activeCaseId={caseId}
+      activeCaseTitle={profile?.title}
+      isConfidential={profile?.mode === "confidential"}
+      onsynced={load}
+    />
   {/if}
 </main>

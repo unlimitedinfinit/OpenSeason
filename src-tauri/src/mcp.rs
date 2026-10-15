@@ -47,6 +47,13 @@ fn tool_list() -> Value {
         tool("guide_find", "Recommend forms or a packet from pack data. Never invents a rule. Includes help_links as data and never opens a browser.", json!({"state": {"type": "string"}, "court": {"type": "string"}, "situation": {"type": "string"}, "trigger_date": {"type": "string", "description": "YYYY-MM-DD"}}), &["state", "situation"]),
         tool("help_links", "JustLegal Get legal help / Find resources URLs as data. Never opens a browser. UI must confirm first.", json!({}), &[]),
         tool("gaps_add", "Capture a justice-gap note. Fake names only.", json!({"path": path, "title": {"type": "string"}, "court": {"type": "string"}, "rule": {"type": "string"}, "happened": {"type": "string"}, "hard": {"type": "string"}}), &["path", "title"]),
+        tool("check_preflight", "Court readiness pre-flight checklist. Verifies caption, docket, filer, deadline, fact cites, authorities, transcripts, and packet parts.", json!({"path": path}), &["path"]),
+        tool("check_transcripts", "Audit hearing transcripts in evidence/ and check grounding of [Tr. Page:Line] citations.", json!({"path": path}), &["path"]),
+        tool("export_exhibit_packet", "Assemble Table of Exhibits and Bates-stamped Exhibit Packet PDF with exhibit divider sheets.", json!({"path": path, "prefix": {"type": "string"}, "start": {"type": "integer"}}), &["path"]),
+        tool("form_inspect", "Inspect court PDF form fields (e.g. Colorado JDF series or NJ forms) and map values from case.json.", json!({"pdf": {"type": "string"}, "path": path}), &["pdf"]),
+        tool("form_fill", "Auto-fill an official court PDF companion and JSON field map using case profile data.", json!({"pdf": {"type": "string"}, "path": path}), &["pdf", "path"]),
+        tool("cloud_pull", "Pull matters, orders, and evidence from JustLegal Cloud (justlegal.me) into local folders.", json!({"case": {"type": "string"}, "root": {"type": "string"}}), &[]),
+        tool("cloud_push", "Push local case exports and filings to JustLegal Cloud.", json!({"path": path}), &["path"]),
     ])
 }
 
@@ -230,6 +237,53 @@ fn call_tool(name: &str, args: &Value) -> Result<Value, String> {
             &s("hard"),
         )?)
         .unwrap()),
+        "check_preflight" => {
+            let p_str = s("path");
+            let report = check::preflight_audit(std::path::Path::new(&p_str))?;
+            Ok(serde_json::to_value(report).unwrap())
+        }
+        "check_transcripts" => {
+            let p_str = s("path");
+            let dir = std::path::Path::new(&p_str);
+            let profile = case_profile::load_case(dir)?;
+            let draft = profile.notice_of_appeal.user_text.as_str();
+            let report = check::check_transcripts(dir, draft)?;
+            Ok(serde_json::to_value(report).unwrap())
+        }
+        "export_exhibit_packet" => {
+            let p_str = s("path");
+            let dir = std::path::Path::new(&p_str);
+            let p_prefix = s("prefix");
+            let prefix = if p_prefix.is_empty() { None } else { Some(p_prefix.as_str()) };
+            let start = args.get("start").and_then(|v| v.as_u64()).map(|n| n as u32);
+            let report = crate::packet::assemble_exhibit_packet(dir, prefix, start)?;
+            Ok(serde_json::to_value(report).unwrap())
+        }
+        "form_inspect" => {
+            let pdf = std::path::PathBuf::from(s("pdf"));
+            let case = if s("path").is_empty() { None } else { Some(std::path::PathBuf::from(s("path"))) };
+            let report = crate::forms::inspect_court_form(&pdf, case.as_deref())?;
+            Ok(serde_json::to_value(report).unwrap())
+        }
+        "form_fill" => {
+            let pdf = std::path::PathBuf::from(s("pdf"));
+            let case = std::path::PathBuf::from(s("path"));
+            let report = crate::forms::fill_court_form(&pdf, &case, None, None)?;
+            Ok(serde_json::to_value(report).unwrap())
+        }
+        "cloud_pull" => {
+            let session = crate::sync::load_cloud_session().ok_or_else(|| "Not logged in to JustLegal cloud. Run cloud login first.".to_string())?;
+            let root = if s("root").is_empty() { case_profile::default_cases_root() } else { std::path::PathBuf::from(s("root")) };
+            let case_filter = if s("case").is_empty() { None } else { Some(s("case")) };
+            let report = crate::sync::cloud_pull_all(&session, &root, case_filter.as_deref())?;
+            Ok(serde_json::to_value(report).unwrap())
+        }
+        "cloud_push" => {
+            let session = crate::sync::load_cloud_session().ok_or_else(|| "Not logged in to JustLegal cloud. Run cloud login first.".to_string())?;
+            let dir = std::path::PathBuf::from(s("path"));
+            let report = crate::sync::cloud_push_case(&dir, &session)?;
+            Ok(serde_json::to_value(report).unwrap())
+        }
         other => Err(format!(
             "Unknown tool '{other}'. Call playbook or packs_list. Known tools are listed by tools/list."
         )),

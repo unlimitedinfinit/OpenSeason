@@ -211,6 +211,10 @@ pub struct CaseProfile {
     /// Full court-markdown draft (md2court subset) when imported.
     #[serde(default)]
     pub court_markdown: String,
+    #[serde(default)]
+    pub cloud_matter_id: Option<String>,
+    #[serde(default)]
+    pub cloud_synced_at: Option<String>,
 }
 
 fn default_schema_version() -> u32 {
@@ -259,6 +263,8 @@ impl CaseProfile {
             appellate_motion: PleadingDraft::default(),
             mandamus: PleadingDraft::default(),
             court_markdown: String::new(),
+            cloud_matter_id: None,
+            cloud_synced_at: None,
         }
     }
 
@@ -820,6 +826,8 @@ pub fn sample_appeal_profile() -> CaseProfile {
         appellate_motion: PleadingDraft::default(),
         mandamus: PleadingDraft::default(),
         court_markdown: String::new(),
+        cloud_matter_id: None,
+        cloud_synced_at: None,
     }
 }
 

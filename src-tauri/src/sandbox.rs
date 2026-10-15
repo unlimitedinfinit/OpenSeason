@@ -653,13 +653,16 @@ mod tests {
         assert!(sanitize_download_stem("C:x").is_err());
         assert!(sanitize_download_stem("foo/../bar").is_ok());
         assert!(!sanitize_download_stem("foo/../bar").unwrap().contains(".."));
-        let dangling = tmp.join("dangling.osb");
-        std::os::unix::fs::symlink(tmp.join("missing-target.osb"), &dangling).unwrap();
-        let link_err = assert_export_target_allowed(&dangling, &cases, &app_data).unwrap_err();
-        assert!(
-            link_err.to_lowercase().contains("symlink"),
-            "dangling symlink export target must be refused: {link_err}"
-        );
+        #[cfg(unix)]
+        {
+            let dangling = tmp.join("dangling.osb");
+            std::os::unix::fs::symlink(tmp.join("missing-target.osb"), &dangling).unwrap();
+            let link_err = assert_export_target_allowed(&dangling, &cases, &app_data).unwrap_err();
+            assert!(
+                link_err.to_lowercase().contains("symlink"),
+                "dangling symlink export target must be refused: {link_err}"
+            );
+        }
         let _ = fs::remove_dir_all(&tmp);
     }
 

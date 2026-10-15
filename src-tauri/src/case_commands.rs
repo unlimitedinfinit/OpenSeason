@@ -183,6 +183,7 @@ pub fn list_case_artifacts_at(
             ("export", "exports"),
             ("filing", "filings"),
             ("order", "orders"),
+            ("form", "forms"),
         ] {
             let root = documents_dir.join(folder);
             if !root.is_dir() {
@@ -681,6 +682,83 @@ pub fn field_help_cmd() -> Result<Vec<crate::help::FieldHelp>, String> {
 #[tauri::command]
 pub fn playbook_cmd() -> Result<String, String> {
     Ok(crate::help::playbook())
+}
+
+#[tauri::command]
+pub fn cloud_login_cmd(email: String, password: String) -> Result<crate::sync::CloudSession, String> {
+    crate::sync::cloud_sign_in_password(&email, &password)
+}
+
+#[tauri::command]
+pub fn cloud_status_cmd() -> Result<Option<crate::sync::CloudSession>, String> {
+    Ok(crate::sync::load_cloud_session())
+}
+
+#[tauri::command]
+pub fn cloud_logout_cmd() -> Result<(), String> {
+    crate::sync::clear_cloud_session()
+}
+
+#[tauri::command]
+pub fn cloud_pull_cmd(case_id: Option<String>) -> Result<crate::sync::PullReport, String> {
+    let session = crate::sync::load_cloud_session().ok_or_else(|| "Not logged in to JustLegal cloud. Please log in first.".to_string())?;
+    crate::sync::cloud_pull_all(&session, &cases_root(), case_id.as_deref())
+}
+
+#[tauri::command]
+pub fn cloud_push_cmd(case_id: String) -> Result<crate::sync::PushReport, String> {
+    let session = crate::sync::load_cloud_session().ok_or_else(|| "Not logged in to JustLegal cloud. Please log in first.".to_string())?;
+    let dir = case_dir_from_id(&case_id)?;
+    crate::sync::cloud_push_case(&dir, &session)
+}
+
+#[tauri::command]
+pub fn cloud_get_case_sync_meta_cmd(case_id: String) -> Result<crate::sync::CaseSyncMetadata, String> {
+    let dir = case_dir_from_id(&case_id)?;
+    Ok(crate::sync::load_case_sync_metadata(&dir))
+}
+
+#[tauri::command]
+pub fn preflight_audit_cmd(case_id: String) -> Result<crate::check::PreFlightAudit, String> {
+    let dir = case_dir_from_id(&case_id)?;
+    crate::check::preflight_audit(&dir)
+}
+
+#[tauri::command]
+pub fn export_exhibit_packet_cmd(
+    case_id: String,
+    bates_prefix: Option<String>,
+    starting_number: Option<u32>,
+) -> Result<crate::packet::ExhibitPacketReport, String> {
+    let dir = case_dir_from_id(&case_id)?;
+    crate::packet::assemble_exhibit_packet(&dir, bates_prefix.as_deref(), starting_number)
+}
+
+#[tauri::command]
+pub fn inspect_court_form_cmd(case_id: Option<String>, form_path: String) -> Result<crate::forms::FormInspection, String> {
+    let case_dir = match &case_id {
+        Some(id) if !id.trim().is_empty() => Some(case_dir_from_id(id)?),
+        _ => None,
+    };
+    crate::forms::inspect_court_form(std::path::Path::new(&form_path), case_dir.as_deref())
+}
+
+#[tauri::command]
+pub fn fill_court_form_cmd(
+    case_id: String,
+    form_path: String,
+    custom_values: Option<std::collections::HashMap<String, String>>,
+) -> Result<crate::forms::FormFillResult, String> {
+    let dir = case_dir_from_id(&case_id)?;
+    crate::forms::fill_court_form(std::path::Path::new(&form_path), &dir, None, custom_values)
+}
+
+#[tauri::command]
+pub fn check_transcripts_cmd(case_id: String) -> Result<crate::check::TranscriptReport, String> {
+    let dir = case_dir_from_id(&case_id)?;
+    let profile = crate::case_profile::load_case(&dir)?;
+    let user_draft = profile.notice_of_appeal.user_text.as_str();
+    crate::check::check_transcripts(&dir, user_draft)
 }
 
 #[cfg(test)]

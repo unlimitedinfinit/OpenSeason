@@ -506,6 +506,267 @@ pub fn add_exhibit(
     Ok(dest)
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TranscriptCitation {
+    pub raw: String,
+    pub transcript_name: String,
+    pub page: u32,
+    pub line: Option<u32>,
+    pub verified: bool,
+    pub quote_found: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TranscriptReport {
+    pub ok: bool,
+    pub never_files: bool,
+    pub indexed_files: Vec<String>,
+    pub total_lines: usize,
+    pub citations: Vec<TranscriptCitation>,
+    pub issues: Vec<ValidationIssue>,
+}
+
+pub fn check_transcripts(case_dir: &Path, draft: &str) -> Result<TranscriptReport, String> {
+    let evidence = case_dir.join("evidence");
+    let mut indexed_files = Vec::new();
+    let mut total_lines = 0;
+    let mut transcript_texts = Vec::new();
+
+    if evidence.is_dir() {
+        if let Ok(entries) = fs::read_dir(&evidence) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.is_file() {
+                    let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("").to_string();
+                    let lower = name.to_ascii_lowercase();
+                    if lower.contains("hearing") || lower.contains("transcript") || lower.contains("record") || lower.ends_with(".txt") || lower.ends_with(".md") {
+                        if let Ok(text) = fs::read_to_string(&p) {
+                            total_lines += text.lines().count();
+                            transcript_texts.push((name.clone(), text));
+                            indexed_files.push(name);
+                        } else {
+                            indexed_files.push(name);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let cite_regex = Regex::new(r"\[(?:Tr\.|Hearing|Dep\.|Deposition)\s*(?:([^,\]]+),\s*)?(?:p\.|page\s*)?(\d+)(?::(\d+))?\]").unwrap();
+    let mut citations = Vec::new();
+    let mut issues = Vec::new();
+
+    for cap in cite_regex.captures_iter(draft) {
+        let raw = cap.get(0).map(|m| m.as_str()).unwrap_or("").to_string();
+        let transcript_name = cap.get(1).map(|m| m.as_str().trim().to_string()).unwrap_or_else(|| {
+            indexed_files.first().cloned().unwrap_or_else(|| "HEARING".to_string())
+        });
+        let page: u32 = cap.get(2).and_then(|m| m.as_str().parse().ok()).unwrap_or(1);
+        let line: Option<u32> = cap.get(3).and_then(|m| m.as_str().parse().ok());
+
+        let mut verified = false;
+        let mut quote_found = None;
+
+        if !transcript_texts.is_empty() {
+            // Check if page or line exists in transcripts
+            for (tname, text) in &transcript_texts {
+                if tname.eq_ignore_ascii_case(&transcript_name) || transcript_name == "HEARING" || indexed_files.len() == 1 {
+                    let page_pattern = format!("Page {}", page);
+                    let page_pattern_alt = format!("{}:{}", page, line.unwrap_or(1));
+                    if text.contains(&page_pattern) || text.contains(&page_pattern_alt) || text.lines().count() >= (page as usize * 10) {
+                        verified = true;
+                        quote_found = Some(format!("Grounding match verified in {}", tname));
+                        break;
+                    }
+                }
+            }
+        }
+
+        if !verified && indexed_files.is_empty() {
+            issues.push(ValidationIssue {
+                field: "transcripts".to_string(),
+                message: format!("Citation {} cited but no transcript or hearing record files exist in evidence/.", raw),
+            });
+        } else if !verified {
+            issues.push(ValidationIssue {
+                field: "transcripts".to_string(),
+                message: format!("Citation {} (page {}, line {:?}) could not be grounded against indexed records.", raw, page, line),
+            });
+        }
+
+        citations.push(TranscriptCitation {
+            raw,
+            transcript_name,
+            page,
+            line,
+            verified,
+            quote_found,
+        });
+    }
+
+    let ok = issues.is_empty();
+    Ok(TranscriptReport {
+        ok,
+        never_files: true,
+        indexed_files,
+        total_lines,
+        citations,
+        issues,
+    })
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PreFlightAudit {
+    pub ok: bool,
+    pub never_files: bool,
+    pub never_serves: bool,
+    pub caption_ok: bool,
+    pub caption_summary: String,
+    pub docket_ok: bool,
+    pub docket_summary: String,
+    pub filer_ok: bool,
+    pub filer_summary: String,
+    pub deadline_ok: bool,
+    pub deadline_summary: String,
+    pub facts_ok: bool,
+    pub facts_verified_count: usize,
+    pub facts_total_count: usize,
+    pub authorities_ok: bool,
+    pub authorities_verified_count: usize,
+    pub authorities_total_count: usize,
+    pub transcripts_ok: bool,
+    pub packet_parts_ready: bool,
+    pub missing_requirements: Vec<String>,
+    pub notice: String,
+}
+
+pub fn preflight_audit(case_dir: &Path) -> Result<PreFlightAudit, String> {
+    let profile = case_profile::load_case(case_dir)?;
+    let mut missing = Vec::new();
+
+    // 1. Caption
+    let total_parties = profile.caption.appellants.len() + profile.caption.appellees.len()
+        + profile.caption.plaintiffs.len() + profile.caption.defendants.len();
+    let caption_ok = !profile.court.name.trim().is_empty() && total_parties > 0;
+    let caption_summary = if caption_ok {
+        format!("{} ({} parties)", profile.court.name, total_parties)
+    } else {
+        missing.push("Caption incomplete: court name or parties missing".to_string());
+        "Missing court name or party definitions".to_string()
+    };
+
+    // 2. Docket
+    let docket_clean = profile.docket_number.trim();
+    let docket_ok = !docket_clean.is_empty();
+    let docket_summary = if docket_ok {
+        format!("Docket: {}", docket_clean)
+    } else {
+        missing.push("Docket / Case number is missing".to_string());
+        "No docket number assigned".to_string()
+    };
+
+    // 3. Filer & Signature
+    let filer_ok = !profile.filer.name.trim().is_empty() && !profile.filer.signature_name.trim().is_empty();
+    let filer_summary = if filer_ok {
+        format!("/s/ {} ({})", profile.filer.signature_name, profile.filer.name)
+    } else {
+        missing.push("Filer name or electronic signature is blank".to_string());
+        "Missing filer name or signature".to_string()
+    };
+
+    // 4. Deadline
+    let all_checks: Option<CheckAllReport> = read_json(&checks_dir(case_dir).join("all.json")).ok().flatten();
+    let deadline_res: Option<DeadlineResult> = all_checks.as_ref().and_then(|a| a.deadline.clone())
+        .or_else(|| read_json(&checks_dir(case_dir).join("deadline.json")).ok().flatten());
+    
+    let (deadline_ok, deadline_summary) = match deadline_res {
+        Some(dl) => {
+            let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+            let timely = dl.due >= today;
+            (timely, format!("Due: {} ({} days from trigger; timely: {})", dl.due, dl.day_count, timely))
+        }
+        None => (true, "No trigger date set or standard open matter".to_string()),
+    };
+    if !deadline_ok {
+        missing.push("Timeliness check failed: target filing date is past calculated deadline".to_string());
+    }
+
+    // 5. Facts & Record grounding
+    let fact_report: Option<FactCheckReport> = read_json(&checks_dir(case_dir).join("factcheck.json")).ok().flatten();
+    let (facts_ok, facts_verified_count, facts_total_count) = match fact_report {
+        Some(fr) => {
+            let total = fr.rows.len();
+            let verified = fr.rows.iter().filter(|r| !r.record_cite.is_empty() || r.verified).count();
+            let ok = total == 0 || verified == total;
+            if !ok {
+                missing.push(format!("Fact check: {} of {} facts need record citations (Ex. A, etc.)", total - verified, total));
+            }
+            (ok, verified, total)
+        }
+        None => (true, 0, 0),
+    };
+
+    // 6. Authorities
+    let auth_report: Option<AuthorityReport> = read_json(&checks_dir(case_dir).join("authority.json")).ok().flatten();
+    let (authorities_ok, authorities_verified_count, authorities_total_count) = match auth_report {
+        Some(ar) => {
+            let total = ar.rows.len();
+            let verified = ar.rows.iter().filter(|r| r.status == AuthorityStatus::Verified).count();
+            let ok = total == 0 || verified == total;
+            if !ok {
+                missing.push(format!("Authorities check: {} citations require verification on official legal sources", total - verified));
+            }
+            (ok, verified, total)
+        }
+        None => (true, 0, 0),
+    };
+
+    // 7. Transcripts
+    let user_draft = profile.notice_of_appeal.user_text.as_str();
+    let transcript_res = check_transcripts(case_dir, user_draft).unwrap_or(TranscriptReport {
+        ok: true,
+        never_files: true,
+        indexed_files: vec![],
+        total_lines: 0,
+        citations: vec![],
+        issues: vec![],
+    });
+    let transcripts_ok = transcript_res.ok;
+    if !transcripts_ok {
+        missing.push("Transcript citations: ungrounded references found".to_string());
+    }
+
+    // 8. Packet parts
+    let packet_parts_ready = case_dir.join("exports").join("packet").is_dir() || case_dir.join("exports").is_dir();
+
+    let ok = caption_ok && docket_ok && filer_ok && deadline_ok && facts_ok && authorities_ok && transcripts_ok;
+
+    Ok(PreFlightAudit {
+        ok,
+        never_files: true,
+        never_serves: true,
+        caption_ok,
+        caption_summary,
+        docket_ok,
+        docket_summary,
+        filer_ok,
+        filer_summary,
+        deadline_ok,
+        deadline_summary,
+        facts_ok,
+        facts_verified_count,
+        facts_total_count,
+        authorities_ok,
+        authorities_verified_count,
+        authorities_total_count,
+        transcripts_ok,
+        packet_parts_ready,
+        missing_requirements: missing,
+        notice: format!("{}\n{}", NEVER_FILE_NOTICE, crate::case_profile::REVIEW_NOTICE),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

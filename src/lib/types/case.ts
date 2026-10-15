@@ -74,6 +74,8 @@ export interface CaseProfile {
   appellate_motion: PleadingDraft;
   mandamus: PleadingDraft;
   court_markdown?: string;
+  cloud_matter_id?: string | null;
+  cloud_synced_at?: string | null;
 }
 
 export interface WorkspaceCase {
@@ -248,3 +250,137 @@ export function sampleProfile(): CaseProfile {
   ];
   return p;
 }
+
+// ---------------------------------------------------------------------------
+// Cloud Sync & Engine Upgrades Types
+// ---------------------------------------------------------------------------
+
+export interface CloudSession {
+  id_token: string;
+  refresh_token: string;
+  uid: string;
+  email: string;
+  expires_at: number;
+}
+
+export interface SyncFileRecord {
+  doc_id: string;
+  title: string;
+  filename: string;
+  subfolder: string;
+  sha256: string;
+  size_bytes: number;
+  synced_at: string;
+}
+
+export interface CaseSyncMetadata {
+  cloud_matter_id: string;
+  last_synced_at: string;
+  files: SyncFileRecord[];
+}
+
+export interface PullReport {
+  ok: boolean;
+  cases_pulled: number;
+  cases_updated: number;
+  files_downloaded: number;
+  issues: string[];
+}
+
+export interface PushReport {
+  ok: boolean;
+  cloud_matter_id: string;
+  files_uploaded: number;
+  message: string;
+}
+
+export interface PreFlightAudit {
+  ok: boolean;
+  never_files: boolean;
+  never_serves: boolean;
+  caption_ok: boolean;
+  caption_summary: string;
+  docket_ok: boolean;
+  docket_summary: string;
+  filer_ok: boolean;
+  filer_summary: string;
+  deadline_ok: boolean;
+  deadline_summary: string;
+  facts_ok: boolean;
+  facts_verified_count: number;
+  facts_total_count: number;
+  authorities_ok: boolean;
+  authorities_verified_count: number;
+  authorities_total_count: number;
+  transcripts_ok: boolean;
+  packet_parts_ready: boolean;
+  missing_requirements: string[];
+  notice: string;
+}
+
+export interface ExhibitPacketItem {
+  letter: string;
+  description: string;
+  filename: string;
+  bates_start: string;
+  bates_end: string;
+  page_count: number;
+}
+
+export interface ExhibitPacketReport {
+  ok: boolean;
+  never_files: boolean;
+  never_serves: boolean;
+  notice: string;
+  table_of_exhibits_pdf: string;
+  exhibit_packet_pdf: string;
+  bates_start: string;
+  bates_end: string;
+  total_exhibits: number;
+  total_pages: number;
+  exhibits: ExhibitPacketItem[];
+}
+
+export interface FormFieldInfo {
+  key: string;
+  label: string;
+  field_type: string;
+  value_from_case?: string | null;
+  required: boolean;
+}
+
+export interface FormInspection {
+  form_name: string;
+  form_path: string;
+  detected_form_number?: string | null;
+  fields: FormFieldInfo[];
+}
+
+export interface FormFillResult {
+  ok: boolean;
+  never_files: boolean;
+  form_path: string;
+  output_pdf_path: string;
+  output_json_path: string;
+  mapped_fields: number;
+  notice: string;
+}
+
+export interface TranscriptCitation {
+  raw: string;
+  transcript_name: string;
+  page: number;
+  line?: number | null;
+  verified: boolean;
+  quote_found?: string | null;
+}
+
+export interface TranscriptReport {
+  ok: boolean;
+  never_files: boolean;
+  indexed_files: string[];
+  total_lines: number;
+  citations: TranscriptCitation[];
+  issues: ValidationIssue[];
+}
+

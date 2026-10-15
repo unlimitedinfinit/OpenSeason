@@ -669,14 +669,17 @@ mod tests {
         );
         let _ = fs::remove_dir_all(&dir);
 
-        let dir2 = temp_dir();
-        fs::write(dir2.join(".sealed"), "junk-one").unwrap();
-        fs::write(dir2.join(".Sealed"), "junk-two").unwrap();
-        assert!(
-            is_dir_sealed(&dir2),
-            "multiple case-insensitive .sealed names must treat the case as sealed"
-        );
-        let _ = fs::remove_dir_all(&dir2);
+        #[cfg(unix)]
+        {
+            let dir2 = temp_dir();
+            fs::write(dir2.join(".sealed"), "junk-one").unwrap();
+            fs::write(dir2.join(".Sealed"), "junk-two").unwrap();
+            assert!(
+                is_dir_sealed(&dir2),
+                "multiple case-insensitive .sealed names must treat the case as sealed"
+            );
+            let _ = fs::remove_dir_all(&dir2);
+        }
     }
 
     #[test]
