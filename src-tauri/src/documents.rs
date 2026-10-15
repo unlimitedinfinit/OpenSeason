@@ -5,11 +5,13 @@ use std::path::{Path, PathBuf};
 use zip::write::SimpleFileOptions;
 use zip::ZipWriter;
 
+use serde::{Deserialize, Serialize};
+
 use crate::case_profile::{validate_case, CaseProfile, Caption, REVIEW_NOTICE};
 use crate::court_rules::CourtRules;
 use crate::pdf;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExportPaths {
     pub docx: PathBuf,
     pub pdf: PathBuf,
@@ -40,7 +42,7 @@ fn xml_escape(text: &str) -> String {
         .replace('"', "&quot;")
 }
 
-fn typst_escape(text: &str) -> String {
+pub fn typst_escape(text: &str) -> String {
     text.replace('\\', "\\\\")
         .replace('#', "\\#")
         .replace('$', "\\$")
@@ -596,6 +598,67 @@ pub fn export_pleading(
     let stem = format!(
         "{}-{}",
         key.replace('_', "-"),
+        profile
+            .docket_number
+            .replace('/', "-")
+            .replace(' ', "_")
+            .replace('\\', "-")
+    );
+    let docx_path = dest.join(format!("{}.docx", stem));
+    let pdf_path = dest.join(format!("{}.pdf", stem));
+
+    let docx_bytes = build_docx_bytes_from_lines(&lines, heading, &rules)?;
+    fs::write(&docx_path, &docx_bytes).map_err(|e| e.to_string())?;
+
+    let typst_src = build_typst_source_from_lines(&lines, heading, &rules);
+    let mut pdf_bytes = pdf::compile_typst(typst_src)?;
+    pdf_bytes.extend_from_slice(b"\n% ");
+    pdf_bytes.extend_from_slice(REVIEW_NOTICE.as_bytes());
+    pdf_bytes.extend_from_slice(b"\n");
+    fs::write(&pdf_path, &pdf_bytes).map_err(|e| e.to_string())?;
+
+    Ok(ExportPaths {
+        docx: docx_path,
+        pdf: pdf_path,
+    })
+}
+
+pub fn export_custom_filing(
+    case_dir: &Path,
+    profile: &CaseProfile,
+    title: &str,
+    user_text: &str,
+    out_dir: Option<&Path>,
+) -> Result<ExportPaths, String> {
+    if crate::seal::is_dir_sealed(case_dir) {
+        return Err("This case is sealed. Export from the Documents pointer is refused.".to_string());
+    }
+    if let Some(out) = out_dir {
+        assert_notice_out_dir(out)?;
+    }
+
+    let mut lines = assembled_caption_lines(profile, "motion");
+    let heading = if title.trim().is_empty() { "MOTION" } else { title.trim() };
+    lines.push(heading.to_string());
+    lines.push(String::new());
+
+    push_user_paragraphs(&mut lines, user_text);
+    lines.extend(assembled_signature_lines(profile));
+
+    let rules = CourtRules::load_for_case(case_dir);
+    let dest = out_dir
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| case_dir.join("exports"));
+    fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
+
+    let safe_title = heading
+        .to_ascii_lowercase()
+        .replace(' ', "-")
+        .replace('/', "-")
+        .replace('\\', "-");
+    let stem = format!(
+        "filing-{}-{}",
+        safe_title,
         profile
             .docket_number
             .replace('/', "-")

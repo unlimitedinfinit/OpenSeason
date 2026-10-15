@@ -54,6 +54,16 @@ fn tool_list() -> Value {
         tool("form_fill", "Auto-fill an official court PDF companion and JSON field map using case profile data.", json!({"pdf": {"type": "string"}, "path": path}), &["pdf", "path"]),
         tool("cloud_pull", "Pull matters, orders, and evidence from JustLegal Cloud (justlegal.me) into local folders.", json!({"case": {"type": "string"}, "root": {"type": "string"}}), &[]),
         tool("cloud_push", "Push local case exports and filings to JustLegal Cloud.", json!({"path": path}), &["path"]),
+        tool("motion_list", "List all motions and filings in a case docket.", json!({"path": path}), &["path"]),
+        tool("motion_create", "Add a new motion or filing to the case docket.", json!({"path": path, "title": {"type": "string"}, "kind": {"type": "string"}, "rule": {"type": "string"}, "text": {"type": "string"}}), &["path", "title"]),
+        tool("motion_export", "Export a specific motion from the case docket to Word and PDF.", json!({"path": path, "id": {"type": "string"}}), &["path", "id"]),
+        tool("service_cert", "Generate a court Certificate of Service PDF and plain text with auto-populated opposing parties.", json!({"path": path, "filing": {"type": "string"}, "method": {"type": "string"}, "date": {"type": "string"}}), &["path"]),
+        tool("service_order", "Generate a court Proposed Form of Order PDF and Word docx.", json!({"path": path, "title": {"type": "string"}, "relief": {"type": "string"}}), &["path"]),
+        tool("pdf_merge", "Merge multiple PDFs into one unified court submission PDF.", json!({"files": {"type": "array", "items": {"type": "string"}}, "out": {"type": "string"}}), &["files", "out"]),
+        tool("pdf_split", "Extract specific pages from a PDF.", json!({"pdf": {"type": "string"}, "pages": {"type": "string"}, "out": {"type": "string"}}), &["pdf", "pages", "out"]),
+        tool("pdf_rotate", "Rotate PDF pages by 90, 180, or 270 degrees.", json!({"pdf": {"type": "string"}, "degrees": {"type": "integer"}, "out": {"type": "string"}}), &["pdf", "degrees", "out"]),
+        tool("pdf_redact", "Scrub SSNs, phone numbers, or custom keywords from a PDF at the byte level.", json!({"pdf": {"type": "string"}, "words": {"type": "array", "items": {"type": "string"}}, "out": {"type": "string"}}), &["pdf", "out"]),
+        tool("sign_pdf", "Stamp court-compliant electronic signature block onto a PDF.", json!({"pdf": {"type": "string"}, "name": {"type": "string"}, "page": {"type": "integer"}, "x": {"type": "number"}, "y": {"type": "number"}, "out": {"type": "string"}}), &["pdf", "name"]),
     ])
 }
 
@@ -283,6 +293,132 @@ fn call_tool(name: &str, args: &Value) -> Result<Value, String> {
             let dir = std::path::PathBuf::from(s("path"));
             let report = crate::sync::cloud_push_case(&dir, &session)?;
             Ok(serde_json::to_value(report).unwrap())
+        }
+        "motion_list" => {
+            let p_str = s("path");
+            let profile = case_profile::load_case(std::path::Path::new(&p_str))?;
+            Ok(serde_json::to_value(profile.filings).unwrap())
+        }
+        "motion_create" => {
+            let p_str = s("path");
+            let dir = std::path::Path::new(&p_str);
+            let mut profile = case_profile::load_case(dir)?;
+            let now = chrono::Local::now().to_rfc3339();
+            let filing = case_profile::CaseFilingItem {
+                id: uuid::Uuid::new_v4().to_string(),
+                title: s("title"),
+                kind: if s("kind").is_empty() { "motion".into() } else { s("kind") },
+                rule: s("rule"),
+                status: "draft".into(),
+                user_text: s("text"),
+                relief_sought: String::new(),
+                created_at: now.clone(),
+                updated_at: now,
+            };
+            profile.filings.push(filing.clone());
+            case_profile::save_case(dir, &profile)?;
+            Ok(serde_json::to_value(filing).unwrap())
+        }
+        "motion_export" => {
+            let p_str = s("path");
+            let dir = std::path::Path::new(&p_str);
+            let profile = case_profile::load_case(dir)?;
+            let id = s("id");
+            let filing = profile.filings.iter().find(|f| f.id == id)
+                .ok_or_else(|| format!("Filing ID '{id}' not found in case."))?;
+            let paths = crate::documents::export_custom_filing(dir, &profile, &filing.title, &filing.user_text, None)?;
+            Ok(serde_json::to_value(paths).unwrap())
+        }
+        "service_cert" => {
+            let p_str = s("path");
+            let dir = std::path::Path::new(&p_str);
+            let profile = case_profile::load_case(dir)?;
+            let recipients: Vec<crate::service::ServiceRecipient> = profile
+                .caption
+                .appellees()
+                .into_iter()
+                .map(|p| crate::service::ServiceRecipient {
+                    name: p.name.clone(),
+                    role: p.role.clone(),
+                    address: p.address.clone(),
+                    email: p.email.clone(),
+                })
+                .collect();
+            let filing_t = if s("filing").is_empty() { "the accompanying papers".into() } else { s("filing") };
+            let method = if s("method").is_empty() { "eCourts / Electronic Filing System".into() } else { s("method") };
+            let params = crate::service::ServiceCertParams {
+                filing_title: filing_t,
+                service_date: s("date"),
+                method,
+                recipients,
+                signature_name: profile.filer.signature_name.clone(),
+            };
+            let result = crate::service::generate_certificate_of_service(dir, &profile, &params)?;
+            Ok(serde_json::to_value(result).unwrap())
+        }
+        "service_order" => {
+            let p_str = s("path");
+            let dir = std::path::Path::new(&p_str);
+            let profile = case_profile::load_case(dir)?;
+            let title = if s("title").is_empty() { "RELIEF REQUESTED".into() } else { s("title") };
+            let result = crate::service::generate_proposed_order(dir, &profile, &title, &s("relief"))?;
+            Ok(serde_json::to_value(result).unwrap())
+        }
+        "pdf_merge" => {
+            let files_arr = args.get("files").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+            let paths: Vec<std::path::PathBuf> = files_arr.iter().filter_map(|v| v.as_str()).map(std::path::PathBuf::from).collect();
+            let out = std::path::PathBuf::from(s("out"));
+            let result = crate::pdf_tools::merge_pdfs(&paths, &out)?;
+            Ok(serde_json::to_value(result).unwrap())
+        }
+        "pdf_split" => {
+            let pdf = std::path::PathBuf::from(s("pdf"));
+            let out = std::path::PathBuf::from(s("out"));
+            let pages_str = s("pages");
+            let mut page_list = Vec::new();
+            for part in pages_str.split(&[',', ' '][..]) {
+                let trimmed = part.trim();
+                if trimmed.is_empty() { continue; }
+                if let Some((s_str, e_str)) = trimmed.split_once('-') {
+                    if let (Ok(start), Ok(end)) = (s_str.trim().parse::<u32>(), e_str.trim().parse::<u32>()) {
+                        for p in start..=end { page_list.push(p); }
+                    }
+                } else if let Ok(num) = trimmed.parse::<u32>() {
+                    page_list.push(num);
+                }
+            }
+            let result = crate::pdf_tools::split_pdf(&pdf, &page_list, &out)?;
+            Ok(serde_json::to_value(result).unwrap())
+        }
+        "pdf_rotate" => {
+            let pdf = std::path::PathBuf::from(s("pdf"));
+            let out = std::path::PathBuf::from(s("out"));
+            let degrees = args.get("degrees").and_then(|v| v.as_i64()).unwrap_or(90);
+            let result = crate::pdf_tools::rotate_pdf(&pdf, degrees, None, &out)?;
+            Ok(serde_json::to_value(result).unwrap())
+        }
+        "pdf_redact" => {
+            let pdf = std::path::PathBuf::from(s("pdf"));
+            let out = std::path::PathBuf::from(s("out"));
+            let words_arr = args.get("words").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+            let words: Vec<String> = words_arr.iter().filter_map(|v| v.as_str().map(String::from)).collect();
+            let result = crate::pdf_tools::redact_pdf_text(&pdf, &words, &out)?;
+            Ok(serde_json::to_value(result).unwrap())
+        }
+        "sign_pdf" => {
+            let pdf = std::path::PathBuf::from(s("pdf"));
+            let name = s("name");
+            let page = args.get("page").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+            let x = args.get("x").and_then(|v| v.as_f64()).unwrap_or(72.0) as f32;
+            let y = args.get("y").and_then(|v| v.as_f64()).unwrap_or(100.0) as f32;
+            let out_str = s("out");
+            let out_p = if out_str.is_empty() {
+                pdf.with_file_name(format!("signed-{}", pdf.file_name().unwrap().to_string_lossy()))
+            } else {
+                std::path::PathBuf::from(out_str)
+            };
+            let result = crate::signature::stamp_pdf(&pdf, &name, page, x, y, &out_p)?;
+            Ok(serde_json::to_value(result).unwrap())
         }
         other => Err(format!(
             "Unknown tool '{other}'. Call playbook or packs_list. Known tools are listed by tools/list."

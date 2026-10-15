@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
@@ -759,6 +759,122 @@ pub fn check_transcripts_cmd(case_id: String) -> Result<crate::check::Transcript
     let profile = crate::case_profile::load_case(&dir)?;
     let user_draft = profile.notice_of_appeal.user_text.as_str();
     crate::check::check_transcripts(&dir, user_draft)
+}
+
+#[tauri::command]
+pub fn list_case_filings_cmd(case_id: String) -> Result<Vec<crate::case_profile::CaseFilingItem>, String> {
+    let dir = case_dir_from_id(&case_id)?;
+    let profile = case_profile::load_case(&dir)?;
+    Ok(profile.filings)
+}
+
+#[tauri::command]
+pub fn save_case_filing_cmd(case_id: String, mut filing: crate::case_profile::CaseFilingItem) -> Result<crate::case_profile::CaseFilingItem, String> {
+    let dir = case_dir_from_id(&case_id)?;
+    let mut profile = case_profile::load_case(&dir)?;
+    if filing.id.trim().is_empty() {
+        filing.id = uuid::Uuid::new_v4().to_string();
+    }
+    let now = chrono::Local::now().to_rfc3339();
+    if filing.created_at.is_empty() {
+        filing.created_at = now.clone();
+    }
+    filing.updated_at = now;
+
+    if let Some(pos) = profile.filings.iter().position(|f| f.id == filing.id) {
+        profile.filings[pos] = filing.clone();
+    } else {
+        profile.filings.push(filing.clone());
+    }
+    case_profile::save_case(&dir, &profile)?;
+    Ok(filing)
+}
+
+#[tauri::command]
+pub fn delete_case_filing_cmd(case_id: String, filing_id: String) -> Result<bool, String> {
+    let dir = case_dir_from_id(&case_id)?;
+    let mut profile = case_profile::load_case(&dir)?;
+    profile.filings.retain(|f| f.id != filing_id);
+    case_profile::save_case(&dir, &profile)?;
+    Ok(true)
+}
+
+#[tauri::command]
+pub fn export_case_filing_cmd(case_id: String, filing_id: String) -> Result<ExportPaths, String> {
+    let dir = case_dir_from_id(&case_id)?;
+    let profile = case_profile::load_case(&dir)?;
+    let filing = profile.filings.iter().find(|f| f.id == filing_id)
+        .ok_or_else(|| format!("Filing {filing_id} not found in case"))?;
+    crate::documents::export_custom_filing(&dir, &profile, &filing.title, &filing.user_text, None)
+}
+
+#[tauri::command]
+pub fn generate_certificate_of_service_cmd(
+    case_id: String,
+    params: crate::service::ServiceCertParams,
+) -> Result<crate::service::ServiceCertResult, String> {
+    let dir = case_dir_from_id(&case_id)?;
+    let profile = case_profile::load_case(&dir)?;
+    crate::service::generate_certificate_of_service(&dir, &profile, &params)
+}
+
+#[tauri::command]
+pub fn generate_proposed_order_cmd(
+    case_id: String,
+    motion_title: String,
+    relief: String,
+) -> Result<crate::service::ProposedOrderResult, String> {
+    let dir = case_dir_from_id(&case_id)?;
+    let profile = case_profile::load_case(&dir)?;
+    crate::service::generate_proposed_order(&dir, &profile, &motion_title, &relief)
+}
+
+#[tauri::command]
+pub fn pdf_merge_cmd(input_paths: Vec<String>, output_path: String) -> Result<crate::pdf_tools::PdfOperationResult, String> {
+    let paths: Vec<PathBuf> = input_paths.into_iter().map(PathBuf::from).collect();
+    crate::pdf_tools::merge_pdfs(&paths, Path::new(&output_path))
+}
+
+#[tauri::command]
+pub fn pdf_split_cmd(input_path: String, pages_to_keep: Vec<u32>, output_path: String) -> Result<crate::pdf_tools::PdfOperationResult, String> {
+    crate::pdf_tools::split_pdf(Path::new(&input_path), &pages_to_keep, Path::new(&output_path))
+}
+
+#[tauri::command]
+pub fn pdf_rotate_cmd(input_path: String, degrees: i64, page_numbers: Option<Vec<u32>>, output_path: String) -> Result<crate::pdf_tools::PdfOperationResult, String> {
+    crate::pdf_tools::rotate_pdf(Path::new(&input_path), degrees, page_numbers, Path::new(&output_path))
+}
+
+#[tauri::command]
+pub fn pdf_redact_cmd(input_path: String, custom_patterns: Vec<String>, output_path: String) -> Result<crate::pdf_tools::RedactOperationResult, String> {
+    crate::pdf_tools::redact_pdf_text(Path::new(&input_path), &custom_patterns, Path::new(&output_path))
+}
+
+#[tauri::command]
+pub fn get_signature_profile_cmd() -> Result<crate::signature::SignatureProfile, String> {
+    crate::signature::load_signature_profile()
+}
+
+#[tauri::command]
+pub fn save_signature_profile_cmd(profile: crate::signature::SignatureProfile) -> Result<bool, String> {
+    crate::signature::save_signature_profile(&profile)?;
+    Ok(true)
+}
+
+#[tauri::command]
+pub fn stamp_pdf_signature_cmd(
+    pdf_path: String,
+    signature_text: String,
+    page_number: u32,
+    x: f32,
+    y: f32,
+    output_path: Option<String>,
+) -> Result<crate::signature::SignatureStampResult, String> {
+    let in_p = Path::new(&pdf_path);
+    let out_p = output_path
+        .map(PathBuf::from)
+        .unwrap_or_else(|| in_p.with_file_name(format!("signed-{}", in_p.file_name().unwrap().to_string_lossy())));
+    crate::signature::stamp_pdf(in_p, &signature_text, page_number, x, y, &out_p)
 }
 
 #[cfg(test)]

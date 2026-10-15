@@ -81,6 +81,35 @@ enum Commands {
         #[command(subcommand)]
         action: FormCmd,
     },
+    /// Manage multiple motions and filings in the case docket
+    Motion {
+        #[command(subcommand)]
+        action: MotionCmd,
+    },
+    /// Generate court Certificate of Service and Proposed Form of Order
+    Service {
+        #[command(subcommand)]
+        action: ServiceCmd,
+    },
+    /// Offline local PDF power tools (merge, split, rotate, redact)
+    Pdf {
+        #[command(subcommand)]
+        action: PdfCmd,
+    },
+    /// Stamp court-compliant electronic signature block onto a PDF
+    Sign {
+        pdf: PathBuf,
+        #[arg(long)]
+        name: String,
+        #[arg(long, default_value = "0")]
+        page: u32,
+        #[arg(long, default_value = "72")]
+        x: f32,
+        #[arg(long, default_value = "100")]
+        y: f32,
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -285,6 +314,82 @@ enum FormCmd {
         case: PathBuf,
         #[arg(long)]
         out: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand)]
+enum MotionCmd {
+    List {
+        path: PathBuf,
+    },
+    Create {
+        path: PathBuf,
+        #[arg(long)]
+        title: String,
+        #[arg(long, default_value = "motion")]
+        kind: String,
+        #[arg(long, default_value = "")]
+        rule: String,
+        #[arg(long, default_value = "")]
+        text: String,
+    },
+    Export {
+        path: PathBuf,
+        #[arg(long)]
+        id: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum ServiceCmd {
+    Cert {
+        path: PathBuf,
+        #[arg(long, default_value = "the accompanying papers")]
+        filing: String,
+        #[arg(long, default_value = "eCourts / Electronic Filing System")]
+        method: String,
+        #[arg(long, default_value = "")]
+        date: String,
+    },
+    Order {
+        path: PathBuf,
+        #[arg(long, default_value = "RELIEF REQUESTED")]
+        title: String,
+        #[arg(long, default_value = "")]
+        relief: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum PdfCmd {
+    Merge {
+        #[arg(long)]
+        out: PathBuf,
+        files: Vec<PathBuf>,
+    },
+    Split {
+        #[arg(long)]
+        pdf: PathBuf,
+        #[arg(long)]
+        pages: String,
+        #[arg(long)]
+        out: PathBuf,
+    },
+    Rotate {
+        #[arg(long)]
+        pdf: PathBuf,
+        #[arg(long, default_value = "90")]
+        degrees: i64,
+        #[arg(long)]
+        out: PathBuf,
+    },
+    Redact {
+        #[arg(long)]
+        pdf: PathBuf,
+        #[arg(long)]
+        words: Vec<String>,
+        #[arg(long)]
+        out: PathBuf,
     },
 }
 
@@ -1178,5 +1283,161 @@ fn run(cli: Cli) -> Result<(), String> {
                 Ok(())
             }
         },
+        Commands::Motion { action } => match action {
+            MotionCmd::List { path } => {
+                let profile = case_profile::load_case(&path)?;
+                if json {
+                    emit(true, &profile.filings, vec![]);
+                } else {
+                    println!("Case has {} motion/filing draft(s):", profile.filings.len());
+                    for f in &profile.filings {
+                        println!("  [{}] {} ({}) - {}", f.id, f.title, f.kind, f.status);
+                    }
+                }
+                Ok(())
+            }
+            MotionCmd::Create { path, title, kind, rule, text } => {
+                let mut profile = case_profile::load_case(&path)?;
+                let now = chrono::Local::now().to_rfc3339();
+                let filing = case_profile::CaseFilingItem {
+                    id: uuid::Uuid::new_v4().to_string(),
+                    title,
+                    kind,
+                    rule,
+                    status: "draft".to_string(),
+                    user_text: text,
+                    relief_sought: String::new(),
+                    created_at: now.clone(),
+                    updated_at: now,
+                };
+                profile.filings.push(filing.clone());
+                case_profile::save_case(&path, &profile)?;
+                if json {
+                    emit(true, &filing, vec![]);
+                } else {
+                    println!("Created filing '{}' (ID: {})", filing.title, filing.id);
+                }
+                Ok(())
+            }
+            MotionCmd::Export { path, id } => {
+                let profile = case_profile::load_case(&path)?;
+                let filing = profile.filings.iter().find(|f| f.id == id)
+                    .ok_or_else(|| format!("Filing ID '{id}' not found in case."))?;
+                let paths = open_season_lib::documents::export_custom_filing(&path, &profile, &filing.title, &filing.user_text, None)?;
+                if json {
+                    emit(true, &paths, vec![]);
+                } else {
+                    println!("Exported filing '{}':", filing.title);
+                    println!("  Word: {}", paths.docx.display());
+                    println!("  PDF:  {}", paths.pdf.display());
+                }
+                Ok(())
+            }
+        },
+        Commands::Service { action } => match action {
+            ServiceCmd::Cert { path, filing, method, date } => {
+                let profile = case_profile::load_case(&path)?;
+                let recipients: Vec<open_season_lib::service::ServiceRecipient> = profile
+                    .caption
+                    .appellees()
+                    .into_iter()
+                    .map(|p| open_season_lib::service::ServiceRecipient {
+                        name: p.name.clone(),
+                        role: p.role.clone(),
+                        address: p.address.clone(),
+                        email: p.email.clone(),
+                    })
+                    .collect();
+                let params = open_season_lib::service::ServiceCertParams {
+                    filing_title: filing,
+                    service_date: date,
+                    method,
+                    recipients,
+                    signature_name: profile.filer.signature_name.clone(),
+                };
+                let result = open_season_lib::service::generate_certificate_of_service(&path, &profile, &params)?;
+                if json {
+                    emit(true, &result, vec![]);
+                } else {
+                    println!("{}", result.notice);
+                    println!("Certificate of Service: {}", result.cert_pdf);
+                }
+                Ok(())
+            }
+            ServiceCmd::Order { path, title, relief } => {
+                let profile = case_profile::load_case(&path)?;
+                let result = open_season_lib::service::generate_proposed_order(&path, &profile, &title, &relief)?;
+                if json {
+                    emit(true, &result, vec![]);
+                } else {
+                    println!("{}", result.notice);
+                    println!("Proposed Order: {}", result.order_pdf);
+                }
+                Ok(())
+            }
+        },
+        Commands::Pdf { action } => match action {
+            PdfCmd::Merge { out, files } => {
+                let result = open_season_lib::pdf_tools::merge_pdfs(&files, &out)?;
+                if json {
+                    emit(true, &result, vec![]);
+                } else {
+                    println!("{}", result.message);
+                }
+                Ok(())
+            }
+            PdfCmd::Split { pdf, pages, out } => {
+                let mut page_list = Vec::new();
+                for part in pages.split(&[',', ' '][..]) {
+                    let trimmed = part.trim();
+                    if trimmed.is_empty() { continue; }
+                    if let Some((s_str, e_str)) = trimmed.split_once('-') {
+                        if let (Ok(s), Ok(e)) = (s_str.trim().parse::<u32>(), e_str.trim().parse::<u32>()) {
+                            for p in s..=e { page_list.push(p); }
+                        }
+                    } else if let Ok(num) = trimmed.parse::<u32>() {
+                        page_list.push(num);
+                    }
+                }
+                let result = open_season_lib::pdf_tools::split_pdf(&pdf, &page_list, &out)?;
+                if json {
+                    emit(true, &result, vec![]);
+                } else {
+                    println!("{}", result.message);
+                }
+                Ok(())
+            }
+            PdfCmd::Rotate { pdf, degrees, out } => {
+                let result = open_season_lib::pdf_tools::rotate_pdf(&pdf, degrees, None, &out)?;
+                if json {
+                    emit(true, &result, vec![]);
+                } else {
+                    println!("{}", result.message);
+                }
+                Ok(())
+            }
+            PdfCmd::Redact { pdf, words, out } => {
+                let result = open_season_lib::pdf_tools::redact_pdf_text(&pdf, &words, &out)?;
+                if json {
+                    emit(true, &result, vec![]);
+                } else {
+                    println!("{}", result.message);
+                }
+                Ok(())
+            }
+        },
+        Commands::Sign { pdf, name, page, x, y, out } => {
+            let in_p = &pdf;
+            let out_p = out.unwrap_or_else(|| {
+                in_p.with_file_name(format!("signed-{}", in_p.file_name().unwrap().to_string_lossy()))
+            });
+            let result = open_season_lib::signature::stamp_pdf(in_p, &name, page, x, y, &out_p)?;
+            if json {
+                emit(true, &result, vec![]);
+            } else {
+                println!("{}", result.message);
+            }
+            Ok(())
+        }
     }
 }

@@ -28,6 +28,9 @@ pub mod packet;
 pub mod forms;
 pub mod guide;
 pub mod help_links;
+pub mod service;
+pub mod pdf_tools;
+pub mod signature;
 
 use crypto::AppState;
 
@@ -112,7 +115,20 @@ pub fn run() {
             case_commands::export_exhibit_packet_cmd,
             case_commands::inspect_court_form_cmd,
             case_commands::fill_court_form_cmd,
-            case_commands::check_transcripts_cmd
+            case_commands::check_transcripts_cmd,
+            case_commands::list_case_filings_cmd,
+            case_commands::save_case_filing_cmd,
+            case_commands::delete_case_filing_cmd,
+            case_commands::export_case_filing_cmd,
+            case_commands::generate_certificate_of_service_cmd,
+            case_commands::generate_proposed_order_cmd,
+            case_commands::pdf_merge_cmd,
+            case_commands::pdf_split_cmd,
+            case_commands::pdf_rotate_cmd,
+            case_commands::pdf_redact_cmd,
+            case_commands::get_signature_profile_cmd,
+            case_commands::save_signature_profile_cmd,
+            case_commands::stamp_pdf_signature_cmd
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

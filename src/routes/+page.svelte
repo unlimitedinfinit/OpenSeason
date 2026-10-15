@@ -5,6 +5,8 @@
   import ReviewNotice from "$lib/components/ReviewNotice.svelte";
   import GettingStarted from "$lib/components/GettingStarted.svelte";
   import CloudSyncModal from "$lib/components/CloudSyncModal.svelte";
+  import PdfToolsModal from "$lib/components/PdfToolsModal.svelte";
+  import SignatureStudioModal from "$lib/components/SignatureStudioModal.svelte";
   import { ipc, runningInTauri } from "$lib/ipc";
   import { session } from "$lib/session.svelte";
   import type { WorkspaceCase, CloudSession } from "$lib/types/case";
@@ -15,6 +17,8 @@
   let actionError = $state("");
   let status = $state("");
   let showCloudModal = $state(false);
+  let showPdfToolsModal = $state(false);
+  let showSignatureModal = $state(false);
   let cloudSession = $state<CloudSession | null>(null);
 
   onMount(() => {
@@ -108,6 +112,18 @@
     <div class="text-right space-y-2 shrink-0">
       <div class="flex items-center justify-end gap-2">
         <button
+          onclick={() => showPdfToolsModal = true}
+          class="text-xs border border-blue-500/40 text-blue-300 hover:bg-blue-950/30 px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors font-medium"
+        >
+          <span>🛠️ PDF Tools</span>
+        </button>
+        <button
+          onclick={() => showSignatureModal = true}
+          class="text-xs border border-emerald-500/40 text-emerald-300 hover:bg-emerald-950/30 px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors font-medium"
+        >
+          <span>✍️ Signature</span>
+        </button>
+        <button
           onclick={() => showCloudModal = true}
           class="text-xs border {cloudSession ? 'border-emerald-500/40 text-emerald-300 hover:bg-emerald-950/30' : 'border-indigo-500/40 text-indigo-300 hover:bg-indigo-950/30'} px-3 py-1.5 rounded-md flex items-center gap-1.5 transition-colors"
         >
@@ -134,6 +150,14 @@
   <section class="space-y-3">
     <h2 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">What do you need?</h2>
     <div class="grid gap-2 md:grid-cols-2">
+      <button onclick={() => showPdfToolsModal = true} class="text-left border border-blue-500/40 rounded-md p-3 hover:border-blue-400 bg-blue-950/15 transition-all">
+        <p class="font-medium flex items-center gap-1.5"><span class="text-blue-400">🛠️</span> <span>Offline PDF Power Station</span></p>
+        <p class="text-xs text-muted-foreground">Merge multiple PDFs, split/extract pages, rotate orientation, and scrub SSNs & PII at byte-level. 100% private, zero cloud.</p>
+      </button>
+      <button onclick={() => showSignatureModal = true} class="text-left border border-emerald-500/40 rounded-md p-3 hover:border-emerald-400 bg-emerald-950/15 transition-all">
+        <p class="font-medium flex items-center gap-1.5"><span class="text-emerald-400">✍️</span> <span>Legal Signature & Stamp Studio</span></p>
+        <p class="text-xs text-muted-foreground">Design your electronic `/s/` signature, formal script, or hand-drawn stylus signoff. 1-click stamp onto court PDFs.</p>
+      </button>
       <button onclick={() => goto("/guide")} class="text-left border border-indigo-500/40 rounded-md p-3 hover:border-indigo-400">
         <p class="font-medium">What do I need to file?</p>
         <p class="text-xs text-muted-foreground">Answer a few plain-language questions. The pack lists the forms and explains each step. Not legal advice.</p>
@@ -300,5 +324,15 @@
     bind:open={showCloudModal}
     onclose={() => showCloudModal = false}
     onsynced={() => { load(); checkCloud(); }}
+  />
+
+  <PdfToolsModal
+    bind:open={showPdfToolsModal}
+    onclose={() => showPdfToolsModal = false}
+  />
+
+  <SignatureStudioModal
+    bind:open={showSignatureModal}
+    onclose={() => showSignatureModal = false}
   />
 </main>

@@ -410,6 +410,30 @@ async function mockInvoke<T>(cmd: string, args: Record<string, unknown> = {}): P
     case "get_hunt_evidence":
     case "get_complaint_sections":
       return [] as T;
+    case "list_case_filings_cmd":
+      return [] as T;
+    case "save_case_filing_cmd":
+      return args.filing as T;
+    case "delete_case_filing_cmd":
+      return true as T;
+    case "export_case_filing_cmd":
+      return { docx: "/mock/exports/filing.docx", pdf: "/mock/exports/filing.pdf" } as T;
+    case "generate_certificate_of_service_cmd":
+      return { ok: true, never_files: true, notice: "Mock cert", cert_pdf: "/mock/exports/cert.pdf", cert_text: "/mock/exports/cert.txt" } as T;
+    case "generate_proposed_order_cmd":
+      return { ok: true, never_files: true, notice: "Mock order", order_pdf: "/mock/exports/order.pdf", order_docx: "/mock/exports/order.docx" } as T;
+    case "pdf_merge_cmd":
+    case "pdf_split_cmd":
+    case "pdf_rotate_cmd":
+      return { ok: true, never_files: true, operation: cmd, output_path: "/mock/exports/output.pdf", page_count: 1, message: "Mock success" } as T;
+    case "pdf_redact_cmd":
+      return { ok: true, never_files: true, output_path: "/mock/exports/redacted.pdf", redactions_count: 3, message: "Mock redacted 3 items" } as T;
+    case "get_signature_profile_cmd":
+      return { full_name: "Mock User", initials: "MU", style: "script_formal", signature_data: null, court_s_block: "/s/ Mock User", updated_at: new Date().toISOString() } as T;
+    case "save_signature_profile_cmd":
+      return true as T;
+    case "stamp_pdf_signature_cmd":
+      return { ok: true, never_files: true, output_path: "/mock/exports/stamped.pdf", page_number: 1, stamped_text: "/s/ Mock", message: "Mock stamp applied" } as T;
     default:
       throw `Unknown command in browser preview: ${cmd}`;
   }

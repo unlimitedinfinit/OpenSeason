@@ -26,6 +26,10 @@ Agents drive the same engine through `openseason --json` or `openseason mcp`. Se
 - **Bates-Stamped Exhibit Packet Assembler**: One-click generation of unified Bates-stamped PDFs with custom prefixes (e.g. `ABRAMS-000001`) and automated Typst Table of Exhibits with SHA-256 integrity hashes.
 - **Official Court Form (AcroForm) Filler**: Inspects PDF form fields and auto-maps `case.json` values into official court forms (e.g. Colorado JDF 205 fee waiver and JDF 1911 direct appeal), exporting filled PDFs and audit JSON.
 - **Transcript Grounding & Indexer**: Indexes depositions and hearing transcripts line-by-line (`TRANSCRIPTS-AND-RECORD.md`) and cross-references assertions against the official record.
+- **Multi-Motion & Multi-Filing Docket**: Manage multiple concurrent motions, stays, enlargements, and responses in a single case docket without overwriting drafts. 1-click Word & PDF export.
+- **Certificate of Service & Proposed Order Generator**: Auto-fill opposing parties and generate court-mandated Certificates of Service (with multiple service methods) and judge-ready Proposed Forms of Order.
+- **Offline "Zero-Leakage" PDF Power Station**: 100% private, pure-Rust PDF tools: Merge multiple court files, Split & extract page ranges, Rotate orientations, and Byte-level scrub SSNs, DOBs, phone numbers, and custom names.
+- **Visual Legal Signature & Stamp Studio**: Electronic `/s/` formatting, formal script styles, and HTML5 stylus/mouse drawing pad for direct PDF stamping without cloud vendors.
 - **Ready-to-Run Standalone Binaries**: Pre-compiled `OpenSeason.exe` (desktop GUI) and `openseason-cli.exe` (CLI/MCP server) located directly in the root repository.
 - **One-Click Launch Scripts**: `run.ps1` (PowerShell) and `run.bat` (batch file) for immediate launching.
 

@@ -76,6 +76,19 @@ export interface CaseProfile {
   court_markdown?: string;
   cloud_matter_id?: string | null;
   cloud_synced_at?: string | null;
+  filings?: CaseFilingItem[];
+}
+
+export interface CaseFilingItem {
+  id: string;
+  title: string;
+  kind: string;
+  rule: string;
+  status: string;
+  user_text: string;
+  relief_sought: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface WorkspaceCase {
@@ -383,4 +396,71 @@ export interface TranscriptReport {
   citations: TranscriptCitation[];
   issues: ValidationIssue[];
 }
+
+export interface ServiceRecipient {
+  name: string;
+  role: string;
+  address: string;
+  email: string;
+}
+
+export interface ServiceCertParams {
+  filing_title: string;
+  service_date: string;
+  method: string;
+  recipients: ServiceRecipient[];
+  signature_name: string;
+}
+
+export interface ServiceCertResult {
+  ok: boolean;
+  never_files: boolean;
+  notice: string;
+  cert_pdf: string;
+  cert_text: string;
+}
+
+export interface ProposedOrderResult {
+  ok: boolean;
+  never_files: boolean;
+  notice: string;
+  order_pdf: string;
+  order_docx: string;
+}
+
+export interface PdfOperationResult {
+  ok: boolean;
+  never_files: boolean;
+  operation: string;
+  output_path: string;
+  page_count: number;
+  message: string;
+}
+
+export interface RedactOperationResult {
+  ok: boolean;
+  never_files: boolean;
+  output_path: string;
+  redactions_count: number;
+  message: string;
+}
+
+export interface SignatureProfile {
+  full_name: string;
+  initials: string;
+  style: string;
+  signature_data?: string | null;
+  court_s_block: string;
+  updated_at: string;
+}
+
+export interface SignatureStampResult {
+  ok: boolean;
+  never_files: boolean;
+  output_path: string;
+  page_number: number;
+  stamped_text: string;
+  message: string;
+}
+
 

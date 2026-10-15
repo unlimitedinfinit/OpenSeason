@@ -121,3 +121,30 @@ Documents/JustLegal/Cases/{caseId}/
 1. **Preserve Determinism:** Never introduce LLM calls into the core Rust compilation path. All layout math, Typst typesetting, and AcroForm parsing must remain deterministic and reproducible.
 2. **Strict Invariant Defense:** Never remove the `NEVER_FILE_NOTICE` or `REVIEW_NOTICE`. Never allow a sealed vault to sync to the network.
 3. **Additive-Only Extensions:** When adding new form packs or state court rules, add them as JSON data packs under `templates/court-rules/` or packs registries rather than hardcoded logic.
+
+---
+
+## 6. The Four Privacy-First Legal Workbench Pillars
+
+OpenSeason includes 4 core workbench capabilities accessible through both the Svelte GUI and the headless Rust CLI/MCP:
+
+### Pillar 1: Multi-Motion & Multi-Filing Docket
+- **Problem Solved:** Real litigation requires multiple concurrent motions (e.g. Motion for Reconsideration, Motion for Stay Pending Appeal, Motion to Enlarge Time, Opposition Briefs) without clobbering existing drafts.
+- **Implementation:** `filings: Vec<CaseFilingItem>` in `case.json`. Complete with category tags (`🔵 motion`, `🟣 reconsideration`, `🟡 stay`, `🟢 enlarge`, `🟠 response`, `🔴 brief`), rule references, relief descriptions, drafting workbench, and 1-click Word/PDF export (`openseason motion export`).
+
+### Pillar 2: Certificate of Service & Proposed Order Generator
+- **Problem Solved:** Courts mandate a formal Certificate of Service (proof of who was served, on what date, and by what method) and a Proposed Form of Order with judicial decretal language.
+- **Implementation:** Auto-detects opposing counsel and parties from `caption`, formats service method (electronic court portal, certified mail, direct email, hand delivery), and compiles formal court-formatted Certificates of Service and judge-ready Proposed Orders (`openseason service cert` and `openseason service order`).
+
+### Pillar 3: Offline "Zero-Leakage" PDF Power Station
+- **Problem Solved:** Litigants are forced to use third-party web tools (e.g. iLovePDF, Smallpdf) that upload sensitive legal pleadings to remote servers.
+- **Implementation:** Pure-Rust, 100% offline document processor using `lopdf`:
+  - **Merge:** Stitches multiple pleadings, orders, and exhibits into a single court submission PDF.
+  - **Split & Extract:** Extracts specific page ranges (e.g. `1-3, 5-8`) into a clean PDF.
+  - **Rotate:** Reorients sideways scanned filings by 90°, 180°, or 270° clockwise.
+  - **Byte Redaction:** Pure stream scrubbing for SSNs (`XXX-XX-XXXX`), phone numbers, dates of birth, and custom sensitive names.
+
+### Pillar 4: Visual Legal Signature & Stamp Studio
+- **Problem Solved:** Applying court-compliant electronic `/s/` signatures or visual cursive/stylus stamps without cloud electronic signature vendors.
+- **Implementation:** Local signature profile store with interactive drawing pad, formal cursive styles, and 1-click AcroForm/PDF placement (`openseason sign stamp`).
+

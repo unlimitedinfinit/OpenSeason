@@ -145,6 +145,28 @@ pub struct NoticeOfAppealDraft {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct CaseFilingItem {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub rule: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub user_text: String,
+    #[serde(default)]
+    pub relief_sought: String,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct PleadingDraft {
     #[serde(default)]
     pub title: String,
@@ -215,6 +237,8 @@ pub struct CaseProfile {
     pub cloud_matter_id: Option<String>,
     #[serde(default)]
     pub cloud_synced_at: Option<String>,
+    #[serde(default)]
+    pub filings: Vec<CaseFilingItem>,
 }
 
 fn default_schema_version() -> u32 {
@@ -265,6 +289,7 @@ impl CaseProfile {
             court_markdown: String::new(),
             cloud_matter_id: None,
             cloud_synced_at: None,
+            filings: Vec::new(),
         }
     }
 
@@ -828,6 +853,7 @@ pub fn sample_appeal_profile() -> CaseProfile {
         court_markdown: String::new(),
         cloud_matter_id: None,
         cloud_synced_at: None,
+        filings: Vec::new(),
     }
 }
 

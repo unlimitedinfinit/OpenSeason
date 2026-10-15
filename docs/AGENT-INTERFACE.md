@@ -91,12 +91,26 @@ Equivalent without npm: `cargo run --manifest-path src-tauri/Cargo.toml --bin op
 | `cloud pull [--case CASE_ID]` | Pull cloud matters and download associated orders, filings, and evidence |
 | `cloud push DIR` | Push local case profile and files to JustLegal Cloud (airgapped cases refused) |
 | `cloud logout` | Clear local session tokens |
+| `motion list DIR` | List all independent motions, stays, and pleadings on the case docket |
+| `motion create DIR --title TEXT [--kind KIND] [--rule RULE] [--text TEXT] [--relief TEXT]` | Add or update a motion entry on the case docket |
+| `motion export DIR --id ID` | One-click compile an individual motion to Word (.docx) and PDF |
+| `service cert DIR --title TEXT [--date DATE] [--method METHOD] [--signer NAME] [--recipient "Name|Role|Address|Email"]` | Generate court-mandated Certificate of Service (PDF + text audit) |
+| `service order DIR --motion TEXT [--relief TEXT]` | Generate standard judicial Proposed Form of Order (PDF + Word DOCX) |
+| `pdf merge --inputs FILE1 FILE2... --out OUT` | 100% offline pure-Rust PDF combiner. Zero cloud leakage |
+| `pdf split --in FILE --pages "1-3,5" --out OUT` | Extract specific pages into a clean court PDF |
+| `pdf rotate --in FILE --degrees 90 [--pages "1,3"] --out OUT` | Reorient scanned court documents (90°, 180°, 270° clockwise) |
+| `pdf redact --in FILE [--ssn] [--phone] [--dob] [--pattern REGEX] --out OUT` | Scrub sensitive identifiers and PII from PDF byte streams |
+| `sign stamp --in FILE --text TEXT [--page N] [--x X] [--y Y] [--out OUT]` | Stamp electronic `/s/` or signature block onto specified PDF page |
 | `mcp` | Stdio MCP server (same tools) |
 | `sync DIR --action backup` | Stub. Standard: `not_implemented`. Confidential: refused |
 
 ## MCP (stdio)
 
 `openseason mcp` speaks JSON-RPC 2.0 with `Content-Length` framing. Tools include:
+- `motion_list`, `motion_create`, `motion_export`: Autonomous multi-motion docket drafting & compilation.
+- `service_cert` & `service_order`: Court-mandated proof of service and judge-ready proposed order generation.
+- `pdf_merge`, `pdf_split`, `pdf_rotate`, `pdf_redact`: Local airgapped PDF power manipulation without cloud surveillance.
+- `sign_pdf`: Automated AcroForm and PDF electronic signature placement.
 - `check_preflight`: Run comprehensive court readiness pre-flight checklist.
 - `check_transcripts`: Index transcripts and cross-reference assertions against record lines.
 - `export_exhibit_packet`: Generate Bates-stamped exhibit packet and Table of Exhibits.
