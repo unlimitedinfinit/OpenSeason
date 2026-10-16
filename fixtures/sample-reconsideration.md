@@ -1,12 +1,19 @@
 ---
 court: Superior Court of New Jersey, Appellate Division
-county_or_district: Sample vicinage
+court_address: Richard J. Hughes Justice Complex, 25 W. Market Street | P.O. Box 006, Trenton, NJ 08625-0006
 plaintiff: Jordan Example
 plaintiff_label: Appellant
 defendant: Sample County Clerk
 defendant_label: Respondent
 case_no: A-01000-24
+trial_court: Superior Court of New Jersey, Law Division, Sample County
+trial_docket: L-01000-24
 doc_title: Motion for reconsideration
+governing_state: NJ
+caption_layout: boxed
+filer_email: jordan.example@example.test
+filer_phone: 555-0100
+filer_address: 100 Sample Street | Example City, ST 00000
 ---
 
 # Preliminary statement
@@ -23,8 +30,10 @@ Jordan Example
 Appellant, proceeding without an attorney
 100 Sample Street
 Example City, ST 00000
+jordan.example@example.test
+555-0100
 :::
 
 ::: certificate
-I will serve a copy of this paper myself. This software did not serve anyone.
+I certify that on October 16, 2026 I served a copy of this motion on Sample County Clerk by electronic mail.
 :::

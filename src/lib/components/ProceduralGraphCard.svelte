@@ -149,12 +149,12 @@
 <section class="graph-card">
   <div class="graph-header">
     <div>
-      <span class="eyebrow">🧭 PREDICTIVE PROCEDURAL STATE GRAPH & ESCALATION ENGINE</span>
-      <h3>"If This Happens, What Are My Next Moves?"</h3>
+      <span class="eyebrow">Next steps</span>
+      <h3>What can come next in this case</h3>
     </div>
     <div class="header-actions">
-      <button type="button" class="btn-wizard" onclick={onOpenWizard}>
-        🧙 Launch Guided Intake Wizard
+      <button type="button" class="btn-wizard" onclick={onOpenWizard} aria-label="Open guided intake">
+        Guided intake
       </button>
       <div class="service-pill">
         <span>Service:</span>
@@ -163,14 +163,14 @@
           class:active={(profile.service_method || "electronic") !== "mail"}
           onclick={() => toggleMailService("electronic")}
         >
-          ⚡ Electronic / Personal (+0d)
+          Electronic / personal (+0 days)
         </button>
         <button
           type="button"
           class:active={profile.service_method === "mail"}
           onclick={() => toggleMailService("mail")}
         >
-          📬 Mail (+3d Rule)
+          Mail (+3 days)
         </button>
       </div>
     </div>
@@ -178,7 +178,7 @@
 
   <!-- Quick Event Logger to drive the Procedural Graph -->
   <div class="event-bar">
-    <span class="event-label">⚡ Log Trigger Event:</span>
+    <span class="event-label">Log the order date</span>
     <select bind:value={quickEventTitle}>
       <option value="Order Denying Motion">Order Denying Motion / Judgment Entered</option>
       <option value="Motion for Reconsideration Filed">Motion for Reconsideration Filed (Triggers Tolling)</option>
@@ -188,7 +188,7 @@
     </select>
     <input type="date" bind:value={quickEventDate} />
     <button type="button" class="btn-log" disabled={busy} onclick={logTriggerEvent}>
-      + Log & Compute Branches
+      Save date and compute deadlines
     </button>
   </div>
 
@@ -209,11 +209,11 @@
             <span class="rule-badge">{b.rule_citation}</span>
             <span class="clock-badge" class:pause={b.clock_interaction === "pause_remaining"}>
               {#if b.clock_interaction === "pause_remaining"}
-                ⏸️ NJ Pause/Toll Clock
+                NJ pause remaining days
               {:else if b.clock_interaction === "reset_full"}
-                🔄 CO/Fed Full Clock Reset
+                CO/Fed full clock reset
               {:else}
-                ⏱️ {b.base_days}d {b.mail_offset_days > 0 ? `+ ${b.mail_offset_days}d mail` : ""}
+                {b.base_days} days{b.mail_offset_days > 0 ? ` + ${b.mail_offset_days} mail` : ""}
               {/if}
             </span>
           </div>
@@ -224,17 +224,23 @@
           <div class="deadline-row">
             {#if b.status === "paused_tolled"}
               <span class="due-pill tolled">
-                ⏸️ PAUSED ({b.days_remaining_after_toll ?? "?"} days remaining after tolling motion is decided)
+                Paused ({b.days_remaining_after_toll ?? "?"} days remaining after the tolling motion is decided)
               </span>
-            {:else if b.computed_deadline}
+            {:else if b.status === "needs_trigger_date" || !b.computed_deadline}
+              <span class="due-pill neutral">Enter the order date to compute this deadline</span>
+            {:else}
               <span class="due-pill" class:urgent={(b.days_until_due ?? 99) <= 7}>
-                📅 Due: <strong>{b.computed_deadline}</strong>
+                Due <strong>{b.computed_deadline}</strong>
                 {#if b.days_until_due !== null && b.days_until_due !== undefined}
-                  ({b.days_until_due >= 0 ? `${b.days_until_due}d left` : `${Math.abs(b.days_until_due)}d ago`})
+                  ({b.days_until_due >= 0 ? `${b.days_until_due} days left` : `${Math.abs(b.days_until_due)} days past`})
                 {/if}
               </span>
-            {:else}
-              <span class="due-pill neutral">📋 Ready when triggered</span>
+            {/if}
+            {#if b.math}
+              <p class="basis">{b.math}</p>
+            {/if}
+            {#if b.unverified && b.computed_deadline}
+              <p class="unverified">unverified, check the order and rule</p>
             {/if}
           </div>
 
@@ -245,9 +251,9 @@
             onclick={() => initializeBranchFiling(b)}
           >
             {#if b.escalation_target}
-              🚀 1-Click Escalate & Carry Over Record →
+              Start the next-court packet (copies the record)
             {:else}
-              📝 1-Click Initialize "{b.title}" Packet
+              Start "{b.title}"
             {/if}
           </button>
         </article>
@@ -257,21 +263,21 @@
 
   <!-- Cross-Venue Escalation Bar -->
   <div class="escalation-bar">
-    <span class="esc-label">🪜 Cross-Venue Escalation (Copies Lower Record to New Appendix):</span>
+    <span class="esc-label">Open a new folder for a later stage (copies the record; does not file):</span>
     <div class="esc-buttons">
       {#if (profile.matter_tier || "litigation") === "administrative"}
         <button type="button" disabled={busy} onclick={() => escalateMatter("trial_lawsuit")}>
-          ⚖️ Graduate Pre-Suit Notice → Tier 3 Civil Lawsuit
+          Pre-suit notice to a civil complaint
         </button>
       {/if}
       <button type="button" disabled={busy} onclick={() => escalateMatter("appellate_appeal")}>
-        🏛️ Escalate Trial → Appellate Appeal
+        Trial to appeal
       </button>
       <button type="button" disabled={busy} onclick={() => escalateMatter("mandamus")}>
-        ⚡ Escalate → Mandamus / C.A.R. 21 / Prerogative Writ
+        Mandamus / C.A.R. 21
       </button>
       <button type="button" disabled={busy} onclick={() => escalateMatter("scotus_cert")}>
-        🦅 Escalate → U.S. Supreme Court Certiorari
+        U.S. Supreme Court certiorari
       </button>
     </div>
   </div>
@@ -286,8 +292,9 @@
 
 <style>
   .graph-card {
-    background: linear-gradient(180deg, #fcfaf4 0%, #f5efe2 100%);
-    border: 2px solid #2c3540;
+    background: hsl(var(--card));
+    color: hsl(var(--card-foreground));
+    border: 1px solid hsl(var(--border));
     border-radius: 10px;
     padding: 1.1rem 1.25rem;
     margin-bottom: 1.25rem;
@@ -452,13 +459,19 @@
     font-size: 0.78rem;
     padding: 0.25rem 0.6rem;
     border-radius: 6px;
-    background: #e6f6ed;
-    color: #165036;
+    background: rgba(251, 191, 36, 0.15);
+    color: #fbbf24;
   }
   .due-pill.urgent {
-    background: #fee2e2;
-    color: #991b1b;
+    background: rgba(248, 113, 113, 0.15);
+    color: #f87171;
   }
+  .basis, .unverified {
+    font-size: 0.72rem;
+    color: hsl(var(--muted-foreground));
+    margin: 0.35rem 0 0;
+  }
+  .unverified { color: #fbbf24; }
   .due-pill.tolled {
     background: #fef3c7;
     color: #92400e;

@@ -66,6 +66,11 @@ enum Commands {
     },
     /// MCP stdio server (same engine as the CLI)
     Mcp,
+    /// Agent contract: tool list, MCP launch, starter prompt
+    Agent {
+        #[command(subcommand)]
+        action: AgentCmd,
+    },
     Sync {
         path: PathBuf,
         #[arg(long, default_value = "backup")]
@@ -176,6 +181,16 @@ enum CaseCmd {
         #[arg(long, default_value = "lucille")]
         template: String,
     },
+    /// Copy a folder of drafts/notes/orders into a case. Never moves originals. Does not auto-commit guesses.
+    ImportFolder {
+        /// Destination case folder (created if missing)
+        path: PathBuf,
+        /// Source folder of drafts, notes, and orders
+        #[arg(long = "from")]
+        from: PathBuf,
+        #[arg(long, default_value = "")]
+        title: String,
+    },
     /// Consolidated case context bundle (profile + venue + next-steps + intake + exhibits)
     Context {
         path: PathBuf,
@@ -200,6 +215,12 @@ enum DraftCmd {
         path: PathBuf,
         #[arg(long)]
         md: PathBuf,
+    },
+    /// Preview a Markdown draft as a court caption + body. Does not write files.
+    Preview {
+        path: Option<PathBuf>,
+        #[arg(long)]
+        md: Option<PathBuf>,
     },
     Sections {
         path: PathBuf,
@@ -399,16 +420,20 @@ enum MotionCmd {
 enum ServiceCmd {
     Cert {
         path: PathBuf,
-        #[arg(long, default_value = "the accompanying papers")]
+        #[arg(long, default_value = "the accompanying papers", alias = "title")]
         filing: String,
         #[arg(long, default_value = "eCourts / Electronic Filing System")]
         method: String,
         #[arg(long, default_value = "")]
         date: String,
+        #[arg(long, default_value = "")]
+        signer: String,
+        #[arg(long = "recipient", action = clap::ArgAction::Append)]
+        recipients: Vec<String>,
     },
     Order {
         path: PathBuf,
-        #[arg(long, default_value = "RELIEF REQUESTED")]
+        #[arg(long, default_value = "RELIEF REQUESTED", alias = "motion")]
         title: String,
         #[arg(long, default_value = "")]
         relief: String,
@@ -527,8 +552,37 @@ enum DocsCmd {
     Links,
 }
 
+#[derive(Subcommand)]
+enum AgentCmd {
+    /// List every CLI/MCP tool, MCP launch config, and a copyable starter prompt
+    Manifest,
+}
+
 fn main() -> ExitCode {
-    let cli = Cli::parse();
+    let json_flag = std::env::args().any(|a| a == "--json");
+    let cli = match Cli::try_parse() {
+        Ok(c) => c,
+        Err(e) => {
+            use clap::error::ErrorKind;
+            if matches!(e.kind(), ErrorKind::DisplayHelp | ErrorKind::DisplayVersion) {
+                let _ = e.print();
+                return ExitCode::SUCCESS;
+            }
+            if json_flag {
+                let env = AgentEnvelope::with_issues(
+                    serde_json::Value::Null,
+                    vec![case_profile::ValidationIssue {
+                        field: "cli".into(),
+                        message: e.to_string(),
+                    }],
+                );
+                println!("{}", env.to_json().unwrap_or_else(|_| "{}".into()));
+                return ExitCode::FAILURE;
+            }
+            let _ = e.print();
+            return ExitCode::FAILURE;
+        }
+    };
     let json = cli.json;
     match run(cli) {
         Ok(()) => ExitCode::SUCCESS,
@@ -565,6 +619,17 @@ fn run(cli: Cli) -> Result<(), String> {
     let json = cli.json;
     match cli.command {
         Commands::Mcp => open_season_lib::mcp::serve_stdio(),
+        Commands::Agent {
+            action: AgentCmd::Manifest,
+        } => {
+            let manifest = open_season_lib::help::agent_manifest();
+            if json {
+                emit(true, &manifest, vec![]);
+            } else {
+                println!("{}", serde_json::to_string_pretty(&manifest).unwrap());
+            }
+            Ok(())
+        }
         Commands::Packs {
             action: PacksCmd::List { catalog },
         } => {
@@ -891,6 +956,23 @@ fn run(cli: Cli) -> Result<(), String> {
                 }
                 Ok(())
             }
+            CaseCmd::ImportFolder { path, from, title } => {
+                let title_opt = if title.trim().is_empty() {
+                    None
+                } else {
+                    Some(title.as_str())
+                };
+                let report = open_season_lib::folder_import::import_folder(&path, &from, title_opt)?;
+                if json {
+                    emit(true, &report, vec![]);
+                } else {
+                    println!("{}", report.notice);
+                    println!("Case folder: {}", report.case_dir);
+                    println!("Copied {} file(s). Originals were not moved.", report.copied_files.len());
+                    println!("Proposals were NOT written to case.json. Confirm each value yourself.");
+                }
+                Ok(())
+            }
             CaseCmd::Context { path } => {
                 let bundle = open_season_lib::intake::case_context(&path)?;
                 if json {
@@ -940,6 +1022,35 @@ fn run(cli: Cli) -> Result<(), String> {
                 emit(true, &doc.meta, vec![]);
             } else {
                 println!("Imported {} ({} lines).", md.display(), doc.lines.len());
+            }
+            Ok(())
+        }
+        Commands::Draft { action: DraftCmd::Preview { path, md } } => {
+            let profile = match &path {
+                Some(p) if p.join("case.json").is_file() => case_profile::load_case(p)?,
+                _ => case_profile::CaseProfile::new_standard("Preview", "motion"),
+            };
+            let markdown = if let Some(md_path) = &md {
+                std::fs::read_to_string(md_path).map_err(|e| e.to_string())?
+            } else if let Some(p) = &path {
+                let draft = p.join("drafts").join("draft.md");
+                if draft.is_file() {
+                    std::fs::read_to_string(draft).map_err(|e| e.to_string())?
+                } else {
+                    profile.court_markdown.clone()
+                }
+            } else {
+                return Err("Pass --md FILE or a case folder.".into());
+            };
+            let preview = court_md::preview_markdown(&profile, &markdown);
+            if json {
+                emit(preview.ok, &preview, vec![]);
+            } else {
+                println!("Caption: {} ({})", preview.court_name, preview.caption_kind);
+                println!("Title: {}", preview.title);
+                for line in &preview.lines {
+                    println!("{line}");
+                }
             }
             Ok(())
         }
@@ -1155,7 +1266,15 @@ fn run(cli: Cli) -> Result<(), String> {
             CheckCmd::Preflight { path } => {
                 let report = check::preflight_audit(&path)?;
                 if json {
-                    emit(true, &report, vec![]);
+                    let issues = report
+                        .missing_requirements
+                        .iter()
+                        .map(|m| case_profile::ValidationIssue {
+                            field: "preflight".into(),
+                            message: m.clone(),
+                        })
+                        .collect();
+                    emit(true, &report, issues);
                 } else {
                     println!("Court Readiness Pre-Flight Audit: {}", if report.ok { "READY" } else { "NOT READY" });
                     println!("  Caption: {}", report.caption_summary);
@@ -1452,25 +1571,45 @@ fn run(cli: Cli) -> Result<(), String> {
             }
         },
         Commands::Service { action } => match action {
-            ServiceCmd::Cert { path, filing, method, date } => {
+            ServiceCmd::Cert {
+                path,
+                filing,
+                method,
+                date,
+                signer,
+                recipients,
+            } => {
                 let profile = case_profile::load_case(&path)?;
-                let recipients: Vec<open_season_lib::service::ServiceRecipient> = profile
-                    .caption
-                    .appellees()
-                    .into_iter()
-                    .map(|p| open_season_lib::service::ServiceRecipient {
-                        name: p.name.clone(),
-                        role: p.role.clone(),
-                        address: p.address.clone(),
-                        email: p.email.clone(),
-                    })
-                    .collect();
+                let recipients: Vec<open_season_lib::service::ServiceRecipient> =
+                    if recipients.is_empty() {
+                        profile
+                            .caption
+                            .appellees()
+                            .into_iter()
+                            .map(|p| open_season_lib::service::ServiceRecipient {
+                                name: p.name.clone(),
+                                role: p.role.clone(),
+                                address: p.address.clone(),
+                                email: p.email.clone(),
+                            })
+                            .collect()
+                    } else {
+                        recipients
+                            .into_iter()
+                            .map(|raw| parse_service_recipient(&raw))
+                            .collect()
+                    };
+                let signature_name = if signer.trim().is_empty() {
+                    profile.filer.signature_name.clone()
+                } else {
+                    signer
+                };
                 let params = open_season_lib::service::ServiceCertParams {
                     filing_title: filing,
                     service_date: date,
                     method,
                     recipients,
-                    signature_name: profile.filer.signature_name.clone(),
+                    signature_name,
                 };
                 let result = open_season_lib::service::generate_certificate_of_service(&path, &profile, &params)?;
                 if json {
@@ -1622,5 +1761,16 @@ fn run(cli: Cli) -> Result<(), String> {
                 Ok(())
             }
         },
+    }
+}
+
+/// Parse `--recipient "Name|role|address|email"` (any suffix optional).
+fn parse_service_recipient(raw: &str) -> open_season_lib::service::ServiceRecipient {
+    let mut parts = raw.splitn(4, '|').map(|s| s.trim().to_string());
+    open_season_lib::service::ServiceRecipient {
+        name: parts.next().unwrap_or_default(),
+        role: parts.next().unwrap_or_default(),
+        address: parts.next().unwrap_or_default(),
+        email: parts.next().unwrap_or_default(),
     }
 }

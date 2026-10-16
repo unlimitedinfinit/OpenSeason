@@ -21,7 +21,7 @@ Agents drive the same engine through `openseason --json` or `openseason mcp`. Se
 - **What do I need to file?**: plain-language finder in the window and `openseason --json guide`. Teaching lives in packs. Legal information, not advice.
 - **Get legal help**: Help menu links to JustLegal after a confirmation. CLI/MCP return the URLs only.
 
-- **JustLegal Cloud Sync Hub**: In-app Firebase Auth and non-destructive additive sync with `justlegal.me`. Downloads route automatically to `orders/`, `filings/`, and `evidence/`. Confidential cases remain strictly airgapped.
+- **JustLegal Cloud (not implemented in this build)**: `openseason sync` for standard cases returns `not_implemented`. Confidential and sealed cases are refused. In-app login widgets exist; do not treat them as a working backup. Use local Word/PDF or `.osb` export.
 - **Court Readiness Pre-Flight Audit**: Real-time validation checklist banner reviewing caption, docket number, filer signature, statutory deadline math, and fact-citation grounding before export.
 - **Bates-Stamped Exhibit Packet Assembler**: One-click generation of unified Bates-stamped PDFs with custom prefixes (e.g. `ABRAMS-000001`) and automated Typst Table of Exhibits with SHA-256 integrity hashes.
 - **Official Court Form (AcroForm) Filler**: Inspects PDF form fields and auto-maps `case.json` values into official court forms (e.g. Colorado JDF 205 fee waiver and JDF 1911 direct appeal), exporting filled PDFs and audit JSON.
@@ -31,7 +31,7 @@ Agents drive the same engine through `openseason --json` or `openseason mcp`. Se
 - **Offline "Zero-Leakage" PDF Power Station**: 100% private, pure-Rust PDF tools: Merge multiple court files, Split & extract page ranges, Rotate orientations, and Byte-level scrub SSNs, DOBs, phone numbers, and custom names.
 - **Visual Legal Signature & Stamp Studio**: Electronic `/s/` formatting, formal script styles, and HTML5 stylus/mouse drawing pad for direct PDF stamping without cloud vendors.
 - **3-Tier Legal Operating System (`Transactional`, `Administrative/Pre-Suit`, `Litigation`)**: Draft everyday instruments (Last Will & Testament with Self-Proving Affidavit, Residential Lease, Independent Contractor Agreement, Durable Power of Attorney), Pre-Suit Notices (Demand Letters, Cure Notices, Security Deposit Demands, OPRA/CORA/FOIA Requests), and Court Pleadings (including `pre_filing` complaints that render `Case No. __________ (To Be Assigned)`).
-- **Multi-Venue Competence Matrix (`NJ`, `CO`, `FEDERAL`, `SCOTUS`)**: Enforces venue-specific sworn statement formulas (e.g. NJ R. 1:4-4(b) verbatim Certification in Lieu of Oath rejecting `"to the best of my knowledge"`, Colorado C.R.S. § 13-27-106 + mandatory C.R.C.P. 121 § 1-15(8) Certificate of Conferral, Federal 28 U.S.C. § 1746 declaration, SCOTUS Rule 14.1 Questions Presented, and Will 2-witness self-proving checks).
+- **Multi-Venue Competence Matrix (`NJ`, `CO`, `FEDERAL`, `SCOTUS`)**: Enforces venue-specific sworn statement formulas where the pack is the source (NJ R. 1:4-4(b) verbatim Certification in Lieu of Oath rejecting `"to the best of my knowledge"`). Colorado C.R.S. § 13-27-106 and C.R.C.P. 121 § 1-15(8) conferral are `needs_verification` templates — appellate papers may be governed by C.A.R., and a UUDA declaration often needs a signing date and place. Federal 28 U.S.C. § 1746, SCOTUS Rule 14.1 Questions Presented, and Will 2-witness self-proving checks stay as listed.
 - **Predictive Procedural State Graph (`case next-steps`)**: Calculates downstream legal branches from timeline events and orders, modeling **NJ Pause/Toll (`pause_remaining` under R. 2:4-3(e))** vs. **Colorado/Federal Full Clock Reset (`reset_full` under FRAP 4(a)(4) / C.R.C.P. 59)** and **Mail Service Offset (+3 days)**.
 - **1-Question-at-a-Time Guided Intake Wizard & Offline PDF Ingestion (`intake`)**: Extracts text offline from PDFs in `orders/` and `evidence/` (`lopdf`), surfaces candidate docket numbers/dates/courts with provenance, and walks users or AI agents through `next_question` prompts with filing-scoped draft storage (`drafts/sections-{filing_id}.json`).
 - **Cross-Venue Case Escalation & Multi-State Portfolio Radar (`case escalate`, `portfolio status`)**: 1-click graduate a Tier 2 Pre-Suit Notice into a Tier 3 Lawsuit, or escalate a Trial case to Appellate / Mandamus / SCOTUS while automatically copying lower-court orders and filings into the new case's `evidence/` appendix, plus a Global Filer Profile (`Documents/JustLegal/filer.json`).
@@ -103,6 +103,7 @@ bash examples/agent-e2e.sh
 # or, one command at a time:
 npm run cli -- --json case create --path ./my-case --title "Example v. Sample County Clerk" --kind reconsideration --pack nj-app-div
 npm run cli -- --json draft import ./my-case --md fixtures/sample-reconsideration.md
+npm run cli -- --json draft preview --md fixtures/sample-reconsideration.md
 npm run cli -- --json check all ./my-case --pack nj-app-div --rule reconsideration-appellate --trigger-date 2026-01-09
 npm run cli -- --json export court-md ./my-case
 ```

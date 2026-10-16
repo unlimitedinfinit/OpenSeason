@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { ipc } from "$lib/ipc";
   import type { CaseFilingItem } from "$lib/types/case";
+  import ConfirmDialog from "$lib/components/ConfirmDialog.svelte";
 
   interface Props {
     caseId: string;
@@ -32,6 +33,7 @@
   let statusMessage = $state("");
   let errorMessage = $state("");
   let lastExport = $state<{ docx: string; pdf: string } | null>(null);
+  let pendingDeleteId = $state<string | null>(null);
 
   const FILING_KINDS = [
     { id: "motion", label: "Standard Motion", emoji: "🔵", color: "blue" },
@@ -115,7 +117,13 @@
   }
 
   async function deleteFiling(id: string) {
-    if (!confirm("Are you sure you want to remove this filing from your case docket?")) return;
+    pendingDeleteId = id;
+  }
+
+  async function confirmDelete() {
+    const id = pendingDeleteId;
+    pendingDeleteId = null;
+    if (!id) return;
     try {
       await ipc<boolean>("delete_case_filing_cmd", { caseId, filingId: id });
       statusMessage = "Filing removed from docket.";
@@ -471,3 +479,13 @@
     </div>
   </div>
 </div>
+
+<ConfirmDialog
+  open={pendingDeleteId !== null}
+  title="Remove this filing?"
+  body="This removes the filing from the case docket. It does not file or un-file anything with a court."
+  confirmLabel="Remove"
+  danger={true}
+  onconfirm={confirmDelete}
+  oncancel={() => (pendingDeleteId = null)}
+/>

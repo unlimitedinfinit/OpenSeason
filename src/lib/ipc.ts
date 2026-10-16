@@ -284,6 +284,8 @@ async function mockInvoke<T>(cmd: string, args: Record<string, unknown> = {}): P
             installed: false,
             rule_pack_id: "nj-app-div",
             source_note: "FIXTURE",
+            installable: true,
+            unavailable_reason: "",
           },
         ],
         installed: [],
@@ -310,6 +312,44 @@ async function mockInvoke<T>(cmd: string, args: Record<string, unknown> = {}): P
       return [{ pack_id: "nj-appeal-fixture", ok: true }] as T;
     case "import_markdown_cmd":
       return { meta: { doc_title: "Imported draft" }, body: String(args.markdown || ""), lines: [] } as T;
+    case "preview_markdown_cmd": {
+      const md = String(args.markdown || "");
+      const isCo = md.toLowerCase().includes("colorado");
+      return {
+        ok: true,
+        never_files: true,
+        never_serves: true,
+        title: isCo ? "Motion for reconsideration" : "Motion for reconsideration",
+        caption_kind: isCo ? "co-boxed" : "nj-boxed",
+        court_name: isCo
+          ? "Colorado Court of Appeals"
+          : "Superior Court of New Jersey, Appellate Division",
+        docket_number: isCo ? "24CA1000" : "A-01000-24",
+        trial_court: isCo ? "Denver District Court" : "Superior Court of New Jersey, Law Division, Sample County",
+        trial_docket: isCo ? "23CV1000" : "L-01000-24",
+        lines: [
+          isCo ? "Colorado Court of Appeals" : "Superior Court of New Jersey, Appellate Division",
+          "COURT USE ONLY",
+          isCo ? "Case Number: 24CA1000" : "Appellate: A-01000-24",
+          isCo ? "Lower Court: Denver District Court" : "Trial Court: L-01000-24",
+          "MOTION FOR RECONSIDERATION",
+          "Preliminary statement",
+          "This is a fake draft for tests.",
+          "/s/ Jordan Example",
+          "CERTIFICATE OF SERVICE",
+        ],
+        has_signature: true,
+        has_certificate: true,
+        markup_stripped: true,
+        notice: "Preview only. Nothing was filed or served.",
+      } as T;
+    }
+    case "export_markdown_draft_cmd":
+      return {
+        docx: "Documents/JustLegal/Cases/preview/exports/court-md-A-01000-24.docx",
+        pdf: "Documents/JustLegal/Cases/preview/exports/court-md-A-01000-24.pdf",
+        notice: "Review every line before filing.",
+      } as T;
     case "seed_sample_cmd": {
       const sample = sampleProfile();
       sample.id = "00000000-0000-4000-8000-000000000101";
@@ -457,10 +497,15 @@ async function mockInvoke<T>(cmd: string, args: Record<string, unknown> = {}): P
           docket_number: c.docket_number,
           completion_percent: 80,
           next_question_prompt: null,
-          urgent_branch_title: "Motion for Reconsideration",
-          urgent_deadline: "2026-03-21",
-          days_until_due: 14,
+          urgent_branch_title: "Motion for reconsideration",
+          urgent_deadline: null,
+          days_until_due: null,
           parent_matter_id: c.parent_matter_id || null,
+          urgent_status: "needs_trigger_date",
+          urgent_rule: "N.J. Ct. R. 4:49-2",
+          urgent_trigger_date: null,
+          urgent_math: null,
+          unverified: true,
         })),
       } as T;
     case "get_global_filer_cmd":
@@ -572,6 +617,33 @@ async function mockInvoke<T>(cmd: string, args: Record<string, unknown> = {}): P
         new_profile: sampleProfile(),
         copied_record_files: 2,
         message: "Escalated case created.",
+      } as T;
+    case "agent_manifest_cmd":
+      return {
+        ok: true,
+        never_files: true,
+        never_serves: true,
+        notice: "This app never files or serves.",
+        case_folder: "Documents/JustLegal/Cases/{caseId}/",
+        mcp_launch: { command: "openseason", args: ["mcp"], cwd: "(repository root)" },
+        tools: [
+          { name: "playbook", cli: "docs playbook", mcp: "playbook", summary: "Read the offline motion playbook first." },
+          { name: "import_folder", cli: "case import-folder", mcp: "import_folder", summary: "Copy drafts and orders. Does not auto-commit guesses." },
+        ],
+        starter_prompt: "You are helping with OpenSeason. Never invent facts, citations, or deadlines. Never file or serve.",
+      } as T;
+    case "import_folder_cmd":
+      return {
+        ok: true,
+        never_files: true,
+        never_serves: true,
+        notice: "Copied files. Proposed names were NOT written to case.json.",
+        source_folder: String(args.from || ""),
+        case_dir: "Documents/JustLegal/Cases/imported",
+        case_id: store.cases[0]?.id || "00000000-0000-4000-8000-000000000001",
+        copied_files: [],
+        proposals: { party_names: [], docket_numbers: [], order_dates: [], court_names: [] },
+        auto_committed: false,
       } as T;
     case "pdf_extract_text_cmd":
       return { ok: true, never_files: true, path: String(args.pdfPath || ""), page_count: 1, total_chars: 42, pages: [{ page_number: 1, text: "Sample extracted text" }], full_text: "Sample extracted text" } as T;

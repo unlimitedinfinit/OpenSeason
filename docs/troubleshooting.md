@@ -47,8 +47,8 @@ Run these from PowerShell in `c:\Users\Deus\Documents\DocumentBuilder`:
 ---
 
 ### Issue C: Colorado Venue Check Fails with `venue.co_rule_121_conferral`
-- **Cause:** Colorado **C.R.C.P. 121 § 1-15(8)** requires every civil motion to begin with a Certificate of Conferral stating that the movant conferred in good faith with opposing counsel/parties (or stating why conferral is exempt).
-- **Fix:** Open the **🧙 Guided Wizard** and answer the Conferral question, or run:
+- **Cause:** Trial-court civil motions in Colorado often use **C.R.C.P. 121 § 1-15(8)** conferral. That label is `needs_verification`. Papers in the Colorado Court of Appeals may be governed by **C.A.R.** instead, so the checker does not assert Rule 121 there.
+- **Fix:** Confirm the rule that governs the paper. For a trial-court motion, open the **Wizard** and answer the Conferral question, or run:
   ```powershell
   .\openseason-cli.exe --json intake answer <case-dir> --id conferral_status --value "Conferred with opposing party on YYYY-MM-DD; motion is opposed."
   ```

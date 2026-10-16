@@ -44,11 +44,30 @@ impl<T: Serialize> AgentEnvelope<T> {
 /// Wrap an engine JSON value in the stable agent envelope.
 /// If `value` already has an `issues` array, those become envelope issues.
 pub fn wrap_value(value: serde_json::Value) -> serde_json::Value {
-    let issues: Vec<ValidationIssue> = value
+    let mut issues: Vec<ValidationIssue> = value
         .get("issues")
         .cloned()
         .and_then(|v| serde_json::from_value(v).ok())
         .unwrap_or_default();
+    let inner_ok = value.get("ok").and_then(|v| v.as_bool());
+    if inner_ok == Some(false) && issues.is_empty() {
+        if let Some(missing) = value.get("missing_requirements").and_then(|v| v.as_array()) {
+            for item in missing {
+                if let Some(message) = item.as_str() {
+                    issues.push(ValidationIssue {
+                        field: "preflight".into(),
+                        message: message.to_string(),
+                    });
+                }
+            }
+        }
+        if issues.is_empty() {
+            issues.push(ValidationIssue {
+                field: "result".into(),
+                message: "The command reported ok=false.".into(),
+            });
+        }
+    }
     serde_json::to_value(AgentEnvelope::with_issues(value, issues)).unwrap_or_else(|_| {
         serde_json::json!({
             "ok": false,
@@ -102,6 +121,22 @@ mod tests {
         assert_eq!(wrapped["ok"], false);
         assert_eq!(wrapped["never_files"], true);
         assert_eq!(wrapped["issues"][0]["field"], "authority.1");
+    }
+
+    #[test]
+    fn wrap_value_outer_ok_follows_inner_failure() {
+        let wrapped = wrap_value(serde_json::json!({
+            "ok": false,
+            "missing_requirements": ["Enter the order date to compute this deadline"]
+        }));
+        assert_eq!(wrapped["ok"], false);
+        assert_eq!(wrapped["data"]["ok"], false);
+        assert!(wrapped["issues"].as_array().unwrap().iter().any(|i| {
+            i["message"]
+                .as_str()
+                .unwrap_or("")
+                .contains("Enter the order date")
+        }));
     }
 }
 

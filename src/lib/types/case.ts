@@ -20,6 +20,7 @@ export interface CourtInfo {
   id: string;
   name: string;
   division?: string;
+  address_lines?: string[];
 }
 
 export interface Filer {
@@ -83,6 +84,7 @@ export interface CaseProfile {
   parent_matter_id?: string | null;
   conferral_status?: string;
   service_method?: string;
+  caption_layout?: string;
 }
 
 export interface CaseFilingItem {
@@ -153,6 +155,23 @@ export interface ExportResult {
   notice: string;
 }
 
+export interface CourtPreview {
+  ok: boolean;
+  never_files: boolean;
+  never_serves: boolean;
+  title: string;
+  caption_kind: string;
+  court_name: string;
+  docket_number: string;
+  trial_court: string;
+  trial_docket: string;
+  lines: string[];
+  has_signature: boolean;
+  has_certificate: boolean;
+  markup_stripped: boolean;
+  notice: string;
+}
+
 export const REVIEW_NOTICE =
   "This document was assembled by OpenSeason from the user's own case profile and draft text. It is a formatting aid, not legal advice. Review every line, caption, date, and citation before filing. Consider consulting a licensed attorney.";
 
@@ -178,7 +197,8 @@ export function emptyProfile(title = "", kind = "notice_of_appeal"): CaseProfile
     created_at: now,
     updated_at: now,
     sealed_at: null,
-    court: { id: "generic-us-appellate", name: "", division: "" },
+    court: { id: "generic-us-appellate", name: "", division: "", address_lines: [] },
+    caption_layout: "",
     docket_number: "",
     caption: { plaintiffs: [], defendants: [], appellants: [], appellees: [] },
     filer: {
@@ -519,6 +539,9 @@ export interface ProceduralBranch {
   template_kind: string;
   escalation_target?: string | null;
   explanation: string;
+  math?: string;
+  trigger_source?: string;
+  unverified?: boolean;
 }
 
 export interface NextStepsReport {
@@ -619,6 +642,11 @@ export interface PortfolioCaseItem {
   urgent_deadline?: string | null;
   days_until_due?: number | null;
   parent_matter_id?: string | null;
+  urgent_status?: string | null;
+  urgent_rule?: string | null;
+  urgent_trigger_date?: string | null;
+  urgent_math?: string | null;
+  unverified?: boolean;
 }
 
 export interface PortfolioStatusReport {
@@ -633,6 +661,32 @@ export interface PortfolioStatusReport {
 export interface PdfTextPage {
   page_number: number;
   text: string;
+}
+
+export interface CopiedFile {
+  original: string;
+  dest: string;
+  kind: string;
+}
+
+export interface ImportProposals {
+  party_names: { value: string; source: string }[];
+  docket_numbers: { value: string; source: string }[];
+  order_dates: { value: string; source: string }[];
+  court_names: { value: string; source: string }[];
+}
+
+export interface FolderImportReport {
+  ok: boolean;
+  never_files: boolean;
+  never_serves: boolean;
+  notice: string;
+  source_folder: string;
+  case_dir: string;
+  case_id: string;
+  copied_files: CopiedFile[];
+  proposals: ImportProposals;
+  auto_committed: boolean;
 }
 
 export interface PdfTextExtractionResult {

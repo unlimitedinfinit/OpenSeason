@@ -106,6 +106,8 @@ export interface PackListItem {
   install_path?: string | null;
   rule_pack_id: string;
   source_note: string;
+  installable?: boolean;
+  unavailable_reason?: string;
 }
 
 export interface PackList {

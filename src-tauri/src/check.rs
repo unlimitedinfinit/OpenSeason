@@ -681,14 +681,24 @@ pub fn preflight_audit(case_dir: &Path) -> Result<PreFlightAudit, String> {
         .or_else(|| read_json(&checks_dir(case_dir).join("deadline.json")).ok().flatten());
     
     let (deadline_ok, deadline_summary) = match deadline_res {
-        Some(dl) => {
+        Some(ref dl) => {
             let today = chrono::Local::now().format("%Y-%m-%d").to_string();
             let timely = dl.due >= today;
             (timely, format!("Due: {} ({} days from trigger; timely: {})", dl.due, dl.day_count, timely))
         }
-        None => (true, "No trigger date set or standard open matter".to_string()),
+        None => {
+            let litigation = profile.effective_tier() == "litigation";
+            if litigation {
+                missing.push(
+                    "Enter the order date to compute this deadline. OpenSeason will not guess from today.".into(),
+                );
+                (false, "Enter the order date to compute this deadline".to_string())
+            } else {
+                (true, "No court deadline applies until you enter a trigger date.".to_string())
+            }
+        }
     };
-    if !deadline_ok {
+    if !deadline_ok && deadline_res.is_some() {
         missing.push("Timeliness check failed: target filing date is past calculated deadline".to_string());
     }
 
@@ -840,6 +850,10 @@ The trial court entered the order on March 1. Relief is sought under R. 2:11-6.
 ::: signature
 /s/ Jordan Example
 :::
+
+::: certificate
+I certify that on October 16, 2026 I served a copy of this motion on Sample County Clerk by electronic mail.
+:::
 "#;
         crate::court_md::import_markdown(&dir, md).unwrap();
         let exhibit = add_exhibit(&dir, "order.txt", b"Order granting dismissal", "Dkt. 12").unwrap();
@@ -860,7 +874,7 @@ The trial court entered the order on March 1. Relief is sought under R. 2:11-6.
         assert!(exported.docx.is_file());
         assert!(exported.pdf.is_file());
         assert!(crate::documents::inspect_docx_contains(&exported.docx, "Jordan Example").unwrap());
-        assert!(crate::documents::inspect_docx_contains(&exported.docx, "not legal advice").unwrap());
+        assert!(!crate::documents::inspect_docx_contains(&exported.docx, "not legal advice").unwrap());
         let _ = fs::remove_dir_all(dir);
     }
 

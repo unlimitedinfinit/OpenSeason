@@ -24,18 +24,31 @@ impl MinimalWorld {
         let mut fonts = Vec::new();
         
         let font_search_paths = [
-            // Windows
+            // Times / serif first so court PDFs match Word (Times New Roman).
+            "C:\\Windows\\Fonts\\times.ttf",
+            "C:\\Windows\\Fonts\\timesbd.ttf",
+            "C:\\Windows\\Fonts\\timesi.ttf",
+            "C:\\Windows\\Fonts\\timesbi.ttf",
+            "C:\\Windows\\Fonts\\times.ttc",
+            "/Library/Fonts/Times New Roman.ttf",
+            "/Library/Fonts/Times New Roman Bold.ttf",
+            "/System/Library/Fonts/Supplemental/Times New Roman.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSerif-Italic.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSerif-BoldItalic.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSerif.ttf",
+            "/usr/share/fonts/truetype/croscore/Tinos-Regular.ttf",
+            // Sans fallbacks
             "C:\\Windows\\Fonts\\arial.ttf",
             "C:\\Windows\\Fonts\\calibri.ttf",
-            "C:\\Windows\\Fonts\\seguiemj.ttf",
-            // macOS
             "/Library/Fonts/Arial.ttf",
-            "/System/Library/Fonts/Helvetica.ttc",
             "/System/Library/Fonts/Supplemental/Arial.ttf",
-            // Linux
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-            "/usr/share/fonts/gnu-free/FreeSans.ttf"
+            "/usr/share/fonts/gnu-free/FreeSans.ttf",
         ];
 
         let mut found_any = false;

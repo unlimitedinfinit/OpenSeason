@@ -112,6 +112,9 @@ pub struct CourtInfo {
     pub name: String,
     #[serde(default)]
     pub division: Option<String>,
+    /// Optional court mailing address. Never invent an address.
+    #[serde(default)]
+    pub address_lines: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -257,6 +260,9 @@ pub struct CaseProfile {
     /// Default service method ("electronic", "mail", "personal", "certified_mail") for deadline mailbox offsets
     #[serde(default)]
     pub service_method: String,
+    /// Caption layout: "boxed" (default for motions) or "classic" (legacy centered stack).
+    #[serde(default)]
+    pub caption_layout: String,
 }
 
 fn default_schema_version() -> u32 {
@@ -326,6 +332,7 @@ impl CaseProfile {
                 id: "generic-us-appellate".to_string(),
                 name: String::new(),
                 division: None,
+                address_lines: Vec::new(),
             },
             docket_number: String::new(),
             caption: Caption::default(),
@@ -349,6 +356,7 @@ impl CaseProfile {
             parent_matter_id: None,
             conferral_status: String::new(),
             service_method: "electronic".to_string(),
+            caption_layout: String::new(),
         }
     }
 
@@ -867,6 +875,7 @@ pub fn sample_appeal_profile() -> CaseProfile {
             id: "generic-us-appellate".to_string(),
             name: "United States Court of Appeals for the Sample Circuit".to_string(),
             division: None,
+            address_lines: Vec::new(),
         },
         docket_number: "24-01000".to_string(),
         caption: Caption {
@@ -937,6 +946,7 @@ pub fn sample_appeal_profile() -> CaseProfile {
         parent_matter_id: None,
         conferral_status: String::new(),
         service_method: "electronic".to_string(),
+        caption_layout: String::new(),
     }
 }
 

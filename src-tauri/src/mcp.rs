@@ -26,6 +26,7 @@ fn tool_list() -> Value {
         tool("case_create", "Create a local case folder. kind: reconsideration|enlargement|stay|amend_findings|appellate_motion|appellate_brief|notice_of_appeal. Never files.", json!({"path": path, "title": {"type": "string", "description": "Caption like Lucille Example v. Sample County Board"}, "kind": {"type": "string"}, "pack": {"type": "string", "description": "nj-app-div, co-mandamus, or generic-us-appellate"}}), &["path", "title"]),
         tool("case_seed", "Copy the fake Lucille Example reconsideration case into path. For tests only.", json!({"path": path}), &["path"]),
         tool("draft_import", "Import a court-markdown draft (YAML caption, ::: signature, ::: certificate).", json!({"path": path, "markdown": {"type": "string"}}), &["path", "markdown"]),
+        tool("draft_preview", "Preview a Markdown draft as a court caption (NJ or CO boxed) plus body. Does not write files. Never files.", json!({"path": path, "markdown": {"type": "string"}}), &["markdown"]),
         tool("draft_sections", "List guided drafting sections and hints for this case kind.", json!({"path": path}), &["path"]),
         tool("draft_fill", "Fill one guided section with the user's own words. Do not invent text.", json!({"path": path, "id": {"type": "string", "description": "Section id from draft_sections"}, "text": {"type": "string"}}), &["path", "id", "text"]),
         tool("evidence_add", "Copy an exhibit into evidence/. First file becomes Ex. A after evidence_index.", json!({"path": path, "file": {"type": "string"}, "description": {"type": "string"}}), &["path", "file"]),
@@ -70,9 +71,11 @@ fn tool_list() -> Value {
         tool("intake_status", "1-question-at-a-time Guided Intake Wizard status, progress percentage, and next_question prompt.", json!({"path": path, "filing_id": {"type": "string"}}), &["path"]),
         tool("intake_answer", "Answer a single question in the Guided Intake Wizard (updates profile, parties, or filing-scoped draft sections).", json!({"path": path, "question_id": {"type": "string"}, "answer": {"type": "string"}, "filing_id": {"type": "string"}}), &["path", "question_id", "answer"]),
         tool("intake_scan", "Offline PDF text extraction & candidate detection (docket numbers, dates, courts) across orders/ and evidence/.", json!({"path": path}), &["path"]),
-        tool("check_venue", "Deterministic Multi-Venue Competence Matrix check (NJ R. 1:4-4(b) oath, CO C.R.C.P. 121 § 1-15(8) conferral, 28 U.S.C. § 1746, SCOTUS Rule 14.1, Will witnesses).", json!({"path": path}), &["path"]),
+        tool("check_venue", "Deterministic Multi-Venue Competence Matrix check (NJ R. 1:4-4(b) oath, CO conferral/declaration as needs_verification, 28 U.S.C. § 1746, SCOTUS Rule 14.1, Will witnesses).", json!({"path": path}), &["path"]),
         tool("portfolio_status", "Multi-state, multi-venue Portfolio Deadline Radar across all matters in the cases directory.", json!({"root": {"type": "string"}}), &[]),
         tool("pdf_extract_text", "Extract text page-by-page from a local PDF offline (never uploads).", json!({"pdf": {"type": "string"}}), &["pdf"]),
+        tool("agent_manifest", "List every CLI/MCP tool with a one-line description, MCP launch config, and a copyable starter prompt. Never files.", json!({}), &[]),
+        tool("import_folder", "Copy (never move) drafts/notes/orders from a folder into a case. Proposes parties, dockets, and order dates. Does not auto-commit guesses.", json!({"path": path, "from": {"type": "string", "description": "Folder of drafts, notes, and orders"}, "title": {"type": "string"}}), &["path", "from"]),
     ])
 }
 
@@ -98,6 +101,15 @@ fn call_tool(name: &str, args: &Value) -> Result<Value, String> {
         "draft_import" => {
             let doc = court_md::import_markdown(std::path::Path::new(&s("path")), &s("markdown"))?;
             Ok(json!({"lines": doc.lines.len(), "case_no": doc.meta.case_no, "never_files": true}))
+        }
+        "draft_preview" => {
+            let profile = if s("path").is_empty() {
+                case_profile::CaseProfile::new_standard("Preview", "motion")
+            } else {
+                case_profile::load_case(std::path::Path::new(&s("path")))?
+            };
+            let preview = court_md::preview_markdown(&profile, &s("markdown"));
+            Ok(serde_json::to_value(preview).unwrap())
         }
         "evidence_add" => {
             let file = s("file");
@@ -475,44 +487,87 @@ fn call_tool(name: &str, args: &Value) -> Result<Value, String> {
             let pdf = std::path::PathBuf::from(s("pdf"));
             Ok(serde_json::to_value(crate::pdf_tools::extract_pdf_text(&pdf)?).unwrap())
         }
+        "agent_manifest" => Ok(crate::help::agent_manifest()),
+        "import_folder" => {
+            let dest = s("path");
+            let from = s("from");
+            let title = s("title");
+            let report = crate::folder_import::import_folder(
+                std::path::Path::new(&dest),
+                std::path::Path::new(&from),
+                if title.is_empty() { None } else { Some(title.as_str()) },
+            )?;
+            Ok(serde_json::to_value(report).unwrap())
+        }
         other => Err(format!(
             "Unknown tool '{other}'. Call playbook or packs_list. Known tools are listed by tools/list."
         )),
     }
 }
 
-fn write_message(out: &mut impl Write, body: &Value) -> Result<(), String> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Framing {
+    ContentLength,
+    Newline,
+}
+
+fn write_message(out: &mut impl Write, body: &Value, framing: Framing) -> Result<(), String> {
     let bytes = serde_json::to_vec(body).map_err(|e| e.to_string())?;
-    write!(out, "Content-Length: {}\r\n\r\n", bytes.len()).map_err(|e| e.to_string())?;
-    out.write_all(&bytes).map_err(|e| e.to_string())?;
+    match framing {
+        Framing::ContentLength => {
+            write!(out, "Content-Length: {}\r\n\r\n", bytes.len()).map_err(|e| e.to_string())?;
+            out.write_all(&bytes).map_err(|e| e.to_string())?;
+        }
+        Framing::Newline => {
+            out.write_all(&bytes).map_err(|e| e.to_string())?;
+            out.write_all(b"\n").map_err(|e| e.to_string())?;
+        }
+    }
     out.flush().map_err(|e| e.to_string())
 }
 
-fn read_message(reader: &mut impl BufRead) -> Result<Option<Value>, String> {
-    let mut headers = String::new();
-    loop {
-        let mut line = String::new();
-        let n = reader.read_line(&mut line).map_err(|e| e.to_string())?;
-        if n == 0 {
-            return Ok(None);
-        }
-        if line == "\r\n" || line == "\n" {
-            break;
-        }
-        headers.push_str(&line);
-    }
-    let mut len = 0usize;
-    for line in headers.lines() {
-        if let Some(v) = line.to_ascii_lowercase().strip_prefix("content-length:") {
-            len = v.trim().parse().map_err(|e| format!("{e}"))?;
-        }
-    }
-    if len == 0 {
+fn read_message(reader: &mut impl BufRead, framing: &mut Option<Framing>) -> Result<Option<Value>, String> {
+    let mut first = String::new();
+    let n = reader.read_line(&mut first).map_err(|e| e.to_string())?;
+    if n == 0 {
         return Ok(None);
     }
-    let mut buf = vec![0u8; len];
-    reader.read_exact(&mut buf).map_err(|e| e.to_string())?;
-    serde_json::from_slice(&buf).map(Some).map_err(|e| e.to_string())
+    let trimmed = first.trim();
+    if trimmed.is_empty() {
+        return read_message(reader, framing);
+    }
+    if trimmed.to_ascii_lowercase().starts_with("content-length:") {
+        *framing = Some(Framing::ContentLength);
+        let mut headers = first;
+        loop {
+            let mut line = String::new();
+            let n = reader.read_line(&mut line).map_err(|e| e.to_string())?;
+            if n == 0 {
+                return Ok(None);
+            }
+            if line == "\r\n" || line == "\n" {
+                break;
+            }
+            headers.push_str(&line);
+        }
+        let mut len = 0usize;
+        for line in headers.lines() {
+            if let Some(v) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                len = v.trim().parse().map_err(|e| format!("{e}"))?;
+            }
+        }
+        if len == 0 {
+            return Ok(None);
+        }
+        let mut buf = vec![0u8; len];
+        reader.read_exact(&mut buf).map_err(|e| e.to_string())?;
+        return serde_json::from_slice(&buf).map(Some).map_err(|e| e.to_string());
+    }
+    if trimmed.starts_with('{') {
+        *framing = Some(Framing::Newline);
+        return serde_json::from_str(trimmed).map(Some).map_err(|e| e.to_string());
+    }
+    Err(format!("Unrecognized MCP frame: {}", trimmed.chars().take(80).collect::<String>()))
 }
 
 fn handle(msg: &Value) -> Option<Value> {
@@ -607,10 +662,23 @@ mod tests {
     #[test]
     fn content_length_roundtrip() {
         let mut buf = Vec::new();
-        write_message(&mut buf, &json!({"hello": "world"})).unwrap();
+        write_message(&mut buf, &json!({"hello": "world"}), Framing::ContentLength).unwrap();
         let mut reader = BufReader::new(Cursor::new(buf));
-        let msg = read_message(&mut reader).unwrap().unwrap();
+        let mut framing = None;
+        let msg = read_message(&mut reader, &mut framing).unwrap().unwrap();
         assert_eq!(msg["hello"], "world");
+        assert_eq!(framing, Some(Framing::ContentLength));
+    }
+
+    #[test]
+    fn newline_delimited_jsonrpc_roundtrip() {
+        let mut buf = Vec::new();
+        write_message(&mut buf, &json!({"jsonrpc": "2.0", "id": 1, "method": "ping"}), Framing::Newline).unwrap();
+        let mut reader = BufReader::new(Cursor::new(buf));
+        let mut framing = None;
+        let msg = read_message(&mut reader, &mut framing).unwrap().unwrap();
+        assert_eq!(msg["method"], "ping");
+        assert_eq!(framing, Some(Framing::Newline));
     }
 
     #[test]
@@ -711,13 +779,14 @@ pub fn serve_stdio() -> Result<(), String> {
     let stdin = std::io::stdin();
     let mut reader = BufReader::new(stdin.lock());
     let mut stdout = std::io::stdout();
+    let mut framing = None;
     eprintln!("openseason mcp: offline stdio server. Never files or serves.");
     loop {
-        match read_message(&mut reader)? {
+        match read_message(&mut reader, &mut framing)? {
             None => break,
             Some(msg) => {
                 if let Some(reply) = handle(&msg) {
-                    write_message(&mut stdout, &reply)?;
+                    write_message(&mut stdout, &reply, framing.unwrap_or(Framing::ContentLength))?;
                 }
             }
         }

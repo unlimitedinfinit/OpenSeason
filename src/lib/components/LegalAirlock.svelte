@@ -12,7 +12,7 @@
   }
 </script>
 
-<div class="fixed inset-0 z-50 flex items-center justify-center bg-background/95 backdrop-blur-sm">
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-background/95">
   <div class="w-full max-w-2xl p-8 space-y-8 bg-card border border-border rounded-lg shadow-2xl">
     <div class="space-y-4 text-center">
       <h1 class="text-3xl font-bold tracking-tighter text-destructive">LEGAL AIRLOCK</h1>

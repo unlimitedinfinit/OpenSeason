@@ -34,6 +34,8 @@ pub mod signature;
 pub mod legal_os;
 pub mod intake;
 pub mod portfolio;
+pub mod pleading;
+pub mod folder_import;
 
 use crypto::AppState;
 
@@ -144,7 +146,11 @@ pub fn run() {
             portfolio::save_global_filer_cmd,
             portfolio::pdf_extract_text_cmd,
             portfolio::scoped_sections_cmd,
-            portfolio::scoped_fill_cmd
+            portfolio::scoped_fill_cmd,
+            case_commands::import_folder_cmd,
+            case_commands::agent_manifest_cmd,
+            case_commands::preview_markdown_cmd,
+            case_commands::export_markdown_draft_cmd
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

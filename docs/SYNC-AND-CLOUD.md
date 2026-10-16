@@ -1,6 +1,8 @@
 # JustLegal Cloud Sync & Airgap Architecture
 
-This document specifies the technical design, security rules, and interface reference for the **JustLegal Cloud Sync Hub** connecting local OpenSeason desktop and CLI instances to the `justlegal.me` platform (`justlegalapp1` Firebase infrastructure).
+**Status in this build:** `openseason sync` is a stub. Standard cases return `not_implemented`. Confidential and sealed cases are refused. Do not treat in-app Cloud login as a working backup. Local Word/PDF and `.osb` export are the supported copy paths.
+
+This document specifies the intended design, security rules, and interface reference for a future JustLegal Cloud connection (`justlegal.me` / `justlegalapp1` Firebase).
 
 ---
 

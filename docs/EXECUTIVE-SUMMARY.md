@@ -162,7 +162,7 @@ To bridge the gap between a document compiler and a predictive, multi-state **Le
 2. **Multi-Venue Competence Matrix (`legal_os.rs`)**
    - Deterministically resolves `NJ`, `CO`, `FEDERAL`, `SCOTUS`, and `GENERIC` venue rules:
      - **New Jersey:** Injects verbatim `N.J. Ct. R. 1:4-4(b)` Certification in Lieu of Oath into assembled packets and flags defective hedging phrases (`"to the best of my knowledge"` or `"information and belief"`).
-     - **Colorado:** Enforces `C.R.S. § 13-27-106` unsworn declarations and requires a `C.R.C.P. 121 § 1-15(8)` Certificate of Conferral on civil motions.
+     - **Colorado:** Suggests a `C.R.S. § 13-27-106` unsworn declaration and a `C.R.C.P. 121 § 1-15(8)` conferral paragraph as `needs_verification` user-editable text. Appellate papers may be governed by C.A.R.; a UUDA declaration often needs a signing date and place.
      - **Federal & SCOTUS:** Enforces `28 U.S.C. § 1746` declarations and `S. Ct. Rule 14.1(a)` Questions Presented.
 
 3. **Predictive Procedural State Graph & Tolling Math (`predict_next_steps`)**

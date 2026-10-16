@@ -3,7 +3,7 @@
 //! 2. Multi-Venue Competence Matrix (NJ, CO, Federal, SCOTUS, Generic)
 //! 3. Predictive Procedural State Graph (Event -> Branches with Pause/Toll vs Reset & Mail Offsets)
 
-use chrono::{Duration, NaiveDate, Utc};
+use chrono::{Duration, NaiveDate};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -18,7 +18,9 @@ pub const CO_CRS_13_27_106_OATH: &str = "I declare under penalty of perjury unde
 
 pub const FED_28_USC_1746_OATH: &str = "I declare under penalty of perjury under the laws of the United States of America that the foregoing is true and correct.";
 
-pub const CO_RULE_121_CONFERRAL_TEMPLATE: &str = "Certificate of Conferral (C.R.C.P. 121 § 1-15(8)): Undersigned certifies that they have conferred (or attempted to confer) in good faith with opposing counsel/party regarding the relief requested in this motion.";
+/// Suggested conferral sentence. citation_status is needs_verification.
+/// Appellate papers in Colorado may be governed by C.A.R. rather than C.R.C.P. 121.
+pub const CO_RULE_121_CONFERRAL_TEMPLATE: &str = "I conferred with the opposing party on [date]. The opposing party [agrees / takes no position / opposes]. Confirm whether C.R.C.P. 121 § 1-15(8) or the Colorado Appellate Rules govern this paper before filing.";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct VenueProfile {
@@ -65,10 +67,131 @@ pub struct ProceduralBranch {
     pub days_remaining_after_toll: Option<i64>,
     pub computed_deadline: Option<String>,
     pub days_until_due: Option<i64>,
-    pub status: String, // "active" | "paused_tolled" | "expired" | "action_ready"
+    pub status: String, // "active" | "paused_tolled" | "expired" | "action_ready" | "needs_trigger_date"
     pub template_kind: String,
     pub escalation_target: Option<String>,
     pub explanation: String,
+    /// How the due date was calculated. Empty when no user trigger date exists.
+    #[serde(default)]
+    pub math: String,
+    /// Provenance of the trigger date (timeline event, judgment_date field, etc.).
+    #[serde(default)]
+    pub trigger_source: String,
+    /// Displayed deadlines are always unverified until the user checks the order and rule.
+    #[serde(default)]
+    pub unverified: bool,
+}
+
+pub const ENTER_ORDER_DATE_PROMPT: &str = "Enter the order date to compute this deadline";
+pub const DEADLINE_UNVERIFIED_LABEL: &str = "unverified, check the order and rule";
+
+fn local_today() -> NaiveDate {
+    chrono::Local::now().date_naive()
+}
+
+#[derive(Debug, Clone)]
+struct UserTrigger {
+    date: NaiveDate,
+    date_iso: String,
+    title: String,
+    source: String,
+}
+
+/// A deadline is only real when the user typed an order/trigger date with a source.
+fn user_order_trigger(profile: &CaseProfile) -> Option<UserTrigger> {
+    let mut from_timeline: Option<UserTrigger> = None;
+    for ev in &profile.timeline {
+        let raw = ev.date.trim();
+        if raw.is_empty() {
+            continue;
+        }
+        let Ok(parsed) = parse_iso_date(raw) else {
+            continue;
+        };
+        let t = ev.title.to_ascii_lowercase();
+        let looks_like_order = t.contains("order")
+            || t.contains("judgment")
+            || t.contains("judgement")
+            || t.contains("denied")
+            || t.contains("dismiss")
+            || t.contains("entered")
+            || t.contains("decision")
+            || t.contains("opinion");
+        if !looks_like_order {
+            continue;
+        }
+        from_timeline = Some(UserTrigger {
+            date: parsed,
+            date_iso: parsed.to_string(),
+            title: if ev.title.trim().is_empty() {
+                "Order / judgment date entered by user".into()
+            } else {
+                ev.title.clone()
+            },
+            source: format!("timeline:{}", ev.title),
+        });
+    }
+    if from_timeline.is_some() {
+        return from_timeline;
+    }
+    let jd = profile.notice_of_appeal.judgment_date.trim();
+    if jd.is_empty() {
+        return None;
+    }
+    let Ok(parsed) = parse_iso_date(jd) else {
+        return None;
+    };
+    Some(UserTrigger {
+        date: parsed,
+        date_iso: parsed.to_string(),
+        title: if profile.notice_of_appeal.judgment_description.trim().is_empty() {
+            "Judgment / order date from the case profile".into()
+        } else {
+            profile.notice_of_appeal.judgment_description.clone()
+        },
+        source: "notice_of_appeal.judgment_date".into(),
+    })
+}
+
+fn administrative_trigger(profile: &CaseProfile) -> Option<UserTrigger> {
+    for ev in profile.timeline.iter().rev() {
+        let raw = ev.date.trim();
+        if raw.is_empty() {
+            continue;
+        }
+        let Ok(parsed) = parse_iso_date(raw) else {
+            continue;
+        };
+        return Some(UserTrigger {
+            date: parsed,
+            date_iso: parsed.to_string(),
+            title: if ev.title.trim().is_empty() {
+                "Notice / demand date entered by user".into()
+            } else {
+                ev.title.clone()
+            },
+            source: format!("timeline:{}", ev.title),
+        });
+    }
+    None
+}
+
+/// A 45-day notice of appeal clock does not apply once the case is already in a reviewing court.
+pub fn already_in_reviewing_court(profile: &CaseProfile) -> bool {
+    let court = profile.court.name.to_ascii_lowercase();
+    let stage = profile.procedural_stage.to_ascii_lowercase();
+    let div = profile
+        .court
+        .division
+        .clone()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    stage == "appellate"
+        || stage == "supreme_court"
+        || court.contains("appellate")
+        || court.contains("court of appeals")
+        || court.contains("supreme court of")
+        || div.contains("appellate")
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -119,7 +242,10 @@ pub fn resolve_venue(profile: &CaseProfile) -> VenueProfile {
 
     match code {
         "NJ" => {
-            let is_appellate = court_raw.contains("appellate") || pack_raw.contains("app-div");
+            // The pack id is teaching data. Court name and stage decide whether a 10-day
+            // appellate reconsideration clock applies — never the pack id alone.
+            let is_appellate = already_in_reviewing_court(profile)
+                || court_raw.contains("appellate");
             VenueProfile {
                 venue_code: "NJ".into(),
                 display_name: if is_appellate {
@@ -146,26 +272,35 @@ pub fn resolve_venue(profile: &CaseProfile) -> VenueProfile {
                 ],
             }
         }
-        "CO" => VenueProfile {
-            venue_code: "CO".into(),
-            display_name: "Colorado State Courts (C.R.C.P. / C.A.R.)".into(),
-            sworn_statement_title: "Unsworn Declaration Under Penalty of Perjury".into(),
-            sworn_statement_citation: "C.R.S. § 13-27-106".into(),
-            mandatory_oath_text: CO_CRS_13_27_106_OATH.into(),
-            requires_conferral_certificate: true,
-            conferral_rule: "C.R.C.P. 121 § 1-15(8)".into(),
-            appeal_days: 49,
-            reconsideration_days: 14,
-            reconsideration_trigger: "entry".into(),
-            tolling_mode: "reset_full".into(),
-            mail_service_adder_days: 3,
-            packet_manifest: vec![
-                "Combined Motion & Incorporated Legal Authority (with C.R.C.P. 121 § 1-15(8) Conferral)".into(),
-                "Unsworn Declaration & Exhibit Index (C.R.S. § 13-27-106)".into(),
-                "Proposed Order".into(),
-                "Certificate of Service".into(),
-            ],
-        },
+        "CO" => {
+            let is_appellate = already_in_reviewing_court(profile)
+                || court_raw.contains("court of appeals");
+            VenueProfile {
+                venue_code: "CO".into(),
+                display_name: "Colorado State Courts (C.R.C.P. / C.A.R.)".into(),
+                sworn_statement_title: "Unsworn Declaration Under Penalty of Perjury".into(),
+                sworn_statement_citation: "C.R.S. § 13-27-106 (needs_verification)".into(),
+                mandatory_oath_text: CO_CRS_13_27_106_OATH.into(),
+                requires_conferral_certificate: !is_appellate,
+                conferral_rule: if is_appellate {
+                    "C.A.R. may apply; C.R.C.P. 121 § 1-15(8) is trial-court civil practice (needs_verification)".into()
+                } else {
+                    "C.R.C.P. 121 § 1-15(8) (needs_verification)".into()
+                },
+                appeal_days: 49,
+                reconsideration_days: 14,
+                reconsideration_trigger: "entry".into(),
+                tolling_mode: "reset_full".into(),
+                mail_service_adder_days: 3,
+                packet_manifest: vec![
+                    "Combined Motion & Incorporated Legal Authority".into(),
+                    "User-supplied conferral paragraph if the governing rule requires one (C.R.C.P. 121 § 1-15(8) vs C.A.R. — needs_verification)".into(),
+                    "User-supplied unsworn declaration with signing date and place if used (C.R.S. § 13-27-106 — needs_verification)".into(),
+                    "Proposed Order".into(),
+                    "Certificate of Service".into(),
+                ],
+            }
+        }
         "SCOTUS" => VenueProfile {
             venue_code: "SCOTUS".into(),
             display_name: "Supreme Court of the United States".into(),
@@ -322,19 +457,28 @@ pub fn check_venue_competence(profile: &CaseProfile) -> VenueCompetenceReport {
                 || kind == "reconsideration"
                 || kind == "enlargement"
                 || kind == "stay";
+            let is_appellate = already_in_reviewing_court(profile)
+                || profile.court.name.to_ascii_lowercase().contains("court of appeals");
             if is_motion
+                && !is_appellate
                 && profile.conferral_status.trim().is_empty()
                 && !lower_text.contains("confer")
                 && !lower_text.contains("121")
             {
                 issues.push(ValidationIssue {
                     field: "venue.co_rule_121_conferral".into(),
-                    message: "Colorado C.R.C.P. 121 § 1-15(8) requires a Certificate of Conferral at the beginning of every civil motion stating whether the movant conferred in good faith with opposing parties (or why conferral is exempt). Set conferral_status or add a Rule 121 conferral paragraph.".into(),
+                    message: "C.R.C.P. 121 § 1-15(8) conferral is trial-court civil-motion practice (needs_verification). Confirm the rule that governs this paper, then add a conferral paragraph or set conferral_status. Do not treat the C.R.C.P. 121 label as verified.".into(),
                 });
             }
-            recommendations.push(
-                "Colorado motions combine the motion and legal authority into a single document and open with a C.R.C.P. 121 § 1-15(8) conferral statement.".into(),
-            );
+            if is_appellate {
+                recommendations.push(
+                    "Colorado Court of Appeals papers may be governed by C.A.R. rather than C.R.C.P. 121 § 1-15(8). A UUDA declaration (C.R.S. § 13-27-106) often needs a signing date and place. Both labels are needs_verification — edit the user's own text; the engine will not assert them.".into(),
+                );
+            } else {
+                recommendations.push(
+                    "Colorado trial-court civil motions often combine the motion and legal authority and open with a conferral statement. Confirm whether C.R.C.P. 121 § 1-15(8) applies (needs_verification).".into(),
+                );
+            }
         }
 
         if venue.venue_code == "SCOTUS" {
@@ -380,13 +524,33 @@ fn compute_adjusted_date(
         notes: String::new(),
     };
     let res = compute_deadline(&pack, &temp_rule, start);
-    let today = Utc::now().date_naive();
+    let today = local_today();
     let due_date = parse_iso_date(&res.due).unwrap_or(start + Duration::days(total_days));
     let remaining = (due_date - today).num_days();
     (res.due, remaining)
 }
 
+fn deadline_math(rule: &str, trigger: &UserTrigger, days: i64, due: &str, mail_offset: i64) -> String {
+    format!(
+        "Trigger date {date} ({title}; source: {source}) + {days} days{mail} under {rule} = due {due}. {unverified}.",
+        date = trigger.date_iso,
+        title = trigger.title,
+        source = trigger.source,
+        days = days,
+        mail = if mail_offset > 0 {
+            format!(" + {mail_offset} mail-service days")
+        } else {
+            String::new()
+        },
+        rule = rule,
+        due = due,
+        unverified = DEADLINE_UNVERIFIED_LABEL
+    )
+}
+
 /// Predict all downstream legal branches and clocks from the case's timeline and tier.
+/// Never invents a deadline from "today". A due date is returned only when the user
+/// entered an order/trigger date with a source.
 pub fn predict_next_steps(profile: &CaseProfile, case_dir: Option<&Path>) -> NextStepsReport {
     let venue = resolve_venue(profile);
     let tier = profile.effective_tier().to_string();
@@ -398,27 +562,31 @@ pub fn predict_next_steps(profile: &CaseProfile, case_dir: Option<&Path>) -> Nex
 
     let mut detected_triggers = Vec::new();
     let mut branches = Vec::new();
-    let today_iso = Utc::now().date_naive().format("%Y-%m-%d").to_string();
 
-    // Detect if a tolling motion (e.g. reconsideration) was filed on the timeline
     let tolling_event = profile.timeline.iter().find(|ev| {
         let t = ev.title.to_ascii_lowercase();
-        (t.contains("reconsideration") || t.contains("alter or amend") || t.contains("rule 59") || t.contains("4:49-2"))
+        (t.contains("reconsideration")
+            || t.contains("alter or amend")
+            || t.contains("rule 59")
+            || t.contains("4:49-2"))
             && (t.contains("filed") || t.contains("served") || t.contains("submitted"))
     });
 
     if tier == "transactional" {
-        detected_triggers.push(format!("Tier 1 Transactional Instrument ({})", profile.document_kind));
+        detected_triggers.push(format!(
+            "Tier 1 Transactional Instrument ({})",
+            profile.document_kind
+        ));
         branches.push(ProceduralBranch {
             id: "exec-ceremony".into(),
-            title: "Complete Statutory Execution & Witness / Notary Block".into(),
+            title: "Complete execution, witnesses, and notary block".into(),
             rule_citation: if profile.document_kind == "will" {
                 "N.J.S.A. 3B:3-4 / C.R.S. § 15-11-504".into()
             } else {
-                "State Contract & Electronic Signature Act".into()
+                "State contract and electronic signature act".into()
             },
-            trigger_event_title: "Draft Initialized".into(),
-            trigger_date: today_iso.clone(),
+            trigger_event_title: "Draft initialized".into(),
+            trigger_date: String::new(),
             trigger_kind: "execution".into(),
             base_days: 0,
             mail_offset_days: 0,
@@ -431,86 +599,119 @@ pub fn predict_next_steps(profile: &CaseProfile, case_dir: Option<&Path>) -> Nex
             status: "action_ready".into(),
             template_kind: profile.document_kind.clone(),
             escalation_target: Some("administrative".into()),
-            explanation: "Verify all party names and clauses, export to PDF, and complete signatures (or two-witness + notary self-proving affidavit for Wills). If a counterparty breaches this instrument later, you can 1-click escalate to a Tier 2 Statutory Cure Demand.".into(),
+            explanation: "Verify every name and clause, export to PDF, and complete signatures (or two-witness plus notary self-proving affidavit for a will). This is not a court deadline.".into(),
+            math: String::new(),
+            trigger_source: String::new(),
+            unverified: false,
         });
     } else if tier == "administrative" {
-        let trigger_date_str = profile
-            .timeline
-            .last()
-            .and_then(|e| if !e.date.trim().is_empty() { Some(e.date.clone()) } else { None })
-            .unwrap_or_else(|| today_iso.clone());
+        let trigger = administrative_trigger(profile);
         let base_days = match profile.document_kind.as_str() {
             "cure_notice" => 7,
             "records_request" => 7,
             "security_deposit_demand" => 14,
             _ => 30,
         };
-        let start = parse_iso_date(&trigger_date_str).unwrap_or_else(|_| Utc::now().date_naive());
-        let (due_iso, days_left) = compute_adjusted_date(&profile.rule_pack_id, start, base_days + mail_offset);
-
-        detected_triggers.push(format!("Tier 2 Statutory Notice / Demand ({trigger_date_str})"));
-        branches.push(ProceduralBranch {
-            id: "cure-window".into(),
-            title: "Statutory Cure / Response Window Expires".into(),
-            rule_citation: "Statutory Pre-Suit Demand Clock".into(),
-            trigger_event_title: "Demand / Notice Sent".into(),
-            trigger_date: trigger_date_str.clone(),
-            trigger_kind: "delivery".into(),
-            base_days,
-            mail_offset_days: mail_offset,
-            clock_interaction: "independent".into(),
-            tolled_by_event: None,
-            days_elapsed_before_toll: None,
-            days_remaining_after_toll: None,
-            computed_deadline: Some(due_iso),
-            days_until_due: Some(days_left),
-            status: if days_left < 0 { "action_ready".into() } else { "active".into() },
-            template_kind: "complaint".into(),
-            escalation_target: Some("litigation".into()),
-            explanation: "Once the statutory cure or response window expires without compliance, 1-click graduate this folder into a Tier 3 Court Complaint with your demand letter and Certified Mail receipt automatically indexed as Exhibit A.".into(),
-        });
+        let rule = "Statutory pre-suit demand clock (pack data; confirm the statute)";
+        if let Some(tr) = trigger {
+            detected_triggers.push(format!("{} ({}) [{}]", tr.title, tr.date_iso, tr.source));
+            let (due_iso, days_left) =
+                compute_adjusted_date(&profile.rule_pack_id, tr.date, base_days + mail_offset);
+            let math = deadline_math(rule, &tr, base_days, &due_iso, mail_offset);
+            branches.push(ProceduralBranch {
+                id: "cure-window".into(),
+                title: "Statutory cure / response window".into(),
+                rule_citation: rule.into(),
+                trigger_event_title: tr.title.clone(),
+                trigger_date: tr.date_iso.clone(),
+                trigger_kind: "delivery".into(),
+                base_days,
+                mail_offset_days: mail_offset,
+                clock_interaction: "independent".into(),
+                tolled_by_event: None,
+                days_elapsed_before_toll: None,
+                days_remaining_after_toll: None,
+                computed_deadline: Some(due_iso),
+                days_until_due: Some(days_left),
+                status: if days_left < 0 {
+                    "action_ready".into()
+                } else {
+                    "active".into()
+                },
+                template_kind: "complaint".into(),
+                escalation_target: Some("litigation".into()),
+                explanation: format!(
+                    "{math} Once the window expires without compliance, you may graduate this folder into a court complaint. Confirm the statute yourself."
+                ),
+                math,
+                trigger_source: tr.source,
+                unverified: true,
+            });
+        } else {
+            detected_triggers.push("No user-entered notice/demand date".into());
+            branches.push(ProceduralBranch {
+                id: "cure-window".into(),
+                title: "Statutory cure / response window".into(),
+                rule_citation: rule.into(),
+                trigger_event_title: String::new(),
+                trigger_date: String::new(),
+                trigger_kind: "delivery".into(),
+                base_days,
+                mail_offset_days: mail_offset,
+                clock_interaction: "independent".into(),
+                tolled_by_event: None,
+                days_elapsed_before_toll: None,
+                days_remaining_after_toll: None,
+                computed_deadline: None,
+                days_until_due: None,
+                status: "needs_trigger_date".into(),
+                template_kind: "complaint".into(),
+                escalation_target: Some("litigation".into()),
+                explanation: ENTER_ORDER_DATE_PROMPT.into(),
+                math: String::new(),
+                trigger_source: String::new(),
+                unverified: true,
+            });
+        }
     } else {
-        // Tier 3 Litigation Procedural Graph
-        // Find trigger date from timeline, notice_of_appeal.judgment_date, or orders/
-        let mut order_date_str = profile.notice_of_appeal.judgment_date.trim().to_string();
-        let mut order_event_title = "Order / Judgment Entered".to_string();
-
-        for ev in &profile.timeline {
-            let t = ev.title.to_ascii_lowercase();
-            if t.contains("order") || t.contains("judgment") || t.contains("denied") || t.contains("dismiss") {
-                if !ev.date.trim().is_empty() {
-                    order_date_str = ev.date.trim().to_string();
-                    order_event_title = ev.title.clone();
+        let trigger = user_order_trigger(profile);
+        let in_review = already_in_reviewing_court(profile);
+        let recon_offset = if venue.reconsideration_trigger == "service" {
+            mail_offset
+        } else {
+            0
+        };
+        let recon_rule = match venue.venue_code.as_str() {
+            "NJ" => {
+                if venue.reconsideration_days == 10 {
+                    "N.J. Ct. R. 2:11-6"
+                } else {
+                    "N.J. Ct. R. 4:49-2"
                 }
             }
+            "CO" => "C.R.C.P. 59 / C.A.R. 40",
+            "SCOTUS" => "S. Ct. R. 44",
+            _ => "Fed. R. Civ. P. 59(e)",
+        };
+        let appeal_rule = match venue.venue_code.as_str() {
+            "NJ" => "N.J. Ct. R. 2:4-1 & R. 2:4-3(e)",
+            "CO" => "C.A.R. 4(a)",
+            "SCOTUS" => "S. Ct. R. 13.1",
+            _ => "Fed. R. App. P. 4(a)(1)",
+        };
+
+        match &trigger {
+            Some(tr) => detected_triggers.push(format!("{} ({}) [{}]", tr.title, tr.date_iso, tr.source)),
+            None => detected_triggers.push("No user-entered order/trigger date".into()),
         }
 
-        if order_date_str.is_empty() {
-            order_date_str = today_iso.clone();
-            order_event_title = "Adverse Order / Trigger Date (Using Today as Preview)".to_string();
-        }
-        detected_triggers.push(format!("{order_event_title} ({order_date_str})"));
-
-        let order_date = parse_iso_date(&order_date_str).unwrap_or_else(|_| Utc::now().date_naive());
-
-        // Branch A: Motion for Reconsideration / Alter or Amend
-        let recon_offset = if venue.reconsideration_trigger == "service" { mail_offset } else { 0 };
-        let (recon_due, recon_days_left) = compute_adjusted_date(
-            &profile.rule_pack_id,
-            order_date,
-            venue.reconsideration_days + recon_offset,
-        );
-        branches.push(ProceduralBranch {
+        // Branch A: reconsideration — always listed, but due date only with a user trigger.
+        let mut recon = ProceduralBranch {
             id: "branch-reconsideration".into(),
-            title: format!("Branch A: Motion for Reconsideration ({})", venue.venue_code),
-            rule_citation: match venue.venue_code.as_str() {
-                "NJ" => if venue.reconsideration_days == 10 { "N.J. Ct. R. 2:11-6".into() } else { "N.J. Ct. R. 4:49-2".into() },
-                "CO" => "C.R.C.P. 59 / C.A.R. 40".into(),
-                "SCOTUS" => "S. Ct. R. 44".into(),
-                _ => "Fed. R. Civ. P. 59(e)".into(),
-            },
-            trigger_event_title: order_event_title.clone(),
-            trigger_date: order_date_str.clone(),
+            title: format!("Motion for reconsideration ({})", venue.venue_code),
+            rule_citation: recon_rule.into(),
+            trigger_event_title: trigger.as_ref().map(|t| t.title.clone()).unwrap_or_default(),
+            trigger_date: trigger.as_ref().map(|t| t.date_iso.clone()).unwrap_or_default(),
             trigger_kind: venue.reconsideration_trigger.clone(),
             base_days: venue.reconsideration_days,
             mail_offset_days: recon_offset,
@@ -518,108 +719,151 @@ pub fn predict_next_steps(profile: &CaseProfile, case_dir: Option<&Path>) -> Nex
             tolled_by_event: None,
             days_elapsed_before_toll: None,
             days_remaining_after_toll: None,
-            computed_deadline: Some(recon_due),
-            days_until_due: Some(recon_days_left),
-            status: if recon_days_left < 0 { "expired".into() } else { "active".into() },
+            computed_deadline: None,
+            days_until_due: None,
+            status: "needs_trigger_date".into(),
             template_kind: "reconsideration".into(),
             escalation_target: None,
-            explanation: format!(
-                "Ask the same court to reconsider or amend its order within {} days of {} (plus {} mail offset days if applicable). A timely motion tolls/affects the appeal clock ({}).",
-                venue.reconsideration_days, venue.reconsideration_trigger, recon_offset, venue.tolling_mode
-            ),
-        });
+            explanation: ENTER_ORDER_DATE_PROMPT.into(),
+            math: String::new(),
+            trigger_source: trigger.as_ref().map(|t| t.source.clone()).unwrap_or_default(),
+            unverified: true,
+        };
+        if let Some(tr) = &trigger {
+            let (recon_due, recon_days_left) = compute_adjusted_date(
+                &profile.rule_pack_id,
+                tr.date,
+                venue.reconsideration_days + recon_offset,
+            );
+            recon.computed_deadline = Some(recon_due.clone());
+            recon.days_until_due = Some(recon_days_left);
+            recon.status = if recon_days_left < 0 {
+                "expired".into()
+            } else {
+                "active".into()
+            };
+            recon.math = deadline_math(
+                recon_rule,
+                tr,
+                venue.reconsideration_days,
+                &recon_due,
+                recon_offset,
+            );
+            recon.explanation = format!(
+                "{} Ask the same court to reconsider within {} days of {} (plus {} mail-offset days if mail service applies). {}",
+                recon.math,
+                venue.reconsideration_days,
+                venue.reconsideration_trigger,
+                recon_offset,
+                DEADLINE_UNVERIFIED_LABEL
+            );
+        }
+        branches.push(recon);
 
-        // Branch B: Notice of Appeal / Higher Court Review (with Pause vs Reset Tolling Math!)
-        let mut tolled_by = None;
-        let mut elapsed_before_toll = None;
-        let mut remaining_after_toll = None;
-        let mut appeal_status = "active".to_string();
-        let (appeal_due, appeal_days_left) = compute_adjusted_date(
-            &profile.rule_pack_id,
-            order_date,
-            venue.appeal_days,
-        );
-
-        if let Some(tev) = tolling_event {
-            if let Ok(t_date) = parse_iso_date(&tev.date) {
-                let elapsed = std::cmp::max(0, (t_date - order_date).num_days());
-                if elapsed <= venue.reconsideration_days + recon_offset {
-                    tolled_by = Some(format!("{} ({})", tev.title, tev.date));
-                    elapsed_before_toll = Some(elapsed);
-                    if venue.tolling_mode == "pause_remaining" {
-                        remaining_after_toll = Some(std::cmp::max(0, venue.appeal_days - elapsed));
-                        appeal_status = "paused_tolled".into();
-                    } else {
-                        remaining_after_toll = Some(venue.appeal_days);
-                        appeal_status = "paused_tolled".into();
+        // Branch B: notice of appeal — omitted when the case is already in a reviewing court.
+        if !in_review {
+            let mut appeal = ProceduralBranch {
+                id: "branch-appeal".into(),
+                title: if venue.venue_code == "SCOTUS" {
+                    "Petition for a writ of certiorari (SCOTUS)".into()
+                } else {
+                    format!("Notice of appeal ({})", venue.venue_code)
+                },
+                rule_citation: appeal_rule.into(),
+                trigger_event_title: trigger.as_ref().map(|t| t.title.clone()).unwrap_or_default(),
+                trigger_date: trigger.as_ref().map(|t| t.date_iso.clone()).unwrap_or_default(),
+                trigger_kind: "entry".into(),
+                base_days: venue.appeal_days,
+                mail_offset_days: 0,
+                clock_interaction: venue.tolling_mode.clone(),
+                tolled_by_event: None,
+                days_elapsed_before_toll: None,
+                days_remaining_after_toll: None,
+                computed_deadline: None,
+                days_until_due: None,
+                status: "needs_trigger_date".into(),
+                template_kind: "notice_of_appeal".into(),
+                escalation_target: Some(if venue.venue_code == "SCOTUS" {
+                    "scotus".into()
+                } else {
+                    "appellate".into()
+                }),
+                explanation: ENTER_ORDER_DATE_PROMPT.into(),
+                math: String::new(),
+                trigger_source: trigger.as_ref().map(|t| t.source.clone()).unwrap_or_default(),
+                unverified: true,
+            };
+            if let Some(tr) = &trigger {
+                let (appeal_due, appeal_days_left) =
+                    compute_adjusted_date(&profile.rule_pack_id, tr.date, venue.appeal_days);
+                let mut tolled_by = None;
+                let mut elapsed_before_toll = None;
+                let mut remaining_after_toll = None;
+                let mut appeal_status = if appeal_days_left < 0 {
+                    "expired".to_string()
+                } else {
+                    "active".to_string()
+                };
+                if let Some(tev) = tolling_event {
+                    if let Ok(t_date) = parse_iso_date(&tev.date) {
+                        let elapsed = std::cmp::max(0, (t_date - tr.date).num_days());
+                        if elapsed <= venue.reconsideration_days + recon_offset {
+                            tolled_by = Some(format!("{} ({})", tev.title, tev.date));
+                            elapsed_before_toll = Some(elapsed);
+                            appeal_status = "paused_tolled".into();
+                            remaining_after_toll = Some(if venue.tolling_mode == "pause_remaining" {
+                                std::cmp::max(0, venue.appeal_days - elapsed)
+                            } else {
+                                venue.appeal_days
+                            });
+                        }
                     }
                 }
-            }
-        } else if appeal_days_left < 0 {
-            appeal_status = "expired".into();
-        }
-
-        branches.push(ProceduralBranch {
-            id: "branch-appeal".into(),
-            title: if venue.venue_code == "SCOTUS" {
-                "Branch B: Petition for a Writ of Certiorari (SCOTUS)".into()
-            } else {
-                format!("Branch B: Notice of Appeal ({})", venue.venue_code)
-            },
-            rule_citation: match venue.venue_code.as_str() {
-                "NJ" => "N.J. Ct. R. 2:4-1 & R. 2:4-3(e)".into(),
-                "CO" => "C.A.R. 4(a)".into(),
-                "SCOTUS" => "S. Ct. R. 13.1".into(),
-                _ => "Fed. R. App. P. 4(a)(1)".into(),
-            },
-            trigger_event_title: order_event_title.clone(),
-            trigger_date: order_date_str.clone(),
-            trigger_kind: "entry".into(),
-            base_days: venue.appeal_days,
-            mail_offset_days: 0,
-            clock_interaction: venue.tolling_mode.clone(),
-            tolled_by_event: tolled_by.clone(),
-            days_elapsed_before_toll: elapsed_before_toll,
-            days_remaining_after_toll: remaining_after_toll,
-            computed_deadline: Some(appeal_due),
-            days_until_due: Some(appeal_days_left),
-            status: appeal_status,
-            template_kind: "notice_of_appeal".into(),
-            escalation_target: Some(if venue.venue_code == "SCOTUS" { "scotus".into() } else { "appellate".into() }),
-            explanation: if let Some(ref tb) = tolled_by {
-                if venue.tolling_mode == "pause_remaining" {
-                    format!(
-                        "CLOCK PAUSED (NJ R. 2:4-3(e)): Tolling motion {} filed after {} days. {} days remain on the 45-day appeal clock once the motion is decided.",
-                        tb,
-                        elapsed_before_toll.unwrap_or(0),
-                        remaining_after_toll.unwrap_or(0)
-                    )
+                appeal.computed_deadline = Some(appeal_due.clone());
+                appeal.days_until_due = Some(appeal_days_left);
+                appeal.status = appeal_status;
+                appeal.tolled_by_event = tolled_by.clone();
+                appeal.days_elapsed_before_toll = elapsed_before_toll;
+                appeal.days_remaining_after_toll = remaining_after_toll;
+                appeal.math = deadline_math(appeal_rule, tr, venue.appeal_days, &appeal_due, 0);
+                appeal.explanation = if let Some(ref tb) = tolled_by {
+                    if venue.tolling_mode == "pause_remaining" {
+                        format!(
+                            "{} Clock paused (NJ R. 2:4-3(e)): tolling motion {} filed after {} days. {} days remain once the motion is decided. {}",
+                            appeal.math,
+                            tb,
+                            elapsed_before_toll.unwrap_or(0),
+                            remaining_after_toll.unwrap_or(0),
+                            DEADLINE_UNVERIFIED_LABEL
+                        )
+                    } else {
+                        format!(
+                            "{} Clock reset pending: a timely post-judgment motion {} tolls appeal; the full {}-day period restarts when the motion is decided. {}",
+                            appeal.math, tb, venue.appeal_days, DEADLINE_UNVERIFIED_LABEL
+                        )
+                    }
                 } else {
                     format!(
-                        "CLOCK RESET PENDING: Timely post-judgment motion {} tolls appeal; full {}-day appeal period restarts upon entry of the order deciding the motion.",
-                        tb, venue.appeal_days
+                        "{} Escalate to appellate review within {} days of judgment entry. {}",
+                        appeal.math, venue.appeal_days, DEADLINE_UNVERIFIED_LABEL
                     )
-                }
-            } else {
-                format!(
-                    "Escalate to appellate review within {} days of judgment entry. Use 1-click Escalate to bundle trial orders and filings into the Appellate Appendix.",
-                    venue.appeal_days
-                )
-            },
-        });
+                };
+            }
+            branches.push(appeal);
+        }
 
-        // Branch C: Motion for Stay Pending Appeal / Extraordinary Mandamus
+        // Branch C: stay / extraordinary writ — no automatic day count.
         branches.push(ProceduralBranch {
             id: "branch-stay-or-mandamus".into(),
-            title: "Branch C: Motion for Stay Pending Appeal / Extraordinary Writ".into(),
+            title: "Motion for stay pending appeal / extraordinary writ".into(),
             rule_citation: match venue.venue_code.as_str() {
                 "NJ" => "N.J. Ct. R. 2:9-5".into(),
                 "CO" => "C.A.R. 8 / C.A.R. 21 (Mandamus)".into(),
                 "SCOTUS" => "S. Ct. R. 23 (Stay)".into(),
                 _ => "Fed. R. App. P. 8(a)".into(),
             },
-            trigger_event_title: order_event_title,
-            trigger_date: order_date_str,
+            trigger_event_title: trigger.as_ref().map(|t| t.title.clone()).unwrap_or_default(),
+            trigger_date: trigger.as_ref().map(|t| t.date_iso.clone()).unwrap_or_default(),
             trigger_kind: "entry".into(),
             base_days: 0,
             mail_offset_days: 0,
@@ -632,16 +876,20 @@ pub fn predict_next_steps(profile: &CaseProfile, case_dir: Option<&Path>) -> Nex
             status: "action_ready".into(),
             template_kind: "stay".into(),
             escalation_target: Some("scotus".into()),
-            explanation: "Pause enforcement of the order while reconsideration or appellate review is pending, or seek an extraordinary Rule to Show Cause / Mandamus if a ministerial duty (such as docketing with an approved fee waiver) was refused.".into(),
+            explanation: "Pause enforcement while reconsideration or appellate review is pending, or seek an extraordinary writ if a ministerial duty was refused. This branch has no automatic day count in the pack.".into(),
+            math: String::new(),
+            trigger_source: trigger.as_ref().map(|t| t.source.clone()).unwrap_or_default(),
+            unverified: false,
         });
     }
 
-    // Check if there are PDFs in orders/ that haven't been logged on the timeline yet
     if let Some(dir) = case_dir {
         if let Ok(entries) = std::fs::read_dir(dir.join("orders")) {
             let count = entries.filter_map(|e| e.ok()).filter(|e| e.path().is_file()).count();
             if count > 0 {
-                detected_triggers.push(format!("{count} order file(s) present in orders/ directory"));
+                detected_triggers.push(format!(
+                    "{count} order file(s) in orders/ — dates from those files are not used until you enter them"
+                ));
             }
         }
     }
@@ -677,14 +925,22 @@ mod tests {
     }
 
     #[test]
-    fn co_venue_enforces_rule_121_conferral() {
+    fn co_trial_court_flags_missing_conferral_as_needs_verification() {
         let mut p = sample_appeal_profile();
         p.governing_state = "CO".into();
         p.document_kind = "motion".into();
+        p.court.name = "Denver District Court".into();
+        p.court.division = None;
+        p.procedural_stage = "active_docket".into();
         p.motion.user_text = "Movant requests an extension of 14 days.".into();
         let report = check_venue_competence(&p);
         assert!(!report.ok);
-        assert!(report.issues.iter().any(|i| i.field == "venue.co_rule_121_conferral"));
+        let issue = report
+            .issues
+            .iter()
+            .find(|i| i.field == "venue.co_rule_121_conferral")
+            .expect("trial-court CO motion still surfaces conferral");
+        assert!(issue.message.contains("needs_verification"));
 
         p.conferral_status = "Conferred on Oct 12; opposing party does not oppose.".into();
         let report_ok = check_venue_competence(&p);
@@ -692,9 +948,44 @@ mod tests {
     }
 
     #[test]
-    fn nj_tolling_pauses_remaining_appeal_days() {
+    fn co_appellate_does_not_assert_rule_121_as_verified() {
+        let mut p = sample_appeal_profile();
+        p.governing_state = "CO".into();
+        p.document_kind = "motion".into();
+        p.court.name = "Colorado Court of Appeals".into();
+        p.procedural_stage = "appellate".into();
+        p.motion.user_text = "Movant requests an extension of 14 days.".into();
+        let report = check_venue_competence(&p);
+        assert!(
+            !report
+                .issues
+                .iter()
+                .any(|i| i.field == "venue.co_rule_121_conferral"),
+            "C.R.C.P. 121 is not asserted for Court of Appeals papers"
+        );
+        assert!(report
+            .recommendations
+            .iter()
+            .any(|r| r.contains("needs_verification") && r.contains("C.A.R.")));
+        assert!(report.venue.conferral_rule.contains("needs_verification"));
+        assert!(report.venue.sworn_statement_citation.contains("needs_verification"));
+    }
+
+    fn trial_court_profile() -> crate::case_profile::CaseProfile {
         let mut p = sample_appeal_profile();
         p.rule_pack_id = "nj-app-div".into();
+        p.governing_state = "NJ".into();
+        p.court.name = "Superior Court of New Jersey, Law Division".into();
+        p.court.division = Some("Sample vicinage".into());
+        p.procedural_stage = "post_judgment".into();
+        p.notice_of_appeal.judgment_date.clear();
+        p.timeline.clear();
+        p
+    }
+
+    #[test]
+    fn nj_tolling_pauses_remaining_appeal_days() {
+        let mut p = trial_court_profile();
         p.timeline.push(TimelineEvent {
             id: "1".into(),
             title: "Trial Order Denied".into(),
@@ -712,5 +1003,107 @@ mod tests {
         assert_eq!(appeal.status, "paused_tolled");
         assert_eq!(appeal.days_elapsed_before_toll, Some(7));
         assert_eq!(appeal.days_remaining_after_toll, Some(38)); // 45 - 7 = 38 days remaining!
+        assert!(appeal.unverified);
+        assert!(appeal.math.contains("2026-10-01"));
+        assert!(appeal.math.contains("unverified"));
+    }
+
+    #[test]
+    fn no_trigger_date_does_not_invent_a_deadline() {
+        let p = trial_court_profile();
+        let next = predict_next_steps(&p, None);
+        assert!(
+            next.detected_triggers
+                .iter()
+                .any(|t| t.contains("No user-entered")),
+            "{:?}",
+            next.detected_triggers
+        );
+        for b in &next.branches {
+            assert!(
+                b.computed_deadline.is_none(),
+                "{} leaked a deadline {:?}",
+                b.id,
+                b.computed_deadline
+            );
+            if b.id == "branch-reconsideration" || b.id == "branch-appeal" {
+                assert_eq!(b.status, "needs_trigger_date");
+                assert!(b.explanation.contains(ENTER_ORDER_DATE_PROMPT));
+            }
+        }
+        let blob = format!("{next:?}");
+        assert!(!blob.contains("Using Today as Preview"));
+    }
+
+    #[test]
+    fn user_entered_order_date_computes_with_basis() {
+        let mut p = trial_court_profile();
+        p.timeline.push(TimelineEvent {
+            id: "1".into(),
+            title: "Order Denying Motion".into(),
+            date: "2026-10-01".into(),
+            notes: "Dkt. 12".into(),
+        });
+        let next = predict_next_steps(&p, None);
+        let recon = next
+            .branches
+            .iter()
+            .find(|b| b.id == "branch-reconsideration")
+            .unwrap();
+        assert_eq!(recon.computed_deadline.as_deref(), Some("2026-10-21"));
+        assert_eq!(recon.trigger_date, "2026-10-01");
+        assert!(recon.trigger_source.contains("timeline"));
+        assert!(recon.unverified);
+        assert!(recon.math.contains("N.J. Ct. R. 4:49-2") || recon.math.contains("4:49-2"));
+        assert!(recon.explanation.contains(DEADLINE_UNVERIFIED_LABEL));
+    }
+
+    #[test]
+    fn appellate_division_does_not_offer_trial_notice_of_appeal_clock() {
+        let mut p = trial_court_profile();
+        p.court.name = "Superior Court of New Jersey, Appellate Division".into();
+        p.procedural_stage = "appellate".into();
+        p.timeline.push(TimelineEvent {
+            id: "1".into(),
+            title: "Appellate Order Entered".into(),
+            date: "2026-10-01".into(),
+            notes: String::new(),
+        });
+        let next = predict_next_steps(&p, None);
+        assert!(
+            next.branches.iter().all(|b| b.id != "branch-appeal"),
+            "appellate cases must not show a 45-day trial notice-of-appeal clock: {:?}",
+            next.branches.iter().map(|b| &b.id).collect::<Vec<_>>()
+        );
+        let recon = next
+            .branches
+            .iter()
+            .find(|b| b.id == "branch-reconsideration")
+            .unwrap();
+        assert!(recon.computed_deadline.is_some());
+        assert_eq!(recon.rule_citation, "N.J. Ct. R. 2:11-6");
+    }
+
+    #[test]
+    fn uses_local_today_not_utc_for_days_remaining() {
+        let mut p = trial_court_profile();
+        p.timeline.push(TimelineEvent {
+            id: "1".into(),
+            title: "Order Entered".into(),
+            date: chrono::Local::now().date_naive().to_string(),
+            notes: String::new(),
+        });
+        let next = predict_next_steps(&p, None);
+        let recon = next
+            .branches
+            .iter()
+            .find(|b| b.id == "branch-reconsideration")
+            .unwrap();
+        let days = recon.days_until_due.expect("user trigger should compute");
+        // 20 calendar days from today, rolled to a business day, should be in a tight window.
+        assert!(
+            (18..=24).contains(&days),
+            "days_until_due {days} should be ~20 local days, not a UTC-skewed value"
+        );
     }
 }

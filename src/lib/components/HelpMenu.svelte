@@ -30,6 +30,7 @@
 <div class="relative">
   <button
     class="text-sm border border-border px-3 py-1.5 rounded-md"
+    aria-label="Help"
     onclick={() => {
       open = !open;
       if (open) load();
@@ -44,6 +45,9 @@
       </button>
       <button onclick={() => { open = false; goto("/packs"); }} class="w-full text-left text-sm px-2 py-1.5 rounded hover:bg-accent/20">
         Forms packs
+      </button>
+      <button onclick={() => { open = false; goto("/ai"); }} class="w-full text-left text-sm px-2 py-1.5 rounded hover:bg-accent/20">
+        For your AI
       </button>
       <div class="border-t border-border my-1"></div>
       {#each links as link}

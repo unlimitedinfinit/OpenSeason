@@ -24,8 +24,8 @@ There is no cloud API and no hosted model. Headless use is local: the `openseaso
 Rules:
 
 - `never_files` and `never_serves` are always true.
-- `ok` is true only when `issues` is empty.
-- Exit code 0 means the command ran. Read `ok`. A missing file or bad argument is exit 1 plus an envelope whose `issues[0].field` is `cli` or `mcp`.
+- `ok` is true only when `issues` is empty. If an inner report has `ok: false` (for example preflight), the outer envelope is also `ok: false`.
+- Exit code 0 means the command ran. Read `ok`. A missing file or bad argument is exit 1 plus an envelope whose `issues[0].field` is `cli` or `mcp`. Clap usage errors also print this envelope when `--json` is set.
 - An agent should stop and ask the user when a fact has no record cite or a cite is `unverified`. Do not fill those fields yourself.
 
 ## CLI
@@ -35,6 +35,8 @@ From the repository root (Rust toolchain required):
 ```bash
 npm run cli -- --json case create --path ./tmp-case --title "Example v. Sample County Clerk" --kind reconsideration --pack nj-app-div
 npm run cli -- --json draft import ./tmp-case --md fixtures/sample-reconsideration.md
+npm run cli -- --json draft preview --md fixtures/sample-reconsideration.md
+npm run cli -- --json export court-md ./tmp-case
 npm run cli -- --json evidence add ./tmp-case --file fixtures/sample-appeal-case/evidence/.gitkeep --description "Dkt. 12 order"
 npm run cli -- --json check fact ./tmp-case
 npm run cli -- --json check authority ./tmp-case
@@ -54,6 +56,7 @@ Equivalent without npm: `cargo run --manifest-path src-tauri/Cargo.toml --bin op
 | `case validate DIR` | Caption and layout check |
 | `case seal DIR` | Writes `.sealed`. Does not encrypt files |
 | `draft import DIR --md FILE` | Import md2court subset into `drafts/draft.md` |
+| `draft preview [--md FILE] [DIR]` | Preview caption + body. Does not write files |
 | `evidence add DIR --file FILE [--description TEXT]` | Copy an exhibit into `evidence/` |
 | `check fact DIR` | Split the draft into sentences. Does not invent cites |
 | `check fact DIR --id N --cite TEXT --exhibit NAME --verified` | Attach a user-supplied cite |
@@ -108,14 +111,18 @@ Equivalent without npm: `cargo run --manifest-path src-tauri/Cargo.toml --bin op
 | `intake status DIR` | 1-question-at-a-time Guided Intake Wizard status, completion %, and `next_question` |
 | `intake answer DIR --id QUESTION_ID --value TEXT` | Answer a question in the Guided Intake Wizard (updates profile, parties, or draft sections) |
 | `intake scan DIR` | Offline PDF text extraction & candidate detection (docket numbers, dates, courts) across `orders/` and `evidence/` |
-| `check venue DIR` | Deterministic Multi-Venue Competence Matrix check (NJ R. 1:4-4(b), CO Rule 121 conferral, 28 U.S.C. § 1746, SCOTUS Rule 14.1, Will witnesses) |
+| `check venue DIR` | Deterministic Multi-Venue Competence Matrix check (NJ R. 1:4-4(b), CO conferral/declaration as needs_verification, 28 U.S.C. § 1746, SCOTUS Rule 14.1, Will witnesses) |
 | `portfolio status [--root DIR]` | Multi-state, multi-venue Portfolio Deadline Radar & Global Filer Profile |
 | `mcp` | Stdio MCP server (same tools) |
 | `sync DIR --action backup` | Stub. Standard: `not_implemented`. Confidential: refused |
+| `agent manifest` | List CLI/MCP tools, MCP launch config, and a copyable starter prompt |
+| `case import-folder DIR --from FOLDER [--title TEXT]` | Copy drafts/notes/orders into a case. Never moves originals. Proposes parties and dates; does not auto-commit guesses |
 
 ## MCP (stdio)
 
-`openseason mcp` speaks JSON-RPC 2.0 with `Content-Length` framing. Tools include:
+`openseason mcp` speaks JSON-RPC 2.0 with `Content-Length` framing **or newline-delimited JSON**. Tools include:
+- `agent_manifest`: Tool list, MCP launch, starter prompt.
+- `import_folder`: Copy a folder of drafts/notes/orders. Does not auto-commit guesses.
 - `case_context`: One-call consolidated Legal OS context bundle for immediate AI agent orientation.
 - `case_next_steps`: Predictive Procedural State Graph (NJ `pause_remaining` vs. CO/Federal `reset_full` tolling + mail service offset).
 - `case_escalate`: Cross-venue graduation/escalation (`trial_lawsuit`, `appellate_appeal`, `mandamus`, `scotus_cert`) with automatic appendix record carryover.

@@ -1,0 +1,31 @@
+{
+  "schema": "openseason.venue-language/v1",
+  "notice": "Suggested oath and conferral sentences. citation_status is needs_verification unless pack_source. Do not treat these as court-required until the user confirms the rule that governs their paper.",
+  "venues": {
+    "NJ": {
+      "oath": {
+        "heading": "CERTIFICATION IN LIEU OF OATH (R. 1:4-4(b))",
+        "text": "I certify that the foregoing statements made by me are true. I am aware that if any of the foregoing statements made by me are willfully false, I am subject to punishment.",
+        "citation": "R. 1:4-4(b)",
+        "citation_status": "pack_source",
+        "note": "New Jersey papers use this verbatim clause. Do not substitute 'to the best of my knowledge'."
+      }
+    },
+    "CO": {
+      "oath": {
+        "heading": "Declaration",
+        "text": "I declare under penalty of perjury under the law of Colorado that the foregoing is true and correct. I signed this on [date] at [city, state].",
+        "citation": "C.R.S. § 13-27-106",
+        "citation_status": "needs_verification",
+        "note": "The Uniform Unsworn Declarations Act form often needs a signing date and place. Confirm the current statute and whether your appellate paper uses this declaration. This is a suggested sentence, not a verified requirement."
+      },
+      "conferral": {
+        "heading": "Conferral",
+        "text": "I conferred with the opposing party on [date]. The opposing party [agrees / takes no position / opposes]. Confirm whether C.R.C.P. 121 § 1-15(8) or the Colorado Appellate Rules govern this paper before filing.",
+        "citation": "C.R.C.P. 121 § 1-15(8)",
+        "citation_status": "needs_verification",
+        "note": "Trial-court civil motions in Colorado often use C.R.C.P. 121 § 1-15(8). Papers in the Colorado Court of Appeals may be governed by C.A.R. instead. Do not treat this label as verified."
+      }
+    }
+  }
+}

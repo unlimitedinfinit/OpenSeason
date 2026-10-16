@@ -93,6 +93,11 @@ pub struct PackListItem {
     pub install_path: Option<String>,
     pub rule_pack_id: String,
     pub source_note: String,
+    /// False when the catalog row has no download, local folder, or sha256.
+    #[serde(default)]
+    pub installable: bool,
+    #[serde(default)]
+    pub unavailable_reason: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -202,13 +207,30 @@ pub fn load_catalog(path: Option<&Path>) -> Result<FormsCatalog, String> {
         if cat.schema.is_empty() {
             cat = justlegal_state_to_catalog(&text)?;
         }
-        return Ok(cat);
+        return Ok(merge_bundled_fixture_packs(cat));
     }
     let cached = default_packs_root().join("catalog.json");
     if cached.is_file() {
         return load_catalog(Some(&cached));
     }
     bundled_catalog()
+}
+
+/// Keep the offline fixture pack visible even when a cached JustLegal catalog is in use.
+fn merge_bundled_fixture_packs(mut cat: FormsCatalog) -> FormsCatalog {
+    if let Ok(bundled) = bundled_catalog() {
+        for pack in bundled.packs {
+            if !cat.packs.iter().any(|p| p.id == pack.id) {
+                cat.packs.push(pack);
+            }
+        }
+        for form in bundled.forms {
+            if !cat.forms.iter().any(|f| f.id == form.id) {
+                cat.forms.push(form);
+            }
+        }
+    }
+    cat
 }
 
 /// Accept a JustLegal `/registry/states/XX.json` file as a catalog.
@@ -366,7 +388,35 @@ fn catalog_base(path: Option<&Path>) -> PathBuf {
 }
 
 pub fn repo_fixtures_catalog_dir() -> PathBuf {
+    for root in fixture_search_roots() {
+        if root.is_dir() {
+            return root;
+        }
+    }
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../fixtures/forms-catalog")
+}
+
+fn fixture_search_roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    roots.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../fixtures/forms-catalog"));
+    if let Ok(cwd) = std::env::current_dir() {
+        roots.push(cwd.join("fixtures/forms-catalog"));
+        roots.push(cwd.join("../fixtures/forms-catalog"));
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            roots.push(dir.join("fixtures/forms-catalog"));
+            roots.push(dir.join("../fixtures/forms-catalog"));
+            roots.push(dir.join("../../fixtures/forms-catalog"));
+            roots.push(dir.join("resources/fixtures/forms-catalog"));
+        }
+    }
+    if let Ok(p) = std::env::var("OPENSEASON_FIXTURES") {
+        if !p.trim().is_empty() {
+            roots.push(PathBuf::from(p));
+        }
+    }
+    roots
 }
 
 pub fn list_packs(catalog_path: Option<&Path>, root: Option<&Path>) -> Result<PackList, String> {
@@ -389,6 +439,13 @@ pub fn list_packs(catalog_path: Option<&Path>, root: Option<&Path>) -> Result<Pa
             install_path: dest.is_dir().then(|| dest.display().to_string()),
             rule_pack_id: pack.rule_pack_id.clone(),
             source_note: catalog.source_note.clone(),
+            installable: pack_unavailable_reason_with_catalog(pack, catalog_path, Some(&catalog))
+                .is_empty(),
+            unavailable_reason: pack_unavailable_reason_with_catalog(
+                pack,
+                catalog_path,
+                Some(&catalog),
+            ),
         });
     }
     let installed = scan_installed(&root)?;
@@ -424,6 +481,70 @@ fn effective_pack_bytes(pack: &CatalogPack, catalog_path: Option<&Path>) -> u64 
         return dir_size(&dir).unwrap_or(0);
     }
     0
+}
+
+#[allow(dead_code)]
+fn pack_is_installable(pack: &CatalogPack, catalog_path: Option<&Path>) -> bool {
+    pack_unavailable_reason(pack, catalog_path).is_empty()
+}
+
+#[allow(dead_code)]
+fn pack_unavailable_reason(pack: &CatalogPack, catalog_path: Option<&Path>) -> String {
+    pack_unavailable_reason_with_catalog(pack, catalog_path, None)
+}
+
+fn pack_unavailable_reason_with_catalog(
+    pack: &CatalogPack,
+    catalog_path: Option<&Path>,
+    catalog: Option<&FormsCatalog>,
+) -> String {
+    if resolve_local_dir(pack, catalog_path).is_some() {
+        return String::new();
+    }
+    if !pack.download_url.is_empty()
+        && !pack.download_url.contains("example.test")
+        && !pack.sha256.trim().is_empty()
+    {
+        return String::new();
+    }
+    if catalog
+        .map(|c| pack_has_installable_forms(c, pack))
+        .unwrap_or(false)
+    {
+        return String::new();
+    }
+    if pack.download_url.is_empty() && pack.local_dir.is_empty() && pack.sha256.trim().is_empty() {
+        return "This pack has no download URL, local folder, or SHA-256 checksum, so it cannot be installed. Pass a zip with --file, or copy fixtures/forms-catalog/packs/nj-appeal.".into();
+    }
+    if pack.sha256.trim().is_empty() {
+        return "This pack has no SHA-256 checksum. OpenSeason will not install a file it cannot verify.".into();
+    }
+    if pack.download_url.is_empty() || pack.download_url.contains("example.test") {
+        return "This pack has no real download source. Point the catalog at a host you control, or pass a local zip with --file.".into();
+    }
+    String::new()
+}
+
+fn pack_has_installable_forms(catalog: &FormsCatalog, pack: &CatalogPack) -> bool {
+    matching_forms(catalog, pack).any(|f| {
+        !f.sha256.trim().is_empty()
+            && !f.download_url.is_empty()
+            && !f.download_url.contains("example.test")
+    })
+}
+
+fn matching_forms<'a>(
+    catalog: &'a FormsCatalog,
+    pack: &'a CatalogPack,
+) -> impl Iterator<Item = &'a crate::rule_pack::FormEntry> {
+    catalog.forms.iter().filter(move |f| {
+        f.state.eq_ignore_ascii_case(&pack.state)
+            && (pack.situations.is_empty()
+                || pack.situations.iter().any(|s| {
+                    crate::rule_pack::normalize_key(s)
+                        == crate::rule_pack::normalize_key(&f.situation)
+                }))
+    })
 }
 
 fn resolve_local_dir(pack: &CatalogPack, catalog_path: Option<&Path>) -> Option<PathBuf> {
@@ -495,6 +616,8 @@ pub fn scan_installed(root: &Path) -> Result<Vec<PackListItem>, String> {
             install_path: Some(path.display().to_string()),
             rule_pack_id: pack.rule_pack_id.unwrap_or_else(|| pack.id.clone()),
             source_note: pack.source_note,
+            installable: true,
+            unavailable_reason: String::new(),
         });
     }
     Ok(out)
@@ -588,12 +711,23 @@ pub fn install(opts: InstallOpts) -> Result<InstallReport, String> {
             offline_after: true,
         });
     }
+    if pack_has_installable_forms(&catalog, pack) {
+        if !opts.allow_network {
+            return Err(
+                "This pack lists official forms with SHA-256 checksums, but network install is off. Pass --file, or confirm install in the window so the files can be downloaded and verified."
+                    .into(),
+            );
+        }
+        return install_matching_forms(&catalog, pack, &dest, opts.situation.clone());
+    }
+    let reason = pack_unavailable_reason_with_catalog(pack, opts.catalog.as_deref(), Some(&catalog));
+    if !reason.is_empty() {
+        return Err(reason);
+    }
     if !opts.allow_network {
         return Err(format!(
-            "Pack '{}' is listed as {} ({}). Network install is off, and no local_dir was found. Host the archive yourself or pass --file.",
-            pack.id,
-            size_label(pack.size_bytes),
-            pack.download_url
+            "Pack '{}' has no local folder on this computer. Network install is off. Pass a zip with --file, or copy fixtures/forms-catalog/packs/nj-appeal.",
+            pack.id
         ));
     }
     if pack.download_url.contains("example.test") || pack.download_url.is_empty() {
@@ -615,6 +749,65 @@ pub fn install(opts: InstallOpts) -> Result<InstallReport, String> {
         size_label: size_label(bytes),
         dest: dest.display().to_string(),
         files: list_files(&dest)?,
+        sha256_ok: true,
+        offline_after: true,
+    })
+}
+
+fn install_matching_forms(
+    catalog: &FormsCatalog,
+    pack: &CatalogPack,
+    dest: &Path,
+    situation: Option<String>,
+) -> Result<InstallReport, String> {
+    let forms: Vec<_> = matching_forms(catalog, pack)
+        .filter(|f| {
+            !f.sha256.trim().is_empty()
+                && !f.download_url.is_empty()
+                && !f.download_url.contains("example.test")
+        })
+        .cloned()
+        .collect();
+    if forms.is_empty() {
+        return Err(pack_unavailable_reason_with_catalog(pack, None, Some(catalog)));
+    }
+    fs::create_dir_all(dest.join("forms")).map_err(|e| e.to_string())?;
+    let mut files = Vec::new();
+    let mut bytes_total = 0u64;
+    for form in &forms {
+        let ext = if form.download_url.to_ascii_lowercase().ends_with(".pdf") {
+            "pdf"
+        } else {
+            "bin"
+        };
+        let dest_file = dest.join("forms").join(format!("{}.{}", form.id, ext));
+        let tmp_dir = dest.join(".download-tmp");
+        let n = download_to(&form.download_url, &tmp_dir, &form.sha256)?;
+        bytes_total += n;
+        let downloaded = if tmp_dir.join("download.bin").is_file() {
+            tmp_dir.join("download.bin")
+        } else {
+            tmp_dir.clone()
+        };
+        if downloaded.is_file() {
+            fs::rename(&downloaded, &dest_file).map_err(|e| e.to_string())?;
+        }
+        let _ = fs::remove_dir_all(&tmp_dir);
+        files.push(dest_file.display().to_string());
+    }
+    fill_form_hashes(dest)?;
+    Ok(InstallReport {
+        ok: true,
+        never_files: true,
+        never_serves: true,
+        notice: format!("{NEVER_FILE_NOTICE}\n{LEGAL_INFO_NOTICE}"),
+        pack_id: pack.id.clone(),
+        state: pack.state.clone(),
+        situation,
+        bytes_planned: bytes_total,
+        size_label: size_label(bytes_total),
+        dest: dest.display().to_string(),
+        files,
         sha256_ok: true,
         offline_after: true,
     })
@@ -1330,9 +1523,50 @@ mod tests {
         })
         .unwrap_err();
         assert!(
-            err.contains("fixture") || err.contains("example.test"),
+            err.contains("fixture")
+                || err.contains("example.test")
+                || err.contains("no real download source")
+                || err.contains("--file"),
             "{err}"
         );
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn install_bundled_fixture_without_file_flag() {
+        let root = temp();
+        let report = install(InstallOpts {
+            state: "NJ".into(),
+            situation: Some("appeal".into()),
+            catalog: None,
+            file: None,
+            root: Some(root.clone()),
+            allow_network: false,
+        })
+        .expect("bundled NJ fixture should copy from local_dir without a network fetch");
+        assert!(report.ok);
+        assert!(report.offline_after);
+        assert!(report.files.iter().any(|f| f.contains("notice-of-appeal") || f.contains("pack.json")));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn catalog_pack_without_source_or_hash_is_unavailable() {
+        let pack = CatalogPack {
+            id: "xx-empty".into(),
+            state: "XX".into(),
+            court: "Sample".into(),
+            title: "Empty pack".into(),
+            situations: vec!["appeal".into()],
+            size_bytes: 0,
+            sha256: String::new(),
+            download_url: String::new(),
+            local_dir: String::new(),
+            rule_pack_id: String::new(),
+            source_id: String::new(),
+        };
+        let reason = pack_unavailable_reason(&pack, None);
+        assert!(!reason.is_empty());
+        assert!(!pack_is_installable(&pack, None));
     }
 }

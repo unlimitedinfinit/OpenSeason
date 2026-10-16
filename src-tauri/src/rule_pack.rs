@@ -232,7 +232,7 @@ impl RulePack {
         }
     }
 
-    pub fn find_situation(&self, query: &str) -> Option<&Situation> {
+    pub fn find_situation_exact(&self, query: &str) -> Option<&Situation> {
         let key = normalize_key(query);
         if key.is_empty() {
             return None;
@@ -242,10 +242,16 @@ impl RulePack {
                 || s.aliases.iter().any(|a| normalize_key(a) == key)
                 || normalize_key(&s.label) == key
         })
-        .or_else(|| {
+    }
+
+    pub fn find_situation(&self, query: &str) -> Option<&Situation> {
+        self.find_situation_exact(query).or_else(|| {
+            let key = normalize_key(query);
+            if key.is_empty() {
+                return None;
+            }
             self.situations.iter().find(|s| {
                 normalize_key(&s.label).contains(&key)
-                    || normalize_key(&s.question).contains(&key)
                     || s.aliases.iter().any(|a| normalize_key(a).contains(&key))
             })
         })
