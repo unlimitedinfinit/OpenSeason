@@ -3,6 +3,8 @@ use std::path::Path;
 
 pub const NJ_APP_DIV_JSON: &str = include_str!("../../templates/rule-packs/nj-app-div.json");
 pub const CO_MANDAMUS_JSON: &str = include_str!("../../templates/rule-packs/co-mandamus.json");
+pub const CO_APP_CT_JSON: &str = include_str!("../../templates/rule-packs/co-app-ct.json");
+pub const FED_APP_CT_JSON: &str = include_str!("../../templates/rule-packs/fed-app-ct.json");
 pub const GENERIC_PACK_JSON: &str = include_str!("../../templates/rule-packs/generic.json");
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -184,13 +186,23 @@ impl RulePack {
         serde_json::from_str(CO_MANDAMUS_JSON).expect("co mandamus pack")
     }
 
+    pub fn co_app_ct() -> Self {
+        serde_json::from_str(CO_APP_CT_JSON).expect("co appellate court pack")
+    }
+
+    pub fn fed_app_ct() -> Self {
+        serde_json::from_str(FED_APP_CT_JSON).expect("fed appellate court pack")
+    }
+
     pub fn builtin(id: &str) -> Result<Self, String> {
         match id.trim() {
             "" | "generic" | "generic-us-appellate" => Ok(Self::generic()),
             "nj-app-div" | "nj" => Ok(Self::nj_app_div()),
+            "co-app-ct" | "co-app" => Ok(Self::co_app_ct()),
+            "fed-app-ct" | "fed" | "federal" => Ok(Self::fed_app_ct()),
             "co-mandamus" | "mandamus" | "co" => Ok(Self::co_mandamus()),
             other => Err(format!(
-                "Unknown rule pack '{other}'. Use generic-us-appellate, nj-app-div, or co-mandamus."
+                "Unknown rule pack '{other}'. Use generic-us-appellate, nj-app-div, co-app-ct, fed-app-ct, or co-mandamus."
             )),
         }
     }
@@ -290,7 +302,13 @@ impl RulePack {
     }
 
     pub fn list_builtin() -> Vec<Self> {
-        vec![Self::generic(), Self::nj_app_div(), Self::co_mandamus()]
+        vec![
+            Self::generic(),
+            Self::nj_app_div(),
+            Self::co_app_ct(),
+            Self::fed_app_ct(),
+            Self::co_mandamus(),
+        ]
     }
 
     /// Validate a pack file. New states are data, not code.

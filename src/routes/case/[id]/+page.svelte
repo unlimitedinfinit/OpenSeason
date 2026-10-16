@@ -3,17 +3,12 @@
   import { goto } from "$app/navigation";
   import { onMount } from "svelte";
   import ReviewNotice from "$lib/components/ReviewNotice.svelte";
-  import PartyEditor from "$lib/components/PartyEditor.svelte";
+  import CasePartiesTab from "$lib/components/tabs/CasePartiesTab.svelte";
   import FieldHelp from "$lib/components/FieldHelp.svelte";
   import PreFlightAuditCard from "$lib/components/PreFlightAuditCard.svelte";
-  import CloudSyncModal from "$lib/components/CloudSyncModal.svelte";
   import MotionDocket from "$lib/components/MotionDocket.svelte";
   import ServiceCertCard from "$lib/components/ServiceCertCard.svelte";
-  import PdfToolsModal from "$lib/components/PdfToolsModal.svelte";
-  import SignatureStudioModal from "$lib/components/SignatureStudioModal.svelte";
-  import IntakeWizardModal from "$lib/components/IntakeWizardModal.svelte";
   import ProceduralGraphCard from "$lib/components/ProceduralGraphCard.svelte";
-  import ConfirmDialog from "$lib/components/ConfirmDialog.svelte";
   import CaseOverviewTab from "$lib/components/tabs/CaseOverviewTab.svelte";
   import CaseDocumentsTab from "$lib/components/tabs/CaseDocumentsTab.svelte";
   import CaseEvidenceTab from "$lib/components/tabs/CaseEvidenceTab.svelte";
@@ -21,6 +16,11 @@
   import CaseCheckTab from "$lib/components/tabs/CaseCheckTab.svelte";
   import CaseFilesTab from "$lib/components/tabs/CaseFilesTab.svelte";
   import CaseConfidentialTab from "$lib/components/tabs/CaseConfidentialTab.svelte";
+  import CaseRecordTab from "$lib/components/tabs/CaseRecordTab.svelte";
+  import ReviewCourtOrderCard from "$lib/components/ReviewCourtOrderCard.svelte";
+  import CaseModals from "$lib/components/CaseModals.svelte";
+  import { decodeOrderForCaseHelper } from "$lib/utils/orderOperations";
+  import { promptAndUploadEvidence } from "$lib/utils/evidenceOperations";
   import { ipc } from "$lib/ipc";
   import { session } from "$lib/session.svelte";
   import type {
@@ -36,18 +36,26 @@
     FormInspection,
     FormFillResult,
     CaseFilingItem,
+    DecodedOrder,
+    MailAuditReport,
   } from "$lib/types/case";
 
   let caseId = $derived($page.params.id || "");
   let profile = $state<CaseProfile | null>(null);
   let parties = $state<Party[]>([]);
   let addressText = $state("");
-  let tab = $state<"overview" | "docket" | "service" | "parties" | "documents" | "evidence" | "timeline" | "files" | "check" | "confidential">("overview");
+  let tab = $state<"overview" | "docket" | "record" | "service" | "parties" | "documents" | "evidence" | "timeline" | "files" | "check" | "confidential">("overview");
   let confirmSeal = $state(false);
   let showCloudModal = $state(false);
   let showPdfToolsModal = $state(false);
   let showSignatureModal = $state(false);
   let showIntakeWizard = $state(false);
+  let showAccountabilityModal = $state(false);
+  let showAdaModal = $state(false);
+  let showRecordRetrievalModal = $state(false);
+  let showWorkflowModal = $state(false);
+  let showConsultationModal = $state(false);
+  let preselectedIssueId = $state<string | null>(null);
   let activeFilingTitle = $state("");
   let exhibitPacketReport = $state<ExhibitPacketReport | null>(null);
   let batesPrefix = $state("");
@@ -88,6 +96,9 @@
   let targetLookup = $state("");
   let targetHits = $state<{ recipient_name?: string; award_amount?: number; description?: string }[]>([]);
   let hydrated = $state("");
+  let activeOrderAlert = $state<DecodedOrder | null>(null);
+  let activeMailAudit = $state<MailAuditReport | null>(null);
+  let inspectingOrder = $state(false);
 
   onMount(load);
 
@@ -237,44 +248,12 @@
     profile.timeline = (profile.timeline || []).filter((e) => e.id !== id);
   }
 
-  async function addEvidence() {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.onchange = async (e: Event) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file || !profile) return;
-      const desc = prompt("Short description for this exhibit:", file.name);
-      if (desc === null) return;
-      try {
-        const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
-        if (profile.mode === "confidential") {
-          const password = prompt("If this case is sealed, re-enter the vault password. Leave empty only for an unsealed Confidential case.");
-          const result = await ipc<string>("add_hunt_evidence_bytes", {
-            huntId: caseId,
-            filename: file.name,
-            fileBytes: bytes,
-            description: desc,
-            password: password && password.length ? password : null,
-          });
-          status =
-            result === "already_present"
-              ? `This exhibit is already in the vault (same file contents). The existing sealed copy was not changed: ${file.name}`
-              : `Encrypted exhibit stored in the vault: ${file.name}`;
-        } else {
-          await ipc("add_case_evidence", {
-            caseId,
-            filename: file.name,
-            fileBytes: bytes,
-            description: desc,
-          });
-          status = `Copied exhibit into the case evidence folder: ${file.name}`;
-        }
-        artifacts = await ipc<CaseArtifact[]>("list_case_artifacts", { caseId }).catch(() => artifacts);
-      } catch (err) {
-        error = String(err);
-      }
-    };
-    input.click();
+  function addEvidence() {
+    promptAndUploadEvidence(caseId, profile, (res) => {
+      if (res.status) status = res.status;
+      if (res.error) error = res.error;
+      if (res.artifacts) artifacts = res.artifacts;
+    });
   }
 
   async function lookupTarget() {
@@ -450,6 +429,32 @@
       fillingForm = false;
     }
   }
+
+  async function decodeOrderForCase(pdfPath?: string) {
+    inspectingOrder = true;
+    error = "";
+    try {
+      const res = await decodeOrderForCaseHelper(caseId, profile, artifacts, pdfPath);
+      if (res) {
+        activeOrderAlert = res.order;
+        activeMailAudit = res.mailAudit;
+        status = `Decoded order: ${res.order.title}`;
+      }
+    } catch (e) {
+      error = String(e);
+    } finally {
+      inspectingOrder = false;
+    }
+  }
+
+  function handleOrderAction(action: string) {
+    status = `Selected order action: ${action}`;
+    if (action.toLowerCase().includes("reconsideration") || action.toLowerCase().includes("motion")) {
+      tab = "docket";
+    } else if (action.toLowerCase().includes("transcript") || action.toLowerCase().includes("record")) {
+      tab = "record";
+    }
+  }
 </script>
 
 <main class="container mx-auto max-w-5xl p-8 space-y-6">
@@ -475,6 +480,18 @@
           <span>Guided intake</span>
         </button>
         <button
+          onclick={() => { preselectedIssueId = null; showAccountabilityModal = true; }}
+          class="text-xs px-3 py-1.5 rounded-md border border-rose-500/40 text-rose-300 hover:bg-rose-950/30 flex items-center gap-1.5 font-medium transition-colors"
+        >
+          <span>Accountability</span>
+        </button>
+        <button
+          onclick={() => (showAdaModal = true)}
+          class="text-xs px-3 py-1.5 rounded-md border border-purple-500/40 text-purple-300 hover:bg-purple-950/30 flex items-center gap-1.5 font-medium transition-colors"
+        >
+          <span>ADA petition</span>
+        </button>
+        <button
           onclick={() => (showPdfToolsModal = true)}
           class="text-xs px-3 py-1.5 rounded-md border border-blue-500/40 text-blue-300 hover:bg-blue-950/30 flex items-center gap-1.5 font-medium transition-colors"
         >
@@ -485,6 +502,30 @@
           class="text-xs px-3 py-1.5 rounded-md border border-emerald-500/40 text-emerald-300 hover:bg-emerald-950/30 flex items-center gap-1.5 font-medium transition-colors"
         >
           <span>Signature</span>
+        </button>
+        <button
+          onclick={() => decodeOrderForCase()}
+          class="text-xs px-3 py-1.5 rounded-md border border-cyan-500/40 text-cyan-300 hover:bg-cyan-950/30 flex items-center gap-1.5 font-medium transition-colors"
+        >
+          <span>Decode order</span>
+        </button>
+        <button
+          onclick={() => (showRecordRetrievalModal = true)}
+          class="text-xs px-3 py-1.5 rounded-md border border-blue-500/40 text-blue-300 hover:bg-blue-950/30 flex items-center gap-1.5 font-medium transition-colors"
+        >
+          <span>Record retrieval</span>
+        </button>
+        <button
+          onclick={() => (showWorkflowModal = true)}
+          class="text-xs px-3 py-1.5 rounded-md border border-indigo-500/40 text-indigo-300 hover:bg-indigo-950/30 flex items-center gap-1.5 font-medium transition-colors"
+        >
+          <span>Workflow radar</span>
+        </button>
+        <button
+          onclick={() => (showConsultationModal = true)}
+          class="text-xs px-3 py-1.5 rounded-md border border-violet-500/40 text-violet-300 hover:bg-violet-950/30 flex items-center gap-1.5 font-medium transition-colors"
+        >
+          <span>Consultation dossier</span>
         </button>
         {#if profile.cloud_matter_id}
           <span class="text-xs bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 px-2.5 py-1 rounded-md font-mono">
@@ -511,10 +552,20 @@
 
     <ReviewNotice />
 
+    {#if activeOrderAlert}
+      <ReviewCourtOrderCard
+        order={activeOrderAlert}
+        mailAudit={activeMailAudit}
+        onSelectAction={handleOrderAction}
+        onDismiss={() => { activeOrderAlert = null; }}
+      />
+    {/if}
+
     <ProceduralGraphCard
       caseId={caseId}
       bind:profile
       onOpenWizard={() => (showIntakeWizard = true)}
+      onOpenExtension={() => (showConsultationModal = true)}
       onProfileSaved={load}
     />
 
@@ -530,6 +581,7 @@
       {#each [
         ["overview", "Overview"],
         ["docket", "Motions & filings"],
+        ["record", "Record & accountability"],
         ["service", "Service & orders"],
         ["parties", "Parties"],
         ["documents", "Documents"],
@@ -565,6 +617,21 @@
           onexport={(paths) => { exportPaths = { docx: paths.docx, pdf: paths.pdf, notice: "Review every line before filing." }; status = `Exported ${paths.pdf}`; }}
         />
       </section>
+    {:else if tab === "record"}
+      <CaseRecordTab
+        {caseId}
+        {profile}
+        onExploreRoutes={(id) => {
+          preselectedIssueId = id || null;
+          showAccountabilityModal = true;
+        }}
+        onRequestFormReady={(packet) => {
+          status = `Generated records request: ${packet.court_name} (${packet.records_requested.length} items)`;
+        }}
+        onPacketGenerated={(packet) => {
+          status = `Generated factual packet for ${packet.issue_id}:\n${packet.notice}`;
+        }}
+      />
     {:else if tab === "service"}
       <section class="space-y-4">
         <ServiceCertCard
@@ -574,10 +641,7 @@
         />
       </section>
     {:else if tab === "parties"}
-      <section class="space-y-4 bg-card border rounded-lg p-6">
-        <h2 class="font-semibold">Parties</h2>
-        <PartyEditor bind:parties />
-      </section>
+      <CasePartiesTab bind:parties />
     {:else if tab === "documents"}
       <CaseDocumentsTab
         bind:profile
@@ -681,41 +745,32 @@
       <p class="text-xs text-muted-foreground">{syncResult.kind}: {syncResult.reason}</p>
     {/if}
 
-    <CloudSyncModal
-      bind:open={showCloudModal}
-      activeCaseId={caseId}
-      activeCaseTitle={profile?.title}
-      isConfidential={profile?.mode === "confidential"}
-      onsynced={load}
-    />
-
-    <PdfToolsModal
-      bind:open={showPdfToolsModal}
-      caseId={caseId}
-      onclose={() => (showPdfToolsModal = false)}
-    />
-
-    <SignatureStudioModal
-      bind:open={showSignatureModal}
-      caseId={caseId}
-      onclose={() => (showSignatureModal = false)}
-    />
-
-    <IntakeWizardModal
-      bind:open={showIntakeWizard}
-      caseId={caseId}
+    <CaseModals
+      {caseId}
       bind:profile
-      onUpdated={load}
-    />
-
-    <ConfirmDialog
-      bind:open={confirmSeal}
-      title="Seal this case?"
-      body="Convert this case to a sealed Confidential vault? This cannot be reversed by editing case.json. Sync will be refused."
-      confirmLabel="Seal"
-      danger={true}
-      onconfirm={doSeal}
-      oncancel={() => (confirmSeal = false)}
+      bind:showCloudModal
+      bind:showPdfToolsModal
+      bind:showSignatureModal
+      bind:showIntakeWizard
+      bind:showAccountabilityModal
+      bind:showAdaModal
+      bind:showRecordRetrievalModal
+      bind:showWorkflowModal
+      bind:showConsultationModal
+      bind:confirmSeal
+      {preselectedIssueId}
+      onReload={load}
+      onConfirmSeal={doSeal}
+      onCloseCloud={() => (showCloudModal = false)}
+      onClosePdf={() => (showPdfToolsModal = false)}
+      onCloseSignature={() => (showSignatureModal = false)}
+      onCloseIntake={() => (showIntakeWizard = false)}
+      onCloseAccountability={() => (showAccountabilityModal = false)}
+      onCloseAda={() => (showAdaModal = false)}
+      onCloseRecordRetrieval={() => (showRecordRetrievalModal = false)}
+      onCloseWorkflow={() => (showWorkflowModal = false)}
+      onCloseConsultation={() => (showConsultationModal = false)}
+      onCancelSeal={() => (confirmSeal = false)}
     />
   {/if}
 </main>

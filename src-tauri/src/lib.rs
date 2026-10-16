@@ -36,6 +36,14 @@ pub mod intake;
 pub mod portfolio;
 pub mod pleading;
 pub mod folder_import;
+pub mod capabilities;
+pub mod record;
+pub mod accountability;
+pub mod ada;
+pub mod order;
+pub mod court_access;
+pub mod workflow;
+pub mod consultation;
 
 use crypto::AppState;
 
@@ -150,7 +158,34 @@ pub fn run() {
             case_commands::import_folder_cmd,
             case_commands::agent_manifest_cmd,
             case_commands::preview_markdown_cmd,
-            case_commands::export_markdown_draft_cmd
+            case_commands::export_markdown_draft_cmd,
+            case_commands::search_forms_cmd,
+            case_commands::recommend_forms_cmd,
+            case_commands::fetch_form_cmd,
+            case_commands::attach_form_cmd,
+            case_commands::record_inventory_cmd,
+            case_commands::record_docket_match_cmd,
+            case_commands::record_missing_cmd,
+            case_commands::record_request_form_cmd,
+            case_commands::accountability_audit_cmd,
+            case_commands::accountability_routes_cmd,
+            case_commands::accountability_resources_cmd,
+            case_commands::accountability_packet_cmd,
+            case_commands::ada_petition_cmd,
+            case_commands::order_decode_cmd,
+            case_commands::timeline_audit_mail_cmd,
+            case_commands::case_bootstrap_cmd,
+            case_commands::court_access_directory_cmd,
+            case_commands::court_access_profile_cmd,
+            case_commands::record_retrieval_plan_cmd,
+            case_commands::record_retrieval_execute_cmd,
+            case_commands::workflow_plan_cmd,
+            case_commands::workflow_status_cmd,
+            case_commands::workflow_advance_cmd,
+            case_commands::stress_test_issue_cmd,
+            case_commands::consultation_dossier_cmd,
+            case_commands::extension_evaluate_cmd,
+            case_commands::extension_suggest_cmd
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -131,3 +131,60 @@ export interface InstallReport {
   offline_after: boolean;
   notice: string;
 }
+
+export interface FormSearchResult {
+  id: string;
+  title: string;
+  form_number: string;
+  state: string;
+  court: string;
+  task: string;
+  size_bytes: number;
+  size_label: string;
+  is_offline: boolean;
+  local_path?: string | null;
+  source_type: string; // "official_pdf", "editable_template", "guide"
+  download_url: string;
+  official_url: string;
+  sha256: string;
+  citation: string;
+  teach: TeachBlock;
+}
+
+export interface FormRecommendation {
+  form: FormSearchResult;
+  relevance_reason: string;
+  priority: number;
+}
+
+export interface CaseRecommendations {
+  case_id: string;
+  state: string;
+  court: string;
+  kind: string;
+  recommendations: FormRecommendation[];
+  notice: string;
+}
+
+export interface FetchFormResult {
+  ok: boolean;
+  form_id: string;
+  file_path: string;
+  bytes: number;
+  size_label: string;
+  sha256: string;
+  sha256_verified: boolean;
+  offline_ready: boolean;
+  message: string;
+}
+
+export interface AttachFormResult {
+  ok: boolean;
+  form_id: string;
+  case_path: string;
+  attached_path: string;
+  action: string;
+  is_template: boolean;
+  notice: string;
+}
+

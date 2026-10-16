@@ -55,7 +55,8 @@ pub struct CourtMarkdownDoc {
 
 pub fn parse_front_matter(text: &str) -> (CourtFrontMatter, String) {
     let mut meta = CourtFrontMatter::default();
-    let trimmed = text.trim_start_matches('\u{feff}');
+    let normalized = text.replace("\r\n", "\n");
+    let trimmed = normalized.trim_start_matches('\u{feff}');
     if !trimmed.starts_with("---") {
         return (meta, trimmed.to_string());
     }

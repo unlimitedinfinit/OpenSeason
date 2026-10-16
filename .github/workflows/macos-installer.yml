@@ -1,0 +1,37 @@
+name: macOS DMG installer
+
+# Builds a macOS desktop installer (.dmg and .app) as a downloadable artifact.
+
+on:
+  push:
+    branches: [main, "cursor/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos-dmg:
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install frontend dependencies
+        run: npm ci --legacy-peer-deps
+      - name: Build macOS bundles
+        # Tauri on macOS automatically builds the .app bundle and .dmg installer
+        run: npm run tauri build
+      - name: Upload DMG artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: justlegal-macos-dmg
+          if-no-files-found: warn
+          path: |
+            src-tauri/target/release/bundle/dmg/*.dmg
+            src-tauri/target/release/bundle/macos/*

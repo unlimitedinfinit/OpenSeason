@@ -49,4 +49,4 @@ lopdf = "0.34"
 
 [[bin]]
 name = "openseason"
-path = "src/bin/openseason.rs"
+path = "src/bin/openseason/main.rs"

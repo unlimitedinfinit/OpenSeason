@@ -60,6 +60,21 @@ cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- --json export
 .\openseason-cli.exe --json case escalate ./my-case --target appellate_appeal
 .\openseason-cli.exe --json portfolio status
 
+# Court Record Reconstruction & Evidentiary Tiers
+.\openseason-cli.exe --json record inventory ./my-case
+.\openseason-cli.exe --json record reconcile ./my-case --docket "02/15/2026 ORDER GRANTING DISMISSAL..."
+.\openseason-cli.exe --json record missing ./my-case
+.\openseason-cli.exe --json record request-form ./my-case --state NJ
+
+# Judicial Findings Audit, Accountability Routes & Factual Packets
+.\openseason-cli.exe --json review record ./my-case
+.\openseason-cli.exe --json accountability routes ./my-case
+.\openseason-cli.exe --json accountability resources --state NJ --category judicial
+.\openseason-cli.exe --json accountability packet ./my-case --issue <issue_id>
+
+# ADA Title II Reasonable Accommodation Petition Generator
+.\openseason-cli.exe --json ada petition ./my-case --name "Jordan Example" --accommodations "remote,reading_time"
+
 # Optional local MCP stdio server (same engine)
 cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- mcp
 

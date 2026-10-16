@@ -14,11 +14,13 @@
     profile = $bindable(),
     onOpenWizard = () => {},
     onProfileSaved = () => {},
+    onOpenExtension = () => {},
   }: {
     caseId: string;
     profile: CaseProfile;
     onOpenWizard?: () => void;
     onProfileSaved?: () => void;
+    onOpenExtension?: () => void;
   } = $props();
 
   let report = $state<NextStepsReport | null>(null);
@@ -89,6 +91,11 @@
     errorMsg = "";
     statusMsg = "";
     try {
+      if (branch.id === "branch-baseline-extension") {
+        onOpenExtension();
+        return;
+      }
+
       if (branch.escalation_target) {
         const res = await ipc<EscalationResult>("escalate_case_cmd", {
           idOrPath: caseId,
@@ -250,7 +257,9 @@
             disabled={busy}
             onclick={() => initializeBranchFiling(b)}
           >
-            {#if b.escalation_target}
+            {#if b.id === "branch-baseline-extension"}
+              Review 30-Day Extension (Conferral & Motion)
+            {:else if b.escalation_target}
               Start the next-court packet (copies the record)
             {:else}
               Start "{b.title}"

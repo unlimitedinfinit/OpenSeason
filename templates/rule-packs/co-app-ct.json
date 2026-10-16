@@ -1,0 +1,116 @@
+{
+  "id": "co-app-ct",
+  "name": "Colorado Court of Appeals & Civil Procedure",
+  "jurisdiction": "CO",
+  "court": "Colorado Court of Appeals",
+  "holiday_set": "us-federal",
+  "source_url": "https://www.courts.state.co.us/Courts/Court_Of_Appeals/",
+  "source_retrieved_on": "2026-10-16",
+  "source_note": "Colorado Appellate Rules (C.A.R.) and Colorado Rules of Civil Procedure (C.R.C.P.). Jurisdictional deadlines are strictly enforced under Dobler v. CDOC (2026) and Estate of Ybarra (2024). Colorado enforces the Physical Clerk Receipt Rule (postmark date does NOT control). Not legal advice. Never files or serves.",
+  "never_files": true,
+  "never_serves": true,
+  "deadlines": [
+    {
+      "id": "co-notice-of-appeal",
+      "label": "Notice of Appeal in Colorado Court of Appeals",
+      "rule": "C.A.R. 4(a)",
+      "trigger": "entry",
+      "days": 49,
+      "count": "calendar",
+      "weekend_holiday_roll": "next_business",
+      "enlargeable_under": "C.A.R. 4(a) (up to 35 additional days upon showing of excusable neglect)",
+      "tolls_appeal_under": "C.R.C.P. 59 (Timely post-trial motion resets clock; untimely motion does NOT toll)",
+      "notes": "Filed within 49 days (7 weeks) of entry of judgment or order. Notice must physically reach the clerk's office on or before the due date under the Colorado Physical Clerk Receipt Rule."
+    },
+    {
+      "id": "co-post-trial-motion",
+      "label": "Motion for Post-Trial Relief (New Trial / Alter Judgment)",
+      "rule": "C.R.C.P. 59(a)",
+      "trigger": "entry",
+      "days": 14,
+      "count": "calendar",
+      "weekend_holiday_roll": "next_business",
+      "enlargeable_under": "C.R.C.P. 6(b) (Before 14-day expiration only)",
+      "tolls_appeal_under": "C.A.R. 4(a)",
+      "notes": "Must be filed within 14 days of entry. Under C.R.C.P. 59(j), deemed denied if not ruled on within 63 days (9 weeks). Untimely filing fails to toll appeal under Dobler v. CDOC (2026)."
+    },
+    {
+      "id": "co-transcript-designation",
+      "label": "Designation of Record and Transcript Order",
+      "rule": "C.A.R. 10(b)",
+      "trigger": "service",
+      "days": 14,
+      "count": "calendar",
+      "weekend_holiday_roll": "next_business",
+      "enlargeable_under": null,
+      "tolls_appeal_under": null,
+      "notes": "Within 14 days of filing notice of appeal, file designation of record and order transcripts using Form JDF 4."
+    },
+    {
+      "id": "co-appellate-conferral",
+      "label": "Duty to Confer on Motions",
+      "rule": "C.A.R. 27(a)",
+      "trigger": "custom",
+      "days": 0,
+      "count": "calendar",
+      "weekend_holiday_roll": "next_business",
+      "enlargeable_under": null,
+      "tolls_appeal_under": null,
+      "notes": "Before filing any procedural motion, moving party must confer with opposing counsel or unrepresented party and state opposing position in motion."
+    }
+  ],
+  "forms": [
+    {
+      "id": "jdf-4",
+      "title": "Transcript Request Form",
+      "form_number": "JDF 4",
+      "state": "CO",
+      "court": "Colorado Court of Appeals / District Court",
+      "situation": "records",
+      "size_bytes": 0,
+      "download_url": "",
+      "official_url": "https://www.courts.state.co.us/Forms/PDF/JDF4.pdf",
+      "sha256": "",
+      "path_in_pack": "",
+      "citation": "C.A.R. 10(b)",
+      "citation_status": "pack_source",
+      "teach": {
+        "what_it_is": "Official Colorado judicial form to order hearing transcripts or FTR audio recordings.",
+        "when_used": "When appealing or when oral argument evidence is needed to prove an issue was preserved.",
+        "common_mistakes": ["Failing to attach required deposit or request fee waiver."],
+        "learn_more": "Submit directly to managing court reporter or clerk of district court."
+      }
+    }
+  ],
+  "situations": [
+    {
+      "id": "co-appeal",
+      "label": "Appealing a Colorado District Court Final Judgment",
+      "question": "Did a Colorado District Court enter a final appealable judgment you wish to challenge?",
+      "aliases": ["appeal", "notice of appeal", "car 4"],
+      "court": "Colorado Court of Appeals",
+      "form_ids": ["jdf-4"],
+      "packet_id": null,
+      "deadline_id": "co-notice-of-appeal",
+      "why": "Governed by C.A.R. 4(a). Jurisdictional deadline is 49 calendar days. Colorado clerk receipt rule strictly controls.",
+      "citation": "C.A.R. 4(a); Dobler v. CDOC, 2026 COA 12",
+      "citation_status": "pack_source",
+      "steps": [
+        {
+          "id": "verify-receipt-date",
+          "title": "Verify physical clerk receipt deadline",
+          "why": "Postmarks do not toll or satisfy C.A.R. 4(a) in Colorado. Filing must reach clerk on or before day 49.",
+          "form_ids": [],
+          "citation": "Estate of Ybarra, 2024 COA 45",
+          "citation_status": "pack_source",
+          "teach": {
+            "what_it_is": "Mandatory jurisdictional deadline verification.",
+            "when_used": "Immediately upon entry of order.",
+            "common_mistakes": ["Relying on mailing date or postmark."],
+            "learn_more": "Electronic filing through CCE Pro Se portal timestamps upon receipt."
+          }
+        }
+      ]
+    }
+  ]
+}

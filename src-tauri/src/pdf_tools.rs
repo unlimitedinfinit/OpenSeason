@@ -317,12 +317,135 @@ pub struct PdfTextExtractionResult {
 }
 
 /// Extract text offline from a PDF file using lopdf (with stream literal fallback).
+fn parse_cmap_stream(bytes: &[u8]) -> std::collections::BTreeMap<u16, String> {
+    let mut map = std::collections::BTreeMap::new();
+    let text = String::from_utf8_lossy(bytes);
+    let mut in_bfchar = false;
+    let mut in_bfrange = false;
+
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.ends_with("beginbfchar") {
+            in_bfchar = true;
+            in_bfrange = false;
+            continue;
+        }
+        if trimmed.ends_with("endbfchar") {
+            in_bfchar = false;
+            continue;
+        }
+        if trimmed.ends_with("beginbfrange") {
+            in_bfrange = true;
+            in_bfchar = false;
+            continue;
+        }
+        if trimmed.ends_with("endbfrange") {
+            in_bfrange = false;
+            continue;
+        }
+
+        if in_bfchar {
+            let parts: Vec<&str> = trimmed
+                .split(|c| c == '<' || c == '>' || c == ' ')
+                .filter(|s| !s.is_empty())
+                .collect();
+            if parts.len() >= 2 {
+                if let Ok(cid) = u16::from_str_radix(parts[0], 16) {
+                    let hex_dst = parts[1];
+                    let mut s = String::new();
+                    let mut i = 0;
+                    while i + 4 <= hex_dst.len() {
+                        if let Ok(code) = u32::from_str_radix(&hex_dst[i..i + 4], 16) {
+                            if let Some(ch) = char::from_u32(code) {
+                                s.push(ch);
+                            }
+                        }
+                        i += 4;
+                    }
+                    if !s.is_empty() {
+                        map.insert(cid, s);
+                    }
+                }
+            }
+        } else if in_bfrange {
+            let parts: Vec<&str> = trimmed
+                .split(|c| c == '<' || c == '>' || c == ' ')
+                .filter(|s| !s.is_empty())
+                .collect();
+            if parts.len() >= 3 {
+                if let (Ok(start), Ok(end), Ok(mut dst_start)) = (
+                    u16::from_str_radix(parts[0], 16),
+                    u16::from_str_radix(parts[1], 16),
+                    u32::from_str_radix(parts[2], 16),
+                ) {
+                    for cid in start..=end {
+                        if let Some(ch) = char::from_u32(dst_start) {
+                            map.insert(cid, ch.to_string());
+                        }
+                        dst_start += 1;
+                    }
+                }
+            }
+        }
+    }
+    map
+}
+
+fn decode_cid_string(bytes: &[u8], cmap: Option<&std::collections::BTreeMap<u16, String>>, all_cmaps: &[&std::collections::BTreeMap<u16, String>]) -> String {
+    let mut out = String::new();
+    if bytes.len() >= 2 && bytes.len() % 2 == 0 {
+        let mut i = 0;
+        let mut decoded_all = true;
+        let mut temp = String::new();
+        while i + 1 < bytes.len() {
+            let cid = u16::from_be_bytes([bytes[i], bytes[i + 1]]);
+            if let Some(mapped) = cmap.and_then(|m| m.get(&cid)).or_else(|| {
+                all_cmaps.iter().find_map(|m| m.get(&cid))
+            }) {
+                temp.push_str(mapped);
+            } else if bytes[i] == 0 && bytes[i + 1].is_ascii() {
+                temp.push(bytes[i + 1] as char);
+            } else {
+                decoded_all = false;
+                break;
+            }
+            i += 2;
+        }
+        if decoded_all && !temp.is_empty() {
+            return temp;
+        }
+    }
+    // Fallback for single-byte ASCII
+    for &b in bytes {
+        if b.is_ascii_graphic() || b == b' ' || b == b'\n' || b == b'\t' {
+            out.push(b as char);
+        }
+    }
+    out
+}
+
 pub fn extract_pdf_text(input_path: &Path) -> Result<PdfTextExtractionResult, String> {
     if !input_path.is_file() {
         return Err(format!("Input file not found: {}", input_path.display()));
     }
     let mut doc = Document::load(input_path).map_err(|e| format!("Failed to load PDF: {e}"))?;
     let _ = doc.decompress();
+
+    // Index all CMaps in the document
+    let mut font_cmaps: std::collections::HashMap<String, std::collections::BTreeMap<u16, String>> = std::collections::HashMap::new();
+    let mut all_cmaps: Vec<std::collections::BTreeMap<u16, String>> = Vec::new();
+
+    for (_id, obj) in &doc.objects {
+        if let Ok(stream) = obj.as_stream() {
+            if stream.content.windows(b"beginbfchar".len()).any(|w| w == b"beginbfchar") {
+                let parsed = parse_cmap_stream(&stream.content);
+                if !parsed.is_empty() {
+                    all_cmaps.push(parsed);
+                }
+            }
+        }
+    }
+
     let doc_pages = doc.get_pages();
     let mut pages = Vec::new();
     let mut full_text = String::new();
@@ -330,32 +453,91 @@ pub fn extract_pdf_text(input_path: &Path) -> Result<PdfTextExtractionResult, St
     for (&page_num, &_page_id) in &doc_pages {
         let mut page_text = doc.extract_text(&[page_num]).unwrap_or_default();
         if page_text.trim().is_empty() {
+            // Build per-page font CMaps: font_name ("F0", "F1", etc.) -> CMap
+            let mut font_cmaps: std::collections::HashMap<String, std::collections::BTreeMap<u16, String>> = std::collections::HashMap::new();
+
+            let res_dict = doc.get_object(_page_id)
+                .ok()
+                .and_then(|o| o.as_dict().ok())
+                .and_then(|d| d.get(b"Resources").ok())
+                .and_then(|r| match r {
+                    Object::Reference(id) => doc.get_object(*id).ok().and_then(|o| o.as_dict().ok().cloned()),
+                    Object::Dictionary(d) => Some(d.clone()),
+                    _ => None,
+                });
+
+            if let Some(res) = res_dict {
+                let fonts_dict = res.get(b"Font").ok().and_then(|f| match f {
+                    Object::Reference(id) => doc.get_object(*id).ok().and_then(|o| o.as_dict().ok().cloned()),
+                    Object::Dictionary(d) => Some(d.clone()),
+                    _ => None,
+                });
+
+                if let Some(fonts) = fonts_dict {
+                    for (name_bytes, font_ref_obj) in fonts.iter() {
+                        let font_name = String::from_utf8_lossy(name_bytes).to_string();
+                        let target_ref = match font_ref_obj {
+                            Object::Reference(id) => Some(*id),
+                            _ => None,
+                        };
+                        if let Some(f_id) = target_ref {
+                            if let Ok(f_dict) = doc.get_object(f_id).and_then(|o| o.as_dict()) {
+                                if let Ok(Object::Reference(cmap_id)) = f_dict.get(b"ToUnicode") {
+                                    if let Ok(stream) = doc.get_object(*cmap_id).and_then(|o| o.as_stream()) {
+                                        let cmap = parse_cmap_stream(&stream.content);
+                                        font_cmaps.insert(font_name, cmap);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             if let Ok(content) = doc.get_page_content(_page_id) {
                 if let Ok(decoded) = lopdf::content::Content::decode(&content) {
                     let mut tokens = Vec::new();
+                    let mut current_font = String::new();
+                    let all_cmaps_refs: Vec<&std::collections::BTreeMap<u16, String>> = all_cmaps.iter().collect();
+
                     for op in decoded.operations {
-                        if op.operator == "Tj" || op.operator == "TJ" || op.operator == "'" || op.operator == "\"" {
+                        if op.operator == "Tf" {
+                            if let Some(name) = op.operands.first().and_then(|o| o.as_name_str().ok()) {
+                                current_font = name.to_string();
+                            }
+                        } else if op.operator == "Tj" || op.operator == "'" || op.operator == "\"" {
                             for operand in op.operands {
-                                match operand {
-                                    Object::String(bytes, _) => {
-                                        if let Ok(s) = std::str::from_utf8(&bytes) {
-                                            tokens.push(s.to_string());
-                                        }
+                                if let Object::String(bytes, _) = operand {
+                                    let active_cmap = font_cmaps.get(&current_font);
+                                    let s = decode_cid_string(&bytes, active_cmap, &all_cmaps_refs);
+                                    if !s.is_empty() {
+                                        tokens.push(s);
                                     }
-                                    Object::Array(arr) => {
-                                        let mut word = String::new();
-                                        for item in arr {
-                                            if let Object::String(bytes, _) = item {
-                                                if let Ok(s) = std::str::from_utf8(&bytes) {
-                                                    word.push_str(s);
-                                                }
+                                }
+                            }
+                        } else if op.operator == "TJ" {
+                            for operand in op.operands {
+                                if let Object::Array(arr) = operand {
+                                    let mut word = String::new();
+                                    for item in arr {
+                                        match item {
+                                            Object::String(bytes, _) => {
+                                                let active_cmap = font_cmaps.get(&current_font);
+                                                let s = decode_cid_string(&bytes, active_cmap, &all_cmaps_refs);
+                                                word.push_str(&s);
                                             }
-                                        }
-                                        if !word.is_empty() {
-                                            tokens.push(word);
+                                            Object::Integer(n) if n < -120 => {
+                                                word.push(' ');
+                                            }
+                                            Object::Real(n) if n < -120.0 => {
+                                                word.push(' ');
+                                            }
+                                            _ => {}
                                         }
                                     }
-                                    _ => {}
+                                    if !word.is_empty() {
+                                        tokens.push(word);
+                                    }
                                 }
                             }
                         }

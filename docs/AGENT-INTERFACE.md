@@ -113,6 +113,15 @@ Equivalent without npm: `cargo run --manifest-path src-tauri/Cargo.toml --bin op
 | `intake scan DIR` | Offline PDF text extraction & candidate detection (docket numbers, dates, courts) across `orders/` and `evidence/` |
 | `check venue DIR` | Deterministic Multi-Venue Competence Matrix check (NJ R. 1:4-4(b), CO conferral/declaration as needs_verification, 28 U.S.C. § 1746, SCOTUS Rule 14.1, Will witnesses) |
 | `portfolio status [--root DIR]` | Multi-state, multi-venue Portfolio Deadline Radar & Global Filer Profile |
+| `record inventory DIR` | Scan workspace into 4 evidentiary tiers (Official, Transcripts, Archive, Unsubmitted) with SHA-256 hashes & clerk stamp detection |
+| `record reconcile DIR --docket TEXT` | Reconcile plain-text court docket sheet against local files and identify gaps |
+| `record missing DIR` | List missing transcripts, orders, or opposition briefs needed to perfect the record |
+| `record request-form DIR [--state STATE]` | Generate prefilled Court Records Request (NJ Form CN 10200 @ 5¢/7¢ or PACER fee waiver notice) |
+| `review record DIR` | Audit judicial findings in orders vs. verified record evidence to detect unsupported findings |
+| `accountability routes DIR [--issue ID]` | List procedural remedies (Interlocutory *Lawson v. Dewar* R. 4:42-2 vs. Final R. 4:49-2 vs. ACJC/OAE with non-tolling warnings) |
+| `accountability resources [--state STATE] [--category CAT]` | Query authoritative registry for ACJC (CN 11166), OAE ethics, CO CJD, 28 U.S.C. § 351 |
+| `accountability packet DIR --issue ID` | Assemble objective factual discrepancy packet grounded in SHA-256 hashes and docket timestamps |
+| `ada petition DIR --name TEXT --accommodations "remote,reading_time..." [--phone P] [--email E]` | Generate Title II ADA accommodation petition (42 U.S.C. § 12132; 28 C.F.R. Part 35; NJ Directive #01-19) |
 | `mcp` | Stdio MCP server (same tools) |
 | `sync DIR --action backup` | Stub. Standard: `not_implemented`. Confidential: refused |
 | `agent manifest` | List CLI/MCP tools, MCP launch config, and a copyable starter prompt |
@@ -129,6 +138,9 @@ Equivalent without npm: `cargo run --manifest-path src-tauri/Cargo.toml --bin op
 - `intake_status`, `intake_answer`, `intake_scan`: 1-question-at-a-time Guided Intake Wizard & offline PDF candidate discovery.
 - `check_venue`: Multi-Venue Competence Matrix audit (`NJ`, `CO`, `FEDERAL`, `SCOTUS`, and Tier 1 Wills/Leases/Contracts).
 - `portfolio_status`: Multi-state deadline radar across all matters.
+- `record_inventory`, `record_reconcile`, `record_missing`, `record_request_form`: 4-tier evidentiary record reconstruction, docket matching, and CN 10200 records requests.
+- `accountability_audit`, `accountability_routes`, `accountability_resources`, `accountability_packet`: Multi-track judicial discrepancy audit, *Lawson v. Dewar* routing, ACJC/OAE registry, and objective factual packets.
+- `ada_petition`: Title II ADA reasonable accommodation petition generator with federal confidentiality protections.
 - `pdf_extract_text`: Page-by-page offline PDF text extraction.
 - `motion_list`, `motion_create`, `motion_export`: Autonomous multi-motion docket drafting & compilation.
 - `service_cert` & `service_order`: Court-mandated proof of service and judge-ready proposed order generation.

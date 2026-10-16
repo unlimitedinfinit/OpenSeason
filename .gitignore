@@ -16,3 +16,4 @@ src-tauri/ok
 *.jldb
 target/
 tmp-agent-e2e/
+installers/

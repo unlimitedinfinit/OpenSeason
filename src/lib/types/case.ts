@@ -85,7 +85,160 @@ export interface CaseProfile {
   conferral_status?: string;
   service_method?: string;
   caption_layout?: string;
+  roster?: RosterEntry[];
+  issues?: IssueItem[];
+  tasks?: ActionTask[];
+  receipts?: OperationReceipt[];
 }
+
+export interface SubstitutionRecord {
+  date: string;
+  substituted_by: string;
+  notice_of_appearance_ref?: string;
+  notes?: string;
+}
+
+export interface RosterEntry {
+  id: string;
+  name: string;
+  role: string;
+  represented_party_id?: string;
+  bar_number?: string;
+  firm_name?: string;
+  address_lines?: string[];
+  email?: string;
+  phone?: string;
+  is_active: boolean;
+  service_preference?: string;
+  substitution_history?: SubstitutionRecord[];
+}
+
+export interface IssueItem {
+  id: string;
+  title: string;
+  category: string;
+  asserted_by: string;
+  record_citations?: string[];
+  contrary_authorities?: string[];
+  status: string;
+  notes?: string;
+}
+
+export interface ActionTask {
+  id: string;
+  title: string;
+  status: string;
+  due_date?: string;
+  assigned_to?: string;
+  category?: string;
+  target_ref?: string;
+  notes?: string;
+}
+
+export interface OperationReceipt {
+  id: string;
+  timestamp: string;
+  operation: string;
+  invoked_by: string;
+  status: string;
+  files_modified?: string[];
+  notes?: string;
+}
+
+export type OrderSigner =
+  | { kind: "ByTheCourt"; detail: { division: string } }
+  | { kind: "NamedJudge"; detail: { name: string; title?: string } }
+  | { kind: "Clerk"; detail: { name?: string } }
+  | { kind: "Unknown" };
+
+export interface DecodedOrder {
+  title: string;
+  court_name?: string | null;
+  docket_number?: string | null;
+  order_date?: string | null;
+  signer: OrderSigner;
+  is_boilerplate_notice: boolean;
+  operative_clauses: string[];
+  candidate_response_window_days?: number | null;
+  candidate_deadline?: string | null;
+  governing_rules_cited: string[];
+  status: "verified" | "needs_verification" | string;
+  uncertainty_notes: string[];
+  source_page: number;
+  suggested_actions: string[];
+}
+
+export interface MailAuditReport {
+  case_id: string;
+  order_entry_date: string;
+  mailing_postmark?: string | null;
+  delivery_receipt_date?: string | null;
+  clerk_receipt_date?: string | null;
+  jurisdiction_receipt_rule: string;
+  mail_delay_days: number;
+  holiday_or_weekend_impact: boolean;
+  jurisdictional_traps: string[];
+  recommended_actions: string[];
+  status: "flagged_risk" | "verified_timely" | "needs_verification" | string;
+}
+
+export interface BootstrapResult {
+  case_id: string;
+  case_path: string;
+  title: string;
+  files_scanned: number;
+  orders_imported: number;
+  filings_imported: number;
+  evidence_imported: number;
+  drafts_imported: number;
+  detected_docket_number?: string | null;
+  detected_court?: string | null;
+  pending_obligations: string[];
+  summary: string;
+}
+
+export interface CourtAccessProfile {
+  court_id: string;
+  court_name: string;
+  jurisdiction_state: string;
+  physical_address: string;
+  clerk_counter_hours: string;
+  phone: string;
+  electronic_portal_name: string;
+  electronic_portal_url: string;
+  pro_se_efiling_allowed: boolean;
+  docket_search_url: string;
+  records_access_rule: string;
+  transcript_request_form: string;
+  transcript_deposit_rules: string;
+  statutory_fees_summary: string;
+  indigent_fee_waiver_available: boolean;
+  special_instructions: string[];
+}
+
+export interface MissingRecordRetrievalItem {
+  title: string;
+  reason: string;
+  record_tier: string;
+  target_agency_or_court: string;
+  required_form: string;
+}
+
+export interface RecordRetrievalWizardPlan {
+  case_id: string;
+  court_id: string;
+  court_name: string;
+  missing_records: MissingRecordRetrievalItem[];
+  recommended_form: string;
+  recommended_form_number: string;
+  submission_channels: string[];
+  estimated_cost_explanation: string;
+  fee_waiver_rule?: string | null;
+  followup_reminder_days: number;
+  step_by_step_instructions: string[];
+}
+
+
 
 export interface CaseFilingItem {
   id: string;
@@ -173,7 +326,7 @@ export interface CourtPreview {
 }
 
 export const REVIEW_NOTICE =
-  "This document was assembled by OpenSeason from the user's own case profile and draft text. It is a formatting aid, not legal advice. Review every line, caption, date, and citation before filing. Consider consulting a licensed attorney.";
+  "This document was assembled by JustLegal Desktop from the user's own case profile and draft text. It is an administrative formatting and document assembly aid, not legal advice or representation. Review every line, caption, date, and citation before filing. Always consider consulting a licensed attorney in your jurisdiction, contacting your local bar association, or seeking unbundled legal assistance.";
 
 export const PARTY_ROLES = [
   "Plaintiff",

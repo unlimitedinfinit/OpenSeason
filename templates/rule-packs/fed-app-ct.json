@@ -1,0 +1,116 @@
+{
+  "id": "fed-app-ct",
+  "name": "Federal Rules of Appellate & Civil Procedure",
+  "jurisdiction": "FED",
+  "court": "United States Court of Appeals",
+  "holiday_set": "us-federal",
+  "source_url": "https://www.uscourts.gov/rules-policies/current-rules-practice-procedure",
+  "source_retrieved_on": "2026-10-16",
+  "source_note": "Federal Rules of Appellate Procedure (FRAP) and Federal Rules of Civil Procedure (FRCP). Under Bowles v. Russell, statutory appeal deadlines are mandatory and jurisdictional. Not legal advice. Never files or serves.",
+  "never_files": true,
+  "never_serves": true,
+  "deadlines": [
+    {
+      "id": "fed-notice-of-appeal-private",
+      "label": "Notice of Appeal in Federal Court (Private Parties)",
+      "rule": "FRAP 4(a)(1)(A)",
+      "trigger": "entry",
+      "days": 30,
+      "count": "calendar",
+      "weekend_holiday_roll": "next_business",
+      "enlargeable_under": "FRAP 4(a)(5) (Motion for extension within 30 days of deadline expiration)",
+      "tolls_appeal_under": "FRAP 4(a)(4)(A) (Timely FRCP 59, FRCP 50(b), or FRCP 60 motion filed within 28 days)",
+      "notes": "30 days after entry of judgment or order appealed from when United States is not a party."
+    },
+    {
+      "id": "fed-notice-of-appeal-us",
+      "label": "Notice of Appeal in Federal Court (United States Party)",
+      "rule": "FRAP 4(a)(1)(B)",
+      "trigger": "entry",
+      "days": 60,
+      "count": "calendar",
+      "weekend_holiday_roll": "next_business",
+      "enlargeable_under": "FRAP 4(a)(5)",
+      "tolls_appeal_under": "FRAP 4(a)(4)(A)",
+      "notes": "60 days after entry of judgment when United States, its agency, or officer is a party."
+    },
+    {
+      "id": "fed-alter-judgment",
+      "label": "Motion to Alter or Amend Judgment",
+      "rule": "FRCP 59(e)",
+      "trigger": "entry",
+      "days": 28,
+      "count": "calendar",
+      "weekend_holiday_roll": "next_business",
+      "enlargeable_under": null,
+      "tolls_appeal_under": "FRAP 4(a)(4)(A)(iv)",
+      "notes": "Must be filed within 28 days of entry. Court cannot extend under FRCP 6(b)(2). Resets 30/60 day appeal clock upon disposition."
+    },
+    {
+      "id": "fed-transcript-order",
+      "label": "Ordering Federal Transcripts (AO 435)",
+      "rule": "FRAP 10(b)(1)",
+      "trigger": "entry",
+      "days": 14,
+      "count": "calendar",
+      "weekend_holiday_roll": "next_business",
+      "enlargeable_under": null,
+      "tolls_appeal_under": null,
+      "notes": "Within 14 days after filing notice of appeal, appellant must order transcript of proceedings from court reporter using AO Form 435."
+    }
+  ],
+  "forms": [
+    {
+      "id": "ao-435",
+      "title": "Transcript Order",
+      "form_number": "AO 435",
+      "state": "FED",
+      "court": "United States District Court / Court of Appeals",
+      "situation": "records",
+      "size_bytes": 0,
+      "download_url": "",
+      "official_url": "https://www.uscourts.gov/forms/other-forms/transcript-order",
+      "sha256": "",
+      "path_in_pack": "",
+      "citation": "FRAP 10(b)(1)",
+      "citation_status": "pack_source",
+      "teach": {
+        "what_it_is": "Official Administrative Office of US Courts form for ordering hearing or trial transcripts.",
+        "when_used": "Within 14 days of filing federal notice of appeal.",
+        "common_mistakes": ["Failing to deliver copy to the appellate clerk and opposing counsel."],
+        "learn_more": "Check whether PACER or court reporter requires advance estimated deposit."
+      }
+    }
+  ],
+  "situations": [
+    {
+      "id": "fed-appeal",
+      "label": "Federal Civil Appeal",
+      "question": "Did a Federal District Court enter an adverse final decision or order?",
+      "aliases": ["federal appeal", "frap 4", "notice of appeal"],
+      "court": "United States Court of Appeals",
+      "form_ids": ["ao-435"],
+      "packet_id": null,
+      "deadline_id": "fed-notice-of-appeal-private",
+      "why": "Governed by FRAP 4(a). Jurisdictional clock is 30 days (or 60 days if US is a party). Strictly enforced under Bowles v. Russell.",
+      "citation": "28 U.S.C. § 2107; FRAP 4(a)(1)",
+      "citation_status": "pack_source",
+      "steps": [
+        {
+          "id": "check-us-party",
+          "title": "Determine if United States is a named party",
+          "why": "Extends the notice of appeal window from 30 calendar days to 60 calendar days.",
+          "form_ids": [],
+          "citation": "FRAP 4(a)(1)(B)",
+          "citation_status": "pack_source",
+          "teach": {
+            "what_it_is": "Verification of whether federal government agency or employee in official capacity is a party.",
+            "when_used": "When docketing candidate appeal deadlines.",
+            "common_mistakes": ["Assuming 30 days applies when defendant is a federal agency."],
+            "learn_more": "Applies to all parties in the action once the US is a named party."
+          }
+        }
+      ]
+    }
+  ]
+}

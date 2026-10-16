@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "open-season",
+  "productName": "JustLegal Desktop",
   "version": "0.1.0",
-  "identifier": "com.openseason.app",
+  "identifier": "me.justlegal.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,9 +12,9 @@
   "app": {
     "windows": [
       {
-        "title": "Document Builder",
-        "width": 1024,
-        "height": 768,
+        "title": "JustLegal Desktop",
+        "width": 1180,
+        "height": 820,
         "resizable": true,
         "fullscreen": false
       }
@@ -33,8 +33,8 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "copyright": "2024 Open Season Public Domain",
+    "copyright": "Copyright 2026 Joshua Abrams / Just Liberty Inc.",
     "category": "Productivity",
-    "shortDescription": "Local legal document builder with Confidential mode"
+    "shortDescription": "JustLegal OS — Private, local-first legal document formatting and court assembly desktop client."
   }
 }
