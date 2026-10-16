@@ -1,71 +1,90 @@
-# Architecture
+# Architecture & Module Map
 
-OpenSeason is one local engine with two first-class front doors: a human wizard in the desktop window, and a headless agent interface (CLI `--json` plus optional stdio MCP). Both doors call the same Rust functions. Neither files nor serves.
+OpenSeason is a deterministic local **Legal Operating System** with two equal front doors:
+1. **Desktop GUI (`OpenSeason.exe`):** Svelte 5 + Tauri v2 window.
+2. **Headless Agent CLI & MCP Server (`openseason-cli.exe`):** `--json` command-line interface and JSON-RPC 2.0 stdio MCP server.
 
-## Components
+Both doors call the exact same Rust library (`open_season_lib` in `src-tauri/src/`). Neither ever invents facts, hallucinates citations, or files/serves papers.
 
-### Svelte frontend
+---
 
-- **Responsibility**: Home screen, case profile form, Notice of Appeal editor, Check tab, Confidential vault UI (Legal Airlock, hunts, evidence).
-- **Key files**: `src/routes/+page.svelte`, `src/routes/case/`, `src/routes/confidential/`, `src/routes/hunt/`
-- **Depends on**: Tauri IPC (`invoke`) into the shared engine
+## 1. Strict Modularity Rule (< 800 Lines Per File)
 
-### Rust backend (shared engine)
+To prevent unmaintainable monoliths as OpenSeason scales across 50 states and hundreds of legal instruments, **every Rust module and Svelte component must remain well under 800 lines**.
 
-- **Responsibility**: Case folders, mode enforcement, document assembly, check pipeline, vault crypto, optional USAspending lookup.
-- **Key files**: `src-tauri/src/case_profile.rs`, `check.rs`, `court_md.rs`, `deadlines.rs`, `rule_pack.rs`, `documents.rs`, `sync.rs`, `case_commands.rs`, `crypto.rs`, `commands.rs`, `pdf.rs`
-- **Depends on**: `rusqlite`, `chacha20poly1305`, `argon2`, `typst`, `zip`
+### Frontend Component Architecture (`src/`)
+| File | Lines | Responsibility |
+|---|---|---|
+| `src/routes/+page.svelte` | ~340 | Home screen, case list, quick actions, and `PortfolioRadarCard` host |
+| `src/routes/case/[id]/+page.svelte` | ~715 | Case dashboard shell, top toolbar, `ProceduralGraphCard` host, tab router, and modals |
+| `src/lib/components/PortfolioRadarCard.svelte` | ~355 | **3-Tier Launchpad** (Wills/Leases, Pre-Suit Notices, Court Pleadings), **Global Filer Profile** (`filer.json`), and **Multi-State Deadline Radar** |
+| `src/lib/components/ProceduralGraphCard.svelte` | ~350 | **Predictive Procedural State Graph** ("If This Happens, What Are My Next Moves?"), NJ Pause vs CO/Fed Reset badges, Mail Service (+3d) toggle, and 1-Click Case Escalation |
+| `src/lib/components/IntakeWizardModal.svelte` | ~430 | **1-Question-at-a-Time Guided Intake Wizard**, Offline PDF Auto-Discovery chips, and **Multi-Venue Competence Matrix** |
+| `src/lib/components/MotionDocket.svelte` | ~330 | Multi-Motion & Multi-Filing Docket manager (`profile.filings[]`) |
+| `src/lib/components/ServiceCertCard.svelte` | ~435 | Certificate of Service & Proposed Form of Order generator |
+| `src/lib/components/PdfToolsModal.svelte` | ~390 | Offline Zero-Leakage PDF Power Station (Merge, Split, Rotate, Byte-Level PII Redact) |
+| `src/lib/components/SignatureStudioModal.svelte` | ~385 | Electronic `/s/`, cursive script, and HTML5 canvas signature stamp studio |
+| `src/lib/components/tabs/CaseOverviewTab.svelte` | ~95 | Court, caption, and filer profile editor |
+| `src/lib/components/tabs/CaseDocumentsTab.svelte` | ~220 | Guided sections editor, Markdown import, and AcroForm inspector/filler |
+| `src/lib/components/tabs/CaseEvidenceTab.svelte` | ~155 | Evidence upload and Bates-stamped Exhibit Packet assembler |
+| `src/lib/components/tabs/CaseTimelineTab.svelte` | ~70 | Chronological timeline event logger |
+| `src/lib/components/tabs/CaseCheckTab.svelte` | ~185 | Fact grounding, authority verification, deadline math, and human sign-off |
 
-### CLI (`openseason`) and MCP
+### Rust Engine Architecture (`src-tauri/src/`)
+| Module | Lines | Responsibility |
+|---|---|---|
+| `legal_os.rs` | ~720 | **Multi-Venue Competence Matrix** (`NJ`, `CO`, `FEDERAL`, `SCOTUS`, `GENERIC`) + **Predictive Procedural State Graph** (`predict_next_steps`, tolling math, mail offsets) |
+| `intake.rs` | ~700 | **1-Question-at-a-Time Guided Intake State Machine** (`intake_status`, `intake_answer`), **Offline PDF Scanner** (`intake_scan`), **Consolidated Context** (`case_context`), and **Global Filer** (`filer.json`) |
+| `portfolio.rs` | ~355 | **Cross-Venue Case Escalation** (`escalate_case` copying lower record to `evidence/`), **Multi-State Portfolio Radar** (`portfolio_status`), and Tauri IPC command wrappers |
+| `case_profile.rs` | ~520 | `CaseProfile` schema, 3-Tier resolution (`effective_tier()`), `pre_filing` complaint handling, and tier-aware validation |
+| `documents.rs` | ~710 | Typst PDF + Office Open XML (`.docx`) compiler with Tier 1 (Instrument), Tier 2 (Statutory Notice), and Tier 3 (Court Caption) headers |
+| `guided.rs` | ~280 | Guided section templates across all 3 tiers + filing-scoped storage (`drafts/sections-{filing_id}.json`) |
+| `packet.rs` | ~420 | 5-part court motion packet & Bates-stamped Exhibit Packet compiler (uses `resolve_venue(profile).mandatory_oath_text`) |
+| `pdf_tools.rs` | ~490 | Pure-Rust `lopdf` offline PDF Merge, Split, Rotate, Byte-Level PII Redaction, and **Page-by-Page Text Extraction** (`extract_pdf_text`) |
+| `service.rs` | ~260 | Certificate of Service & Proposed Order compiler |
+| `signature.rs` | ~210 | Signature profile persistence and PDF signature stamping |
+| `sync.rs` | ~590 | JustLegal Cloud (`justlegal.me`) Firebase Auth, additive merge, subfolder routing (`orders/`, `filings/`, `evidence/`), and `.sealed` airgap |
+| `mcp.rs` | ~730 | Offline JSON-RPC 2.0 stdio MCP server exposing all engine tools to AI agents |
+| `bin/openseason.rs` | ~740 | Headless CLI (`openseason --json ...`) |
 
-- **Responsibility**: Headless create, Markdown import, exhibit add, each check stage, JSON issue lists, Word/PDF export. MCP stdio is the same tool list.
-- **Key files**: `src-tauri/src/bin/openseason.rs`, `agent.rs`, `mcp.rs`
-- **Docs**: [AGENT-INTERFACE.md](AGENT-INTERFACE.md), example `examples/agent-e2e.sh`
+---
 
-### Court rules and rule packs
+## 2. The 3-Tier Matter Architecture
 
-- **Responsibility**: Paper size, margins, font, line spacing (`templates/court-rules/`). Deadline tables and knowledge notes (`templates/rule-packs/`). Not legal holdings.
+OpenSeason classifies every matter via `profile.effective_tier()`:
+1. **Tier 1: `transactional`** (`will`, `lease`, `contractor`, `power_of_attorney`)
+   - **Validation:** Does *not* require `court.name` or `docket_number`. Requires at least one party/testator and signature name.
+   - **Formatting:** Renders a centered instrument header (`LAST WILL AND TESTAMENT`, `RESIDENTIAL LEASE AGREEMENT`, etc.) instead of an adversarial `"v."` caption.
+   - **Venue Checks:** Audits state witness/notary self-proving affidavit language for Wills (`N.J.S.A. 3B:3-4` / `C.R.S. § 15-11-504`), deposit/rent clauses for Leases, and IP/milestone clauses for Contractor Agreements.
+2. **Tier 2: `administrative`** (`demand_letter`, `cure_notice`, `security_deposit_demand`, `records_request`, `agency_appeal`)
+   - **Validation:** Does *not* require `court.name` or `docket_number` (uses agency/recipient if provided).
+   - **Formatting:** Renders a formal statutory notice block (`TO: / FROM: / DATE: / VIA CERTIFIED MAIL`).
+   - **Graduation:** Can be 1-click graduated via `escalate_case(dir, "trial_lawsuit")` into a Tier 3 `pre_filing` Civil Complaint with the demand letter and certified mail receipts automatically copied into `evidence/` as Exhibit A.
+3. **Tier 3: `litigation`** (`reconsideration`, `motion`, `enlargement`, `stay`, `complaint`, `notice_of_appeal`, `appellate_brief`, `mandamus`)
+   - **Pre-Filing Support:** When `procedural_stage == "pre_filing"` (or `document_kind == "complaint"` before a docket is assigned), validation succeeds without `docket_number` and renders `Case No. __________ (To Be Assigned)` in Word and PDF captions.
 
-## Modes
+---
 
-```
-Standard case.json  -->  may call sync stub (returns not implemented)
-                    -->  can convert to Confidential (writes .sealed plus sealed_at)
-Confidential        -->  sync/backup/publish refused if .sealed exists
-                    -->  cannot become standard by editing case.json
-                    -->  local Word/PDF/.osb export still allowed
-```
+## 3. Multi-Venue Competence Matrix & Tolling Math
 
-The UI is not the security boundary. `sync::request_sync_for_dir` checks the `.sealed` file first, then `case.json`. `save_case` refuses an unseal payload when that marker is present.
+`legal_os::resolve_venue` inspects `governing_state`, `rule_pack_id`, and `court.name`:
 
-Desktop seal checks the vault password against a verifier, then encrypts the whole vault tree (nested folders and root-level user files included). Only the app's own `{vault}/metadata.db` and `{vault}/court-rules/` stay readable. Documents is then emptied to the pointer files. CLI `case seal` only writes the marker. Hunt and case command ids must be UUIDs. Export will not write inside app data or the cases root, will not write a file named `.sealed`, and will not use a relative, UNC, or symlink target. Repeat downloads get a numeric suffix and are created with O_EXCL. Sealed vault delete, purge, evidence add/delete, and other hunt edits require the vault password. The desktop UI is one case dashboard. USAspending lookup and the disclosure statement are Confidential tools, not a second home screen.
+| Venue | Sworn Statement Formula | Conferral Requirement | Reconsideration Tolling Effect on Appeal Clock |
+|---|---|---|---|
+| **New Jersey (`NJ`)** | **Certification in Lieu of Oath (`R. 1:4-4(b)`)**: Verbatim `"I am aware that if any of the foregoing statements made by me are willfully false, I am subject to punishment."` Rejects `"to the best of my knowledge"`. | `R. 1:6-2(c)` (Discovery motions only) | **`pause_remaining` (`R. 2:4-3(e)`)**: Pauses the 45-day appeal clock on the date the R. 4:49-2 motion is served/filed; only the remaining $45 - \text{elapsed}$ days run after disposition. |
+| **Colorado (`CO`)** | **Unsworn Declaration (`C.R.S. § 13-27-106`)**: Under penalty of perjury under the law of Colorado. | **Mandatory (`C.R.C.P. 121 § 1-15(8)`)** on every motion | **`reset_full` (`C.A.R. 4(a)(3)`)**: Timely C.R.C.P. 59 post-trial motion resets the full 49-day appeal clock upon disposition. |
+| **Federal (`FEDERAL`)** | **Unsworn Declaration (`28 U.S.C. § 1746`)** | Local Rule 7.1 conferral | **`reset_full` (`FRAP 4(a)(4)`)**: Timely Rule 59(e)/60 motion resets the full 30/60-day appeal clock. |
+| **U.S. Supreme Court (`SCOTUS`)** | **28 U.S.C. § 1746 / S. Ct. Rule 39 IFP** | N/A | Timely rehearing/reconsideration in lower court of last resort tolls the 90-day cert window (`S. Ct. Rule 13.3`). |
 
-## Data flow: Notice of Appeal
+---
 
-1. User (or CLI) creates a folder and writes `case.json`.
-2. `validate_case` checks required caption fields and leftover placeholders.
-3. `documents::export_notice_of_appeal` merges profile + user text.
-4. Word is written as Office Open XML (zip). PDF is compiled with Typst using the court-rules font list.
-5. Files land in `exports/`. Both copies include the review notice.
+## 4. Storage & Confidentiality Boundary
 
-## Data flow: Confidential vault (unchanged core)
-
-1. User passes the Legal Airlock and unlocks with a master password.
-2. Argon2id derives a 32-byte session key. An encrypted verifier next to `master_salt.bin` rejects a wrong password. The password itself is not stored.
-3. Evidence is scrubbed, hashed, encrypted, and indexed in `metadata.db`.
-4. Disclosure PDFs and `.osb` bundles stay on disk.
-
-## Storage
-
-| Kind | Location |
+| Resource | Disk Path |
 |---|---|
-| Standard case | `Documents/JustLegal/Cases/{id}/` |
-| Confidential hunt | App local data `vaults/{id}/` |
-| Vault salt | App local data `master_salt.bin` |
-| Password verifier | App local data `master_verifier.bin` |
+| Standard Cases | `Documents/JustLegal/Cases/{caseId}/` |
+| Global Filer Profile | `Documents/JustLegal/filer.json` |
+| Installed Form Packs | `Documents/JustLegal/Packs/{packId}/` |
+| Confidential Vault Hunts | AppData `vaults/{id}/` (XChaCha20Poly1305 + Argon2id) |
 
-Windows, macOS, and Linux resolve those roots through the `dirs` crate and Tauri path APIs. Paths are not hard-coded to one drive letter.
-
-## Sync (stub)
-
-`sync.rs` is the only place a future justlegal.me adapter should hook in. It currently returns `NotImplemented` for standard cases and `ConfidentialForbidden` for sealed ones. There is no HTTP client in this module.
+`sync.rs` enforces the airgap in Rust: any folder containing `.sealed`, `mode == "confidential"`, or `sealed_at` is permanently blocked from `cloud_push` or `cloud_pull`.

@@ -299,3 +299,91 @@ pub fn redact_pdf_text(
         message: format!("Scrubbed {} sensitive token(s) from document stream.", total_redactions),
     })
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PdfTextPage {
+    pub page_number: u32,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PdfTextExtractionResult {
+    pub ok: bool,
+    pub never_files: bool,
+    pub path: String,
+    pub page_count: usize,
+    pub pages: Vec<PdfTextPage>,
+    pub full_text: String,
+}
+
+/// Extract text offline from a PDF file using lopdf (with stream literal fallback).
+pub fn extract_pdf_text(input_path: &Path) -> Result<PdfTextExtractionResult, String> {
+    if !input_path.is_file() {
+        return Err(format!("Input file not found: {}", input_path.display()));
+    }
+    let mut doc = Document::load(input_path).map_err(|e| format!("Failed to load PDF: {e}"))?;
+    let _ = doc.decompress();
+    let doc_pages = doc.get_pages();
+    let mut pages = Vec::new();
+    let mut full_text = String::new();
+
+    for (&page_num, &_page_id) in &doc_pages {
+        let mut page_text = doc.extract_text(&[page_num]).unwrap_or_default();
+        if page_text.trim().is_empty() {
+            if let Ok(content) = doc.get_page_content(_page_id) {
+                if let Ok(decoded) = lopdf::content::Content::decode(&content) {
+                    let mut tokens = Vec::new();
+                    for op in decoded.operations {
+                        if op.operator == "Tj" || op.operator == "TJ" || op.operator == "'" || op.operator == "\"" {
+                            for operand in op.operands {
+                                match operand {
+                                    Object::String(bytes, _) => {
+                                        if let Ok(s) = std::str::from_utf8(&bytes) {
+                                            tokens.push(s.to_string());
+                                        }
+                                    }
+                                    Object::Array(arr) => {
+                                        let mut word = String::new();
+                                        for item in arr {
+                                            if let Object::String(bytes, _) = item {
+                                                if let Ok(s) = std::str::from_utf8(&bytes) {
+                                                    word.push_str(s);
+                                                }
+                                            }
+                                        }
+                                        if !word.is_empty() {
+                                            tokens.push(word);
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                    }
+                    page_text = tokens.join(" ");
+                }
+            }
+        }
+        let cleaned = page_text.trim().to_string();
+        if !cleaned.is_empty() {
+            if !full_text.is_empty() {
+                full_text.push_str("\n\n");
+            }
+            full_text.push_str(&format!("--- Page {} ---\n{}", page_num, cleaned));
+        }
+        pages.push(PdfTextPage {
+            page_number: page_num,
+            text: cleaned,
+        });
+    }
+
+    Ok(PdfTextExtractionResult {
+        ok: true,
+        never_files: true,
+        path: input_path.to_string_lossy().into_owned(),
+        page_count: doc_pages.len(),
+        pages,
+        full_text,
+    })
+}
+

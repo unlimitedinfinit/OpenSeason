@@ -83,8 +83,8 @@ The implementation has passed all system verification gates:
   - `OpenSeason.exe` (Desktop application GUI, 45.1 MB)
   - `openseason-cli.exe` (Command line interface and MCP server, 35.7 MB)
 - **Convenience Launchers:**
-  - `run.ps1` (PowerShell launch script)
-  - `run.bat` (Double-click batch launcher)
+  - `launch.ps1` (PowerShell launch script with interactive menu)
+  - `launch.bat` (Double-click batch launcher with options)
 
 ---
 
@@ -147,4 +147,33 @@ OpenSeason includes 4 core workbench capabilities accessible through both the Sv
 ### Pillar 4: Visual Legal Signature & Stamp Studio
 - **Problem Solved:** Applying court-compliant electronic `/s/` signatures or visual cursive/stylus stamps without cloud electronic signature vendors.
 - **Implementation:** Local signature profile store with interactive drawing pad, formal cursive styles, and 1-click AcroForm/PDF placement (`openseason sign stamp`).
+
+---
+
+## 7. The Legal Operating System Architecture (6 Structural Upgrades)
+
+To bridge the gap between a document compiler and a predictive, multi-state **Legal Operating System** for both everyday people and AI agents, six deterministic Rust subsystems (`legal_os.rs`, `intake.rs`, `portfolio.rs`) and three modular Svelte 5 UI components (`PortfolioRadarCard.svelte`, `ProceduralGraphCard.svelte`, `IntakeWizardModal.svelte`) were engineered:
+
+1. **3-Tier Matter Architecture & Pre-Filing Complaints (`case_profile.rs`, `documents.rs`, `guided.rs`)**
+   - **Tier 1 (`transactional`):** Everyday legal instruments (`will`, `lease`, `contractor`, `power_of_attorney`). Bypasses adversarial `"v."` captions and docket number requirements; renders clean centered instrument titles and statutory witness/notary self-proving blocks.
+   - **Tier 2 (`administrative`):** Pre-suit & agency notices (`demand_letter`, `cure_notice`, `security_deposit_demand`, `records_request`, `agency_appeal`). Renders `TO: / FROM: / VIA CERTIFIED MAIL` statutory notice headers and tracks cure windows.
+   - **Tier 3 (`litigation`):** Trial, Appellate, Mandamus, and SCOTUS filings. Supports `procedural_stage: "pre_filing"` so initial Complaints validate and render `Case No. __________ (To Be Assigned)` before the clerk assigns a docket number.
+
+2. **Multi-Venue Competence Matrix (`legal_os.rs`)**
+   - Deterministically resolves `NJ`, `CO`, `FEDERAL`, `SCOTUS`, and `GENERIC` venue rules:
+     - **New Jersey:** Injects verbatim `N.J. Ct. R. 1:4-4(b)` Certification in Lieu of Oath into assembled packets and flags defective hedging phrases (`"to the best of my knowledge"` or `"information and belief"`).
+     - **Colorado:** Enforces `C.R.S. § 13-27-106` unsworn declarations and requires a `C.R.C.P. 121 § 1-15(8)` Certificate of Conferral on civil motions.
+     - **Federal & SCOTUS:** Enforces `28 U.S.C. § 1746` declarations and `S. Ct. Rule 14.1(a)` Questions Presented.
+
+3. **Predictive Procedural State Graph & Tolling Math (`predict_next_steps`)**
+   - Computes downstream legal branches whenever a timeline event or order is logged.
+   - Accurately models **NJ Pause/Toll (`pause_remaining` under R. 2:4-3(e))** (pausing the 45-day appeal clock with $45 - \text{elapsed}$ days remaining) vs. **Colorado/Federal Full Clock Reset (`reset_full` under FRAP 4(a)(4) / C.R.C.P. 59)**, plus **Mail Service Offsets (+3 days)**.
+
+4. **1-Question-at-a-Time Guided Intake Wizard & Offline PDF Text Extraction (`intake.rs`, `pdf_tools.rs`)**
+   - Extracts text page-by-page offline from PDFs in `orders/` and `evidence/`, auto-detects candidate docket numbers, dates, and court names with file provenance, and drives a step-by-step interview (`intake status`, `intake answer`, `case context`).
+   - Supports filing-scoped draft storage (`drafts/sections-{filing_id}.json`) so multiple motions never clobber each other.
+
+5. **Cross-Venue Case Escalation & Multi-State Portfolio Radar (`portfolio.rs`)**
+   - `case escalate` graduates a Tier 2 Pre-Suit Notice into a Tier 3 Lawsuit or escalates a Trial case to Appellate / Mandamus / SCOTUS, automatically copying `orders/`, `filings/`, and `evidence/` into the new matter's `evidence/` appendix.
+   - `portfolio status` aggregates deadlines across all matters and maintains a fill-once Global Filer Profile (`Documents/JustLegal/filer.json`).
 

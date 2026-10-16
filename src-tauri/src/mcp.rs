@@ -64,6 +64,15 @@ fn tool_list() -> Value {
         tool("pdf_rotate", "Rotate PDF pages by 90, 180, or 270 degrees.", json!({"pdf": {"type": "string"}, "degrees": {"type": "integer"}, "out": {"type": "string"}}), &["pdf", "degrees", "out"]),
         tool("pdf_redact", "Scrub SSNs, phone numbers, or custom keywords from a PDF at the byte level.", json!({"pdf": {"type": "string"}, "words": {"type": "array", "items": {"type": "string"}}, "out": {"type": "string"}}), &["pdf", "out"]),
         tool("sign_pdf", "Stamp court-compliant electronic signature block onto a PDF.", json!({"pdf": {"type": "string"}, "name": {"type": "string"}, "page": {"type": "integer"}, "x": {"type": "number"}, "y": {"type": "number"}, "out": {"type": "string"}}), &["pdf", "name"]),
+        tool("case_context", "Consolidated 1-call Legal OS snapshot: profile, tier, venue rules, timeline, exhibits, filings, intake wizard status, and predictive next steps.", json!({"path": path}), &["path"]),
+        tool("case_next_steps", "Predictive Procedural State Graph: compute downstream branches, deadlines, and tolling (NJ pause vs CO/Fed reset) from timeline & orders.", json!({"path": path, "event": {"type": "string"}, "trigger_date": {"type": "string"}}), &["path"]),
+        tool("case_escalate", "Graduate Tier 2 Pre-Suit -> Tier 3 Lawsuit or escalate Trial -> Appellate / Mandamus / SCOTUS, carrying over record exhibits.", json!({"path": path, "target": {"type": "string", "description": "trial_lawsuit|appellate_appeal|mandamus|scotus_cert"}}), &["path", "target"]),
+        tool("intake_status", "1-question-at-a-time Guided Intake Wizard status, progress percentage, and next_question prompt.", json!({"path": path, "filing_id": {"type": "string"}}), &["path"]),
+        tool("intake_answer", "Answer a single question in the Guided Intake Wizard (updates profile, parties, or filing-scoped draft sections).", json!({"path": path, "question_id": {"type": "string"}, "answer": {"type": "string"}, "filing_id": {"type": "string"}}), &["path", "question_id", "answer"]),
+        tool("intake_scan", "Offline PDF text extraction & candidate detection (docket numbers, dates, courts) across orders/ and evidence/.", json!({"path": path}), &["path"]),
+        tool("check_venue", "Deterministic Multi-Venue Competence Matrix check (NJ R. 1:4-4(b) oath, CO C.R.C.P. 121 § 1-15(8) conferral, 28 U.S.C. § 1746, SCOTUS Rule 14.1, Will witnesses).", json!({"path": path}), &["path"]),
+        tool("portfolio_status", "Multi-state, multi-venue Portfolio Deadline Radar across all matters in the cases directory.", json!({"root": {"type": "string"}}), &[]),
+        tool("pdf_extract_text", "Extract text page-by-page from a local PDF offline (never uploads).", json!({"pdf": {"type": "string"}}), &["pdf"]),
     ])
 }
 
@@ -419,6 +428,52 @@ fn call_tool(name: &str, args: &Value) -> Result<Value, String> {
             };
             let result = crate::signature::stamp_pdf(&pdf, &name, page, x, y, &out_p)?;
             Ok(serde_json::to_value(result).unwrap())
+        }
+        "case_context" => {
+            let dir = std::path::PathBuf::from(s("path"));
+            Ok(serde_json::to_value(crate::intake::case_context(&dir)?).unwrap())
+        }
+        "case_next_steps" => {
+            let dir = std::path::PathBuf::from(s("path"));
+            let profile = case_profile::load_case(&dir)?;
+            let report = crate::legal_os::predict_next_steps(&profile, Some(&dir));
+            Ok(serde_json::to_value(report).unwrap())
+        }
+        "case_escalate" => {
+            let dir = std::path::PathBuf::from(s("path"));
+            let report = crate::portfolio::escalate_case(&dir, &s("target"), None)?;
+            Ok(serde_json::to_value(report).unwrap())
+        }
+        "intake_status" => {
+            let dir = std::path::PathBuf::from(s("path"));
+            let report = crate::intake::intake_status(&dir)?;
+            Ok(serde_json::to_value(report).unwrap())
+        }
+        "intake_answer" => {
+            let dir = std::path::PathBuf::from(s("path"));
+            let report = crate::intake::intake_answer(&dir, &s("question_id"), &s("answer"))?;
+            Ok(serde_json::to_value(report).unwrap())
+        }
+        "intake_scan" => {
+            let dir = std::path::PathBuf::from(s("path"));
+            Ok(serde_json::to_value(crate::intake::intake_scan(&dir)).unwrap())
+        }
+        "check_venue" => {
+            let dir = std::path::PathBuf::from(s("path"));
+            let profile = case_profile::load_case(&dir)?;
+            Ok(serde_json::to_value(crate::legal_os::check_venue_competence(&profile)).unwrap())
+        }
+        "portfolio_status" => {
+            let root = if s("root").is_empty() {
+                case_profile::default_cases_root()
+            } else {
+                std::path::PathBuf::from(s("root"))
+            };
+            Ok(serde_json::to_value(crate::portfolio::portfolio_status(&root)?).unwrap())
+        }
+        "pdf_extract_text" => {
+            let pdf = std::path::PathBuf::from(s("pdf"));
+            Ok(serde_json::to_value(crate::pdf_tools::extract_pdf_text(&pdf)?).unwrap())
         }
         other => Err(format!(
             "Unknown tool '{other}'. Call playbook or packs_list. Known tools are listed by tools/list."

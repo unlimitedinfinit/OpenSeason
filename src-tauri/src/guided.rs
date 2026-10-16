@@ -67,6 +67,40 @@ pub fn templates_for(kind: &str) -> Vec<GuidedSection> {
             ("order", "The order or judgment you are appealing", "Date and a short description from the record."),
             ("notice", "Your notice text", "Your own words. This app will not invent grounds of appeal."),
         ],
+        "will" => &[
+            ("declaration", "Declaration of Testator & Family Status", "State your full legal name, county/state of residence, and revoke prior wills in your own words."),
+            ("bequests", "Specific Bequests & Residuary Distribution", "List specific gifts and who receives the remainder of your estate. Do not leave placeholders."),
+            ("executor", "Appointment of Executor / Personal Representative", "Name your primary and alternate Personal Representative / Executor."),
+            ("attestation", "Witness & Self-Proving Affidavit Instructions", "State the governing state (e.g., NJ N.J.S.A. 3B:3-4 or CO C.R.S. § 15-11-504) for two-witness and notary execution."),
+        ],
+        "lease" => &[
+            ("premises_term", "Premises, Lease Term & Monthly Rent", "Property address, start/end dates, monthly rent amount, and due date."),
+            ("security_deposit", "Security Deposit & Statutory Trust Terms", "Deposit amount, bank/trust holding details, and statutory return period."),
+            ("habitability", "Maintenance, Utilities & Habitability", "Allocation of utilities, repairs, and statutory warranty of habitability."),
+            ("default_notice", "Default, Cure Period & Termination Notice", "Notice period required before termination or eviction filing."),
+        ],
+        "contractor" => &[
+            ("scope", "Scope of Services & Deliverables", "Concrete description of services and milestones to be performed."),
+            ("compensation", "Compensation, Invoicing & Payment Schedule", "Rates, milestone payment triggers, and late-fee terms."),
+            ("ip_ownership", "Intellectual Property & Confidentiality", "Who owns work product upon full payment and confidentiality obligations."),
+            ("termination", "Independent Contractor Relationship & Termination", "Notice period to terminate and non-employment tax status."),
+        ],
+        "power_of_attorney" => &[
+            ("principal_agent", "Principal & Designated Agent (Attorney-in-Fact)", "Your full name and the name/address of your chosen Agent and Successor Agent."),
+            ("powers_granted", "Specific Financial or Legal Powers Granted", "List the exact powers granted in your own words."),
+            ("durability", "Effective Date, Durability & Revocation Terms", "Whether this power remains effective upon disability/incapacity."),
+        ],
+        "demand_letter" | "cure_notice" | "security_deposit_demand" => &[
+            ("obligation", "Underlying Agreement or Statutory Duty", "Identify the lease, contract, or statute (e.g., 7-day / 30-day demand rule)."),
+            ("breach_chronology", "Chronology of Default or Non-Payment", "Dates and exact amounts or violations supported by your records."),
+            ("cure_demand", "Exact Cure / Payment Required & Statutory Deadline", "Exact dollar amount or action demanded and the date the cure clock expires."),
+            ("escalation_notice", "Delivery Method & Notice of Legal Escalation", "Certified Mail RRR tracking info and statement that failure to cure will result in a Tier 3 court action."),
+        ],
+        "records_request" | "agency_appeal" => &[
+            ("authority", "Governing Statute or Agency Rule", "e.g., NJ OPRA (N.J.S.A. 47:1A-1), CO CORA (C.R.S. § 24-72-201), FOIA, or Unemployment Rule."),
+            ("records_or_ruling", "Specific Records Requested or Agency Determination Challenged", "Date Range, record custodian, or agency docket/decision date."),
+            ("relief", "Fee Waiver / Production Format or Administrative Relief Sought", "Electronic PDF delivery request or reversal of agency determination."),
+        ],
         _ => &[
             ("order", "The order you want the court to look at again", "Date of the order and what it did. Copy from the paper you have."),
             ("rule", "The rule you are using", "If you do not have a rule, leave this blank. The app will not invent one. NJ reconsideration is often R. 2:11-6 or R. 4:49-2. Confirm the current rule yourself."),
@@ -88,18 +122,37 @@ pub fn path(case_dir: &Path) -> std::path::PathBuf {
     case_dir.join("drafts").join("sections.json")
 }
 
+pub fn scoped_path(case_dir: &Path, filing_id: Option<&str>) -> std::path::PathBuf {
+    match filing_id.map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        Some(fid) => case_dir.join("drafts").join(format!("sections-{fid}.json")),
+        None => path(case_dir),
+    }
+}
+
 pub fn load_or_init(case_dir: &Path, kind: &str) -> Result<GuidedDraft, String> {
+    load_or_init_scoped(case_dir, None, kind)
+}
+
+pub fn load_or_init_scoped(
+    case_dir: &Path,
+    filing_id: Option<&str>,
+    kind: &str,
+) -> Result<GuidedDraft, String> {
     if crate::seal::is_dir_sealed(case_dir) {
         return Err("This case is sealed. Guided drafts cannot be written on the Documents pointer.".into());
     }
-    if let Some(existing) = crate::check::read_json::<GuidedDraft>(&path(case_dir))? {
-        return Ok(existing);
+    let target = scoped_path(case_dir, filing_id);
+    if let Some(existing) = crate::check::read_json::<GuidedDraft>(&target)? {
+        if existing.kind.eq_ignore_ascii_case(kind) || kind.trim().is_empty() {
+            return Ok(existing);
+        }
     }
     let draft = GuidedDraft {
         kind: kind.to_string(),
         sections: templates_for(kind),
     };
-    save(case_dir, &draft)?;
+    fs::create_dir_all(case_dir.join("drafts")).map_err(|e| e.to_string())?;
+    crate::check::write_json(&target, &draft)?;
     Ok(draft)
 }
 
@@ -124,15 +177,31 @@ pub fn assemble(sections: &[GuidedSection]) -> String {
     out
 }
 
-/// Write one section and copy the assembled body onto the matching profile field.
+/// Write one section and copy the assembled body onto the matching profile field (or scoped filing).
 pub fn set_section(case_dir: &Path, id: &str, text: &str) -> Result<GuidedDraft, String> {
-    let profile = case_profile::load_case(case_dir)?;
-    let kind = if profile.document_kind.is_empty() {
-        "reconsideration"
+    set_section_scoped(case_dir, None, id, text)
+}
+
+pub fn set_section_scoped(
+    case_dir: &Path,
+    filing_id: Option<&str>,
+    id: &str,
+    text: &str,
+) -> Result<GuidedDraft, String> {
+    let mut profile = case_profile::load_case(case_dir)?;
+    let kind = if let Some(fid) = filing_id.filter(|s| !s.trim().is_empty()) {
+        profile
+            .filings
+            .iter()
+            .find(|f| f.id == fid)
+            .map(|f| f.kind.clone())
+            .unwrap_or_else(|| profile.document_kind.clone())
+    } else if profile.document_kind.is_empty() {
+        "reconsideration".to_string()
     } else {
-        profile.document_kind.as_str()
+        profile.document_kind.clone()
     };
-    let mut draft = load_or_init(case_dir, kind)?;
+    let mut draft = load_or_init_scoped(case_dir, filing_id, &kind)?;
     let known: Vec<String> = draft.sections.iter().map(|s| s.id.clone()).collect();
     let section = draft.sections.iter_mut().find(|s| s.id == id).ok_or_else(|| {
         format!(
@@ -141,16 +210,26 @@ pub fn set_section(case_dir: &Path, id: &str, text: &str) -> Result<GuidedDraft,
         )
     })?;
     section.user_text = text.to_string();
-    save(case_dir, &draft)?;
+    let target = scoped_path(case_dir, filing_id);
+    fs::create_dir_all(case_dir.join("drafts")).map_err(|e| e.to_string())?;
+    crate::check::write_json(&target, &draft)?;
     let body = assemble(&draft.sections);
-    let mut profile = profile;
-    match draft.kind.to_ascii_lowercase().as_str() {
-        "appellate_brief" | "brief" => profile.brief.user_text = body,
-        "appellate_motion" => profile.appellate_motion.user_text = body,
-        "mandamus" => profile.mandamus.user_text = body,
-        "complaint" => profile.complaint.user_text = body,
-        "notice_of_appeal" => profile.notice_of_appeal.user_text = body,
-        _ => profile.motion.user_text = body,
+
+    if let Some(fid) = filing_id.filter(|s| !s.trim().is_empty()) {
+        if let Some(filing) = profile.filings.iter_mut().find(|f| f.id == fid) {
+            filing.user_text = body.clone();
+            let md_path = case_dir.join("drafts").join(format!("motion-{fid}.md"));
+            let _ = fs::write(md_path, &body);
+        }
+    } else {
+        match draft.kind.to_ascii_lowercase().as_str() {
+            "appellate_brief" | "brief" => profile.brief.user_text = body,
+            "appellate_motion" => profile.appellate_motion.user_text = body,
+            "mandamus" => profile.mandamus.user_text = body,
+            "complaint" => profile.complaint.user_text = body,
+            "notice_of_appeal" => profile.notice_of_appeal.user_text = body,
+            _ => profile.motion.user_text = body,
+        }
     }
     case_profile::save_case(case_dir, &profile)?;
     Ok(draft)

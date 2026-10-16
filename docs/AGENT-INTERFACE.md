@@ -100,13 +100,29 @@ Equivalent without npm: `cargo run --manifest-path src-tauri/Cargo.toml --bin op
 | `pdf split --in FILE --pages "1-3,5" --out OUT` | Extract specific pages into a clean court PDF |
 | `pdf rotate --in FILE --degrees 90 [--pages "1,3"] --out OUT` | Reorient scanned court documents (90°, 180°, 270° clockwise) |
 | `pdf redact --in FILE [--ssn] [--phone] [--dob] [--pattern REGEX] --out OUT` | Scrub sensitive identifiers and PII from PDF byte streams |
+| `pdf extract-text --in FILE` | Extract text page-by-page offline from a local PDF (`lopdf`) |
 | `sign stamp --in FILE --text TEXT [--page N] [--x X] [--y Y] [--out OUT]` | Stamp electronic `/s/` or signature block onto specified PDF page |
+| `case context DIR` | **1-Call Consolidated Legal OS Bundle**: profile, tier, venue rules, next steps, intake status, and exhibits |
+| `case next-steps DIR` | **Predictive Procedural State Graph**: downstream branches, deadlines, and tolling (NJ pause vs CO/Fed reset) |
+| `case escalate DIR --target STAGE [--out DIR]` | Graduate Tier 2 $\rightarrow$ Tier 3 Lawsuit or escalate Trial $\rightarrow$ Appeal / Mandamus / SCOTUS, copying lower record |
+| `intake status DIR` | 1-question-at-a-time Guided Intake Wizard status, completion %, and `next_question` |
+| `intake answer DIR --id QUESTION_ID --value TEXT` | Answer a question in the Guided Intake Wizard (updates profile, parties, or draft sections) |
+| `intake scan DIR` | Offline PDF text extraction & candidate detection (docket numbers, dates, courts) across `orders/` and `evidence/` |
+| `check venue DIR` | Deterministic Multi-Venue Competence Matrix check (NJ R. 1:4-4(b), CO Rule 121 conferral, 28 U.S.C. § 1746, SCOTUS Rule 14.1, Will witnesses) |
+| `portfolio status [--root DIR]` | Multi-state, multi-venue Portfolio Deadline Radar & Global Filer Profile |
 | `mcp` | Stdio MCP server (same tools) |
 | `sync DIR --action backup` | Stub. Standard: `not_implemented`. Confidential: refused |
 
 ## MCP (stdio)
 
 `openseason mcp` speaks JSON-RPC 2.0 with `Content-Length` framing. Tools include:
+- `case_context`: One-call consolidated Legal OS context bundle for immediate AI agent orientation.
+- `case_next_steps`: Predictive Procedural State Graph (NJ `pause_remaining` vs. CO/Federal `reset_full` tolling + mail service offset).
+- `case_escalate`: Cross-venue graduation/escalation (`trial_lawsuit`, `appellate_appeal`, `mandamus`, `scotus_cert`) with automatic appendix record carryover.
+- `intake_status`, `intake_answer`, `intake_scan`: 1-question-at-a-time Guided Intake Wizard & offline PDF candidate discovery.
+- `check_venue`: Multi-Venue Competence Matrix audit (`NJ`, `CO`, `FEDERAL`, `SCOTUS`, and Tier 1 Wills/Leases/Contracts).
+- `portfolio_status`: Multi-state deadline radar across all matters.
+- `pdf_extract_text`: Page-by-page offline PDF text extraction.
 - `motion_list`, `motion_create`, `motion_export`: Autonomous multi-motion docket drafting & compilation.
 - `service_cert` & `service_order`: Court-mandated proof of service and judge-ready proposed order generation.
 - `pdf_merge`, `pdf_split`, `pdf_rotate`, `pdf_redact`: Local airgapped PDF power manipulation without cloud surveillance.

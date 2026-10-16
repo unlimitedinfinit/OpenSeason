@@ -239,6 +239,24 @@ pub struct CaseProfile {
     pub cloud_synced_at: Option<String>,
     #[serde(default)]
     pub filings: Vec<CaseFilingItem>,
+    /// Matter tier: "litigation" (default), "administrative", or "transactional"
+    #[serde(default)]
+    pub matter_tier: String,
+    /// Procedural stage: "pre_filing", "active_docket", "post_judgment", "appellate", "supreme_court"
+    #[serde(default)]
+    pub procedural_stage: String,
+    /// Governing state/venue code: e.g. "NJ", "CO", "FEDERAL", "SCOTUS"
+    #[serde(default)]
+    pub governing_state: String,
+    /// Optional parent matter id when graduated from Tier 2 -> Tier 3 or escalated Trial -> Appeal -> SCOTUS
+    #[serde(default)]
+    pub parent_matter_id: Option<String>,
+    /// Conferral status for venues requiring conferral certificates (e.g. CO C.R.C.P. 121 § 1-15(8))
+    #[serde(default)]
+    pub conferral_status: String,
+    /// Default service method ("electronic", "mail", "personal", "certified_mail") for deadline mailbox offsets
+    #[serde(default)]
+    pub service_method: String,
 }
 
 fn default_schema_version() -> u32 {
@@ -258,8 +276,43 @@ pub struct ValidationReport {
 }
 
 impl CaseProfile {
+    pub fn effective_tier(&self) -> &'static str {
+        match self.matter_tier.trim().to_ascii_lowercase().as_str() {
+            "transactional" | "tier1" | "everyday" => "transactional",
+            "administrative" | "tier2" | "pre_suit" | "presuit" => "administrative",
+            "litigation" | "tier3" => "litigation",
+            _ => match self.document_kind.trim().to_ascii_lowercase().as_str() {
+                "will" | "lease" | "contractor" | "power_of_attorney" | "bill_of_sale" | "nda" => {
+                    "transactional"
+                }
+                "demand_letter"
+                | "cure_notice"
+                | "security_deposit_demand"
+                | "records_request"
+                | "agency_appeal" => "administrative",
+                _ => "litigation",
+            },
+        }
+    }
+
+    pub fn is_pre_filing(&self) -> bool {
+        self.procedural_stage.trim().eq_ignore_ascii_case("pre_filing")
+    }
+
     pub fn new_standard(title: &str, document_kind: &str) -> Self {
         let now = Utc::now().to_rfc3339();
+        let kind_lower = document_kind.trim().to_ascii_lowercase();
+        let inferred_tier = match kind_lower.as_str() {
+            "will" | "lease" | "contractor" | "power_of_attorney" | "bill_of_sale" | "nda" => {
+                "transactional"
+            }
+            "demand_letter"
+            | "cure_notice"
+            | "security_deposit_demand"
+            | "records_request"
+            | "agency_appeal" => "administrative",
+            _ => "litigation",
+        };
         Self {
             schema_version: 1,
             id: Uuid::new_v4().to_string(),
@@ -290,6 +343,12 @@ impl CaseProfile {
             cloud_matter_id: None,
             cloud_synced_at: None,
             filings: Vec::new(),
+            matter_tier: inferred_tier.to_string(),
+            procedural_stage: String::new(),
+            governing_state: String::new(),
+            parent_matter_id: None,
+            conferral_status: String::new(),
+            service_method: "electronic".to_string(),
         }
     }
 
@@ -504,41 +563,45 @@ fn placeholder_hits(text: &str) -> Vec<String> {
 
 pub fn validate_case(profile: &CaseProfile, case_dir: Option<&Path>) -> ValidationReport {
     let mut issues = Vec::new();
+    let tier = profile.effective_tier();
+    let kind = profile.document_kind.trim().to_ascii_lowercase();
 
     if is_blank(&profile.title) {
         issues.push(ValidationIssue {
             field: "title".into(),
-            message: "Case title is required.".into(),
+            message: "Case or instrument title is required.".into(),
         });
     }
-    if is_blank(&profile.court.name) {
-        issues.push(ValidationIssue {
-            field: "court.name".into(),
-            message: "Court name is required so the caption can be filled.".into(),
-        });
-    }
-    if is_blank(&profile.docket_number) {
-        issues.push(ValidationIssue {
-            field: "docket_number".into(),
-            message: "Docket number is required.".into(),
-        });
+    if tier == "litigation" {
+        if is_blank(&profile.court.name) {
+            issues.push(ValidationIssue {
+                field: "court.name".into(),
+                message: "Court name is required so the caption can be filled.".into(),
+            });
+        }
+        if is_blank(&profile.docket_number) && !profile.is_pre_filing() {
+            issues.push(ValidationIssue {
+                field: "docket_number".into(),
+                message: "Docket number is required (or set procedural_stage to pre_filing for initial complaints).".into(),
+            });
+        }
     }
     if profile.caption.appellants().is_empty() {
         issues.push(ValidationIssue {
             field: "caption.appellants".into(),
-            message: "Add at least one appellant (or plaintiff).".into(),
+            message: "Add at least one primary party (appellant, plaintiff, testator, landlord, or claimant).".into(),
         });
     }
-    if profile.caption.appellees().is_empty() {
+    if kind != "will" && kind != "power_of_attorney" && profile.caption.appellees().is_empty() {
         issues.push(ValidationIssue {
             field: "caption.appellees".into(),
-            message: "Add at least one appellee (or defendant).".into(),
+            message: "Add at least one counterparty (appellee, defendant, tenant, contractor, or respondent).".into(),
         });
     }
     if is_blank(&profile.filer.name) {
         issues.push(ValidationIssue {
             field: "filer.name".into(),
-            message: "Filer name is required for the signature block.".into(),
+            message: "Filer / signer name is required for the signature block.".into(),
         });
     }
     if is_blank(&profile.filer.signature_name) {
@@ -557,8 +620,7 @@ pub fn validate_case(profile: &CaseProfile, case_dir: Option<&Path>) -> Validati
         }
     }
 
-    let kind = profile.document_kind.to_ascii_lowercase();
-    if kind.is_empty() || kind == "notice_of_appeal" || kind == "appeal" {
+    if tier == "litigation" && (kind.is_empty() || kind == "notice_of_appeal" || kind == "appeal") {
         if is_blank(&profile.notice_of_appeal.judgment_date) {
             issues.push(ValidationIssue {
                 field: "notice_of_appeal.judgment_date".into(),
@@ -591,6 +653,15 @@ pub fn validate_case(profile: &CaseProfile, case_dir: Option<&Path>) -> Validati
                 message: format!("Unfilled placeholder remains: {}", hit),
             });
         }
+    } else if tier != "litigation" {
+        if is_blank(&profile.motion.user_text) && is_blank(&profile.complaint.user_text) && is_blank(&profile.court_markdown) {
+            issues.push(ValidationIssue {
+                field: "motion.user_text".into(),
+                message: "Instrument or notice body text is required. OpenSeason will not invent terms.".into(),
+            });
+        }
+        let combined = format!("{} {} {}", profile.motion.user_text, profile.complaint.user_text, profile.title);
+        push_placeholder_issues(&combined, &mut issues);
     }
 
     ValidationReport {
@@ -600,34 +671,38 @@ pub fn validate_case(profile: &CaseProfile, case_dir: Option<&Path>) -> Validati
 }
 
 fn push_core_profile_issues(profile: &CaseProfile, issues: &mut Vec<ValidationIssue>) {
+    let tier = profile.effective_tier();
+    let kind = profile.document_kind.trim().to_ascii_lowercase();
     if is_blank(&profile.title) {
         issues.push(ValidationIssue {
             field: "title".into(),
             message: "Case title is required.".into(),
         });
     }
-    if is_blank(&profile.court.name) {
-        issues.push(ValidationIssue {
-            field: "court.name".into(),
-            message: "Court name is required so the caption can be filled.".into(),
-        });
-    }
-    if is_blank(&profile.docket_number) {
-        issues.push(ValidationIssue {
-            field: "docket_number".into(),
-            message: "Docket number is required.".into(),
-        });
+    if tier == "litigation" {
+        if is_blank(&profile.court.name) {
+            issues.push(ValidationIssue {
+                field: "court.name".into(),
+                message: "Court name is required so the caption can be filled.".into(),
+            });
+        }
+        if is_blank(&profile.docket_number) && !profile.is_pre_filing() {
+            issues.push(ValidationIssue {
+                field: "docket_number".into(),
+                message: "Docket number is required.".into(),
+            });
+        }
     }
     if profile.caption.appellants().is_empty() {
         issues.push(ValidationIssue {
             field: "caption.parties".into(),
-            message: "Add at least one plaintiff or appellant.".into(),
+            message: "Add at least one plaintiff, appellant, or primary party.".into(),
         });
     }
-    if profile.caption.appellees().is_empty() {
+    if kind != "will" && kind != "power_of_attorney" && profile.caption.appellees().is_empty() {
         issues.push(ValidationIssue {
             field: "caption.parties".into(),
-            message: "Add at least one defendant or appellee.".into(),
+            message: "Add at least one defendant, appellee, or counterparty.".into(),
         });
     }
     if is_blank(&profile.filer.name) {
@@ -722,11 +797,13 @@ pub fn validate_pleading(
                 });
             }
         }
-        "motion" | "reconsideration" | "enlargement" | "stay" | "amend_findings" => {
+        "motion" | "reconsideration" | "enlargement" | "stay" | "amend_findings" | "will"
+        | "lease" | "contractor" | "power_of_attorney" | "demand_letter" | "cure_notice"
+        | "security_deposit_demand" | "records_request" | "agency_appeal" => {
             if is_blank(&profile.motion.user_text) {
                 issues.push(ValidationIssue {
                     field: "motion.user_text".into(),
-                    message: "Paste the user's own motion text. This builder is basic and will not invent the request.".into(),
+                    message: "Paste the user's own draft text. OpenSeason will not invent the terms or request.".into(),
                 });
             }
             push_placeholder_issues(
@@ -854,6 +931,12 @@ pub fn sample_appeal_profile() -> CaseProfile {
         cloud_matter_id: None,
         cloud_synced_at: None,
         filings: Vec::new(),
+        matter_tier: "litigation".to_string(),
+        procedural_stage: String::new(),
+        governing_state: String::new(),
+        parent_matter_id: None,
+        conferral_status: String::new(),
+        service_method: "electronic".to_string(),
     }
 }
 

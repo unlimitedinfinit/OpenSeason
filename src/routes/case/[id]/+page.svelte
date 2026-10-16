@@ -11,6 +11,8 @@
   import ServiceCertCard from "$lib/components/ServiceCertCard.svelte";
   import PdfToolsModal from "$lib/components/PdfToolsModal.svelte";
   import SignatureStudioModal from "$lib/components/SignatureStudioModal.svelte";
+  import IntakeWizardModal from "$lib/components/IntakeWizardModal.svelte";
+  import ProceduralGraphCard from "$lib/components/ProceduralGraphCard.svelte";
   import CaseOverviewTab from "$lib/components/tabs/CaseOverviewTab.svelte";
   import CaseDocumentsTab from "$lib/components/tabs/CaseDocumentsTab.svelte";
   import CaseEvidenceTab from "$lib/components/tabs/CaseEvidenceTab.svelte";
@@ -43,6 +45,7 @@
   let showCloudModal = $state(false);
   let showPdfToolsModal = $state(false);
   let showSignatureModal = $state(false);
+  let showIntakeWizard = $state(false);
   let activeFilingTitle = $state("");
   let exhibitPacketReport = $state<ExhibitPacketReport | null>(null);
   let batesPrefix = $state("");
@@ -476,6 +479,12 @@
       </div>
       <div class="flex items-center gap-2">
         <button
+          onclick={() => (showIntakeWizard = true)}
+          class="text-xs px-3 py-1.5 rounded-md border border-amber-500/40 text-amber-300 hover:bg-amber-950/30 flex items-center gap-1.5 font-medium transition-colors"
+        >
+          <span>🧙 Guided Wizard</span>
+        </button>
+        <button
           onclick={() => (showPdfToolsModal = true)}
           class="text-xs px-3 py-1.5 rounded-md border border-blue-500/40 text-blue-300 hover:bg-blue-950/30 flex items-center gap-1.5 font-medium transition-colors"
         >
@@ -511,6 +520,13 @@
     </div>
 
     <ReviewNotice />
+
+    <ProceduralGraphCard
+      caseId={caseId}
+      bind:profile
+      onOpenWizard={() => (showIntakeWizard = true)}
+      onProfileSaved={load}
+    />
 
     <PreFlightAuditCard caseId={caseId} />
 
@@ -694,6 +710,13 @@
       bind:open={showSignatureModal}
       caseId={caseId}
       onclose={() => (showSignatureModal = false)}
+    />
+
+    <IntakeWizardModal
+      bind:open={showIntakeWizard}
+      caseId={caseId}
+      bind:profile
+      onUpdated={load}
     />
   {/if}
 </main>

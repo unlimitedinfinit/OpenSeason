@@ -49,6 +49,16 @@ cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- --json check 
 # Export court-formatted Word + PDF
 cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- --json export court-md ./my-case
 
+# Legal OS 1-Call Context Bundle, Guided Intake Wizard, Predictive Next Steps & Venue Check
+.\openseason-cli.exe --json case context ./my-case
+.\openseason-cli.exe --json intake scan ./my-case
+.\openseason-cli.exe --json intake status ./my-case
+.\openseason-cli.exe --json intake answer ./my-case --id <question_id> --value "<user answer>"
+.\openseason-cli.exe --json case next-steps ./my-case
+.\openseason-cli.exe --json check venue ./my-case
+.\openseason-cli.exe --json case escalate ./my-case --target appellate_appeal
+.\openseason-cli.exe --json portfolio status
+
 # Optional local MCP stdio server (same engine)
 cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- mcp
 
@@ -60,7 +70,7 @@ cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- case seal ./m
 cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- sync ./my-case --action backup
 ```
 
-There is also `npm run cli -- ...` if you prefer that wrapper.
+There is also `npm run cli -- ...` or the pre-built `.\openseason-cli.exe` binary in the repo root.
 
 ## Case folder layout
 

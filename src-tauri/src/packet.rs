@@ -37,6 +37,8 @@ fn part_lines(profile: &CaseProfile, id: &str) -> (String, Vec<String>) {
     if lines.last().map(|l| !l.is_empty()).unwrap_or(false) {
         lines.push(String::new());
     }
+    let venue = crate::legal_os::resolve_venue(profile);
+    let oath_text = venue.mandatory_oath_text.as_str();
     let (heading, body): (&str, Vec<&str>) = match id {
         "notice" => (
             "NOTICE OF MOTION",
@@ -48,7 +50,7 @@ fn part_lines(profile: &CaseProfile, id: &str) -> (String, Vec<String>) {
         "certification" => (
             "CERTIFICATION",
             vec![
-                "I certify that the facts in the accompanying motion are true to the best of my knowledge.",
+                oath_text,
                 "I certify that this paper is the user's own draft. OpenSeason did not invent facts.",
                 "I understand this app did not file or serve this paper.",
             ],

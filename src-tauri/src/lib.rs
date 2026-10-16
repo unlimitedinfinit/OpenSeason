@@ -31,6 +31,9 @@ pub mod help_links;
 pub mod service;
 pub mod pdf_tools;
 pub mod signature;
+pub mod legal_os;
+pub mod intake;
+pub mod portfolio;
 
 use crypto::AppState;
 
@@ -128,7 +131,20 @@ pub fn run() {
             case_commands::pdf_redact_cmd,
             case_commands::get_signature_profile_cmd,
             case_commands::save_signature_profile_cmd,
-            case_commands::stamp_pdf_signature_cmd
+            case_commands::stamp_pdf_signature_cmd,
+            portfolio::case_context_cmd,
+            portfolio::intake_status_cmd,
+            portfolio::intake_answer_cmd,
+            portfolio::intake_scan_cmd,
+            portfolio::case_next_steps_cmd,
+            portfolio::check_venue_competence_cmd,
+            portfolio::escalate_case_cmd,
+            portfolio::portfolio_status_cmd,
+            portfolio::get_global_filer_cmd,
+            portfolio::save_global_filer_cmd,
+            portfolio::pdf_extract_text_cmd,
+            portfolio::scoped_sections_cmd,
+            portfolio::scoped_fill_cmd
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

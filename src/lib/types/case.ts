@@ -77,6 +77,12 @@ export interface CaseProfile {
   cloud_matter_id?: string | null;
   cloud_synced_at?: string | null;
   filings?: CaseFilingItem[];
+  matter_tier?: string;
+  procedural_stage?: string;
+  governing_state?: string;
+  parent_matter_id?: string | null;
+  conferral_status?: string;
+  service_method?: string;
 }
 
 export interface CaseFilingItem {
@@ -462,5 +468,182 @@ export interface SignatureStampResult {
   stamped_text: string;
   message: string;
 }
+
+// ---------------------------------------------------------------------------
+// Legal Operating System (3-Tier, Multi-Venue, Predictive Graph, Intake Wizard, Portfolio)
+// ---------------------------------------------------------------------------
+
+export interface VenueProfile {
+  venue_code: string;
+  display_name: string;
+  sworn_statement_title: string;
+  sworn_statement_citation: string;
+  mandatory_oath_text: string;
+  requires_conferral_certificate: boolean;
+  conferral_rule: string;
+  appeal_days: number;
+  reconsideration_days: number;
+  reconsideration_trigger: string;
+  tolling_mode: "pause_remaining" | "reset_full" | "none" | string;
+  mail_service_adder_days: number;
+  packet_manifest: string[];
+}
+
+export interface VenueCompetenceReport {
+  ok: boolean;
+  never_files: boolean;
+  never_serves: boolean;
+  matter_tier: string;
+  document_kind: string;
+  venue: VenueProfile;
+  issues: ValidationIssue[];
+  recommendations: string[];
+}
+
+export interface ProceduralBranch {
+  id: string;
+  title: string;
+  rule_citation: string;
+  trigger_event_title: string;
+  trigger_date: string;
+  trigger_kind: string;
+  base_days: number;
+  mail_offset_days: number;
+  clock_interaction: string;
+  tolled_by_event?: string | null;
+  days_elapsed_before_toll?: number | null;
+  days_remaining_after_toll?: number | null;
+  computed_deadline?: string | null;
+  days_until_due?: number | null;
+  status: string;
+  template_kind: string;
+  escalation_target?: string | null;
+  explanation: string;
+}
+
+export interface NextStepsReport {
+  ok: boolean;
+  never_files: boolean;
+  never_serves: boolean;
+  notice: string;
+  case_id: string;
+  case_title: string;
+  matter_tier: string;
+  venue_code: string;
+  detected_triggers: string[];
+  branches: ProceduralBranch[];
+}
+
+export interface ScannedFileSummary {
+  folder: string;
+  filename: string;
+  page_count: number;
+  snippet: string;
+}
+
+export interface CandidateValue {
+  value: string;
+  source: string;
+}
+
+export interface IntakeScanReport {
+  scanned_files: ScannedFileSummary[];
+  candidate_dockets: CandidateValue[];
+  candidate_dates: CandidateValue[];
+  candidate_courts: CandidateValue[];
+}
+
+export interface IntakeQuestion {
+  id: string;
+  step_number: number;
+  category: string;
+  prompt: string;
+  why: string;
+  current_value: string;
+  answered: boolean;
+  choices: string[];
+  candidates: string[];
+}
+
+export interface IntakeStatusReport {
+  ok: boolean;
+  never_files: boolean;
+  never_serves: boolean;
+  case_id: string;
+  case_title: string;
+  matter_tier: string;
+  document_kind: string;
+  venue_code: string;
+  completed_steps: number;
+  total_steps: number;
+  completion_percent: number;
+  next_question?: IntakeQuestion | null;
+  questions: IntakeQuestion[];
+  scan: IntakeScanReport;
+}
+
+export interface CaseContextBundle {
+  ok: boolean;
+  never_files: boolean;
+  never_serves: boolean;
+  notice: string;
+  case_dir: string;
+  profile: CaseProfile;
+  venue_competence: VenueCompetenceReport;
+  next_steps: NextStepsReport;
+  intake: IntakeStatusReport;
+  exhibits: { never_files: boolean; items: ExhibitRow[] };
+}
+
+export interface EscalationResult {
+  ok: boolean;
+  never_files: boolean;
+  never_serves: boolean;
+  parent_case_id: string;
+  new_case_dir: string;
+  new_profile: CaseProfile;
+  copied_record_files: number;
+  message: string;
+}
+
+export interface PortfolioCaseItem {
+  case_id: string;
+  title: string;
+  matter_tier: string;
+  document_kind: string;
+  venue_code: string;
+  docket_number: string;
+  completion_percent: number;
+  next_question_prompt?: string | null;
+  urgent_branch_title?: string | null;
+  urgent_deadline?: string | null;
+  days_until_due?: number | null;
+  parent_matter_id?: string | null;
+}
+
+export interface PortfolioStatusReport {
+  ok: boolean;
+  never_files: boolean;
+  never_serves: boolean;
+  total_matters: number;
+  global_filer: Filer;
+  matters: PortfolioCaseItem[];
+}
+
+export interface PdfTextPage {
+  page_number: number;
+  text: string;
+}
+
+export interface PdfTextExtractionResult {
+  ok: boolean;
+  never_files: boolean;
+  path: string;
+  page_count: number;
+  total_chars: number;
+  pages: PdfTextPage[];
+  full_text: string;
+}
+
 
 

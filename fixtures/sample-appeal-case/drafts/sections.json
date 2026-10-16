@@ -1,0 +1,17 @@
+{
+  "kind": "notice_of_appeal",
+  "sections": [
+    {
+      "id": "order",
+      "heading": "The order or judgment you are appealing",
+      "hint": "Date and a short description from the record.",
+      "user_text": ""
+    },
+    {
+      "id": "notice",
+      "heading": "Your notice text",
+      "hint": "Your own words. This app will not invent grounds of appeal.",
+      "user_text": ""
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "never_files": true,
+  "items": [
+    {
+      "letter": "A",
+      "filename": ".gitkeep",
+      "description": "",
+      "path": "fixtures/sample-appeal-case\\evidence\\.gitkeep"
+    }
+  ]
+}

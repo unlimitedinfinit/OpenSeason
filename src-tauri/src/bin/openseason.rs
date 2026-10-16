@@ -110,6 +110,41 @@ enum Commands {
         #[arg(long)]
         out: Option<PathBuf>,
     },
+    /// Guided 1-question-at-a-time Intake Wizard & Offline PDF Ingestion Scanner
+    Intake {
+        #[command(subcommand)]
+        action: IntakeCmd,
+    },
+    /// Multi-state Portfolio Deadline Radar & Global Filer Profile
+    Portfolio {
+        #[command(subcommand)]
+        action: PortfolioCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum IntakeCmd {
+    Status {
+        path: PathBuf,
+    },
+    Answer {
+        path: PathBuf,
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        answer: String,
+    },
+    Scan {
+        path: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum PortfolioCmd {
+    Status {
+        #[arg(long)]
+        root: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -140,6 +175,22 @@ enum CaseCmd {
         path: PathBuf,
         #[arg(long, default_value = "lucille")]
         template: String,
+    },
+    /// Consolidated case context bundle (profile + venue + next-steps + intake + exhibits)
+    Context {
+        path: PathBuf,
+    },
+    /// Predict downstream procedural branches and deadlines from timeline & orders
+    NextSteps {
+        path: PathBuf,
+    },
+    /// Graduate Tier 2 -> Tier 3 Lawsuit or Escalate Trial -> Appeal / Mandamus / SCOTUS
+    Escalate {
+        path: PathBuf,
+        #[arg(long, default_value = "appellate")]
+        to: String,
+        #[arg(long)]
+        out: Option<PathBuf>,
     },
 }
 
@@ -236,6 +287,10 @@ enum CheckCmd {
         path: PathBuf,
     },
     Transcripts {
+        path: PathBuf,
+    },
+    /// Check venue-specific and tier-specific competence rules (NJ R. 1:4-4b, CO Rule 121, 28 USC 1746, SCOTUS, Wills/Leases)
+    Venue {
         path: PathBuf,
     },
 }
@@ -390,6 +445,10 @@ enum PdfCmd {
         words: Vec<String>,
         #[arg(long)]
         out: PathBuf,
+    },
+    /// Extract text offline from a PDF file using lopdf
+    ExtractText {
+        pdf: PathBuf,
     },
 }
 
@@ -832,6 +891,47 @@ fn run(cli: Cli) -> Result<(), String> {
                 }
                 Ok(())
             }
+            CaseCmd::Context { path } => {
+                let bundle = open_season_lib::intake::case_context(&path)?;
+                if json {
+                    emit(true, &bundle, bundle.venue_competence.issues.clone());
+                } else {
+                    println!("Case: {} ({}) [Tier: {}, Venue: {}]", bundle.profile.title, bundle.profile.docket_number, bundle.intake.matter_tier, bundle.intake.venue_code);
+                    println!("Intake Completion: {}% ({}/{})", bundle.intake.completion_percent, bundle.intake.completed_steps, bundle.intake.total_steps);
+                    if let Some(nq) = &bundle.intake.next_question {
+                        println!("Next Question [{}]: {}", nq.id, nq.prompt);
+                    }
+                    println!("Procedural Branches ({}):", bundle.next_steps.branches.len());
+                    for b in &bundle.next_steps.branches {
+                        println!("  - {} [{}] due={:?}", b.title, b.status, b.computed_deadline);
+                    }
+                }
+                Ok(())
+            }
+            CaseCmd::NextSteps { path } => {
+                let profile = case_profile::load_case(&path)?;
+                let report = open_season_lib::legal_os::predict_next_steps(&profile, Some(&path));
+                if json {
+                    emit(true, &report, vec![]);
+                } else {
+                    println!("Predictive Procedural Graph for '{}' (Venue: {}, Tier: {}):", report.case_title, report.venue_code, report.matter_tier);
+                    for b in &report.branches {
+                        println!("  [{}] {} ({}) -> due: {}", b.status, b.title, b.rule_citation, b.computed_deadline.as_deref().unwrap_or("N/A"));
+                        println!("      {}", b.explanation);
+                    }
+                }
+                Ok(())
+            }
+            CaseCmd::Escalate { path, to, out } => {
+                let res = open_season_lib::portfolio::escalate_case(&path, &to, out.as_deref())?;
+                if json {
+                    emit(true, &res, vec![]);
+                } else {
+                    println!("{}", res.message);
+                    println!("New case folder: {}", res.new_case_dir);
+                }
+                Ok(())
+            }
         },
         Commands::Draft { action: DraftCmd::Import { path, md } } => {
             let text = std::fs::read_to_string(&md).map_err(|e| e.to_string())?;
@@ -1084,6 +1184,23 @@ fn run(cli: Cli) -> Result<(), String> {
                     println!("Citations found: {}", report.citations.len());
                     for c in &report.citations {
                         println!("  {} -> verified: {} ({})", c.raw, c.verified, c.quote_found.as_deref().unwrap_or("no match"));
+                    }
+                }
+                Ok(())
+            }
+            CheckCmd::Venue { path } => {
+                let profile = case_profile::load_case(&path)?;
+                let report = open_season_lib::legal_os::check_venue_competence(&profile);
+                if json {
+                    emit(true, &report, report.issues.clone());
+                } else {
+                    println!("Venue Competence ({} — {}): ok={}", report.venue.venue_code, report.venue.display_name, report.ok);
+                    println!("Mandatory Sworn Statement: {} ({})", report.venue.sworn_statement_title, report.venue.sworn_statement_citation);
+                    for issue in &report.issues {
+                        println!("  - [ISSUE] {}: {}", issue.field, issue.message);
+                    }
+                    for rec in &report.recommendations {
+                        println!("  - [NOTE] {}", rec);
                     }
                 }
                 Ok(())
@@ -1425,6 +1542,16 @@ fn run(cli: Cli) -> Result<(), String> {
                 }
                 Ok(())
             }
+            PdfCmd::ExtractText { pdf } => {
+                let result = open_season_lib::pdf_tools::extract_pdf_text(&pdf)?;
+                if json {
+                    emit(true, &result, vec![]);
+                } else {
+                    println!("Extracted {} page(s) from {}:", result.page_count, result.path);
+                    println!("{}", result.full_text);
+                }
+                Ok(())
+            }
         },
         Commands::Sign { pdf, name, page, x, y, out } => {
             let in_p = &pdf;
@@ -1439,5 +1566,61 @@ fn run(cli: Cli) -> Result<(), String> {
             }
             Ok(())
         }
+        Commands::Intake { action } => match action {
+            IntakeCmd::Status { path } => {
+                let report = open_season_lib::intake::intake_status(&path)?;
+                if json {
+                    emit(true, &report, vec![]);
+                } else {
+                    println!("Intake Wizard Status: {}% ({}/{}) [Tier: {}, Venue: {}]", report.completion_percent, report.completed_steps, report.total_steps, report.matter_tier, report.venue_code);
+                    if let Some(nq) = &report.next_question {
+                        println!("Next Question (Step {}) [{}]: {}", nq.step_number, nq.id, nq.prompt);
+                        println!("  Why: {}", nq.why);
+                    } else {
+                        println!("All intake steps complete!");
+                    }
+                }
+                Ok(())
+            }
+            IntakeCmd::Answer { path, id, answer } => {
+                let report = open_season_lib::intake::intake_answer(&path, &id, &answer)?;
+                if json {
+                    emit(true, &report, vec![]);
+                } else {
+                    println!("Recorded answer for '{}'. Progress: {}% ({}/{})", id, report.completion_percent, report.completed_steps, report.total_steps);
+                    if let Some(nq) = &report.next_question {
+                        println!("Next Question (Step {}) [{}]: {}", nq.step_number, nq.id, nq.prompt);
+                    }
+                }
+                Ok(())
+            }
+            IntakeCmd::Scan { path } => {
+                let report = open_season_lib::intake::intake_scan(&path)?;
+                if json {
+                    emit(true, &report, vec![]);
+                } else {
+                    println!("Scanned {} file(s) across case subfolders:", report.scanned_files.len());
+                    for f in &report.scanned_files {
+                        println!("  {}/{} ({} pages): {}", f.folder, f.filename, f.page_count, f.snippet);
+                    }
+                }
+                Ok(())
+            }
+        },
+        Commands::Portfolio { action } => match action {
+            PortfolioCmd::Status { root } => {
+                let cases_root = root.unwrap_or_else(case_profile::default_cases_root);
+                let report = open_season_lib::portfolio::portfolio_status(&cases_root)?;
+                if json {
+                    emit(true, &report, vec![]);
+                } else {
+                    println!("Multi-State Portfolio Radar ({} matter(s)):", report.total_matters);
+                    for m in &report.matters {
+                        println!("  [{}] {} ({}) — {}% complete | due: {}", m.venue_code, m.title, m.matter_tier, m.completion_percent, m.urgent_deadline.as_deref().unwrap_or("none"));
+                    }
+                }
+                Ok(())
+            }
+        },
     }
 }

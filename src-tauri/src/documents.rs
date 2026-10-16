@@ -67,7 +67,48 @@ fn party_side_label(kind: &str, left: bool) -> &'static str {
 fn assembled_caption_lines(profile: &CaseProfile, kind: &str) -> Vec<String> {
     let left = profile.caption.appellants();
     let right = profile.caption.appellees();
+    let tier = profile.effective_tier();
+    let key = kind.trim().to_ascii_lowercase();
     let mut lines = Vec::new();
+
+    if tier == "transactional" {
+        let state_label = if !profile.governing_state.trim().is_empty() {
+            format!("STATE OF {}", profile.governing_state.trim().to_uppercase())
+        } else {
+            "TRANSACTIONAL LEGAL INSTRUMENT".to_string()
+        };
+        lines.push(state_label);
+        lines.push(String::new());
+        if key == "will" || key == "power_of_attorney" {
+            lines.push(format!("DECLARANT / TESTATOR: {}", Caption::party_names(&left)));
+            if !right.is_empty() {
+                lines.push(format!("FIDUCIARY / BENEFICIARY: {}", Caption::party_names(&right)));
+            }
+        } else {
+            lines.push(format!("FIRST PARTY: {}", Caption::party_names(&left)));
+            lines.push(format!("COUNTERPARTY: {}", Caption::party_names(&right)));
+        }
+        lines.push(format!("INSTRUMENT: {}", profile.title));
+        lines.push(String::new());
+        return lines;
+    }
+
+    if tier == "administrative" {
+        lines.push("FORMAL STATUTORY NOTICE & PRE-SUIT DEMAND".to_string());
+        if !profile.court.name.trim().is_empty() {
+            lines.push(format!("AGENCY / VENUE: {}", profile.court.name));
+        }
+        lines.push(String::new());
+        lines.push(format!("FROM (CLAIMANT / SENDER): {}", Caption::party_names(&left)));
+        lines.push(format!("TO (RESPONDENT / RECIPIENT): {}", Caption::party_names(&right)));
+        lines.push(format!("RE: {}", profile.title));
+        if !profile.docket_number.trim().is_empty() {
+            lines.push(format!("REFERENCE / CLAIM NO.: {}", profile.docket_number));
+        }
+        lines.push(String::new());
+        return lines;
+    }
+
     lines.push(profile.court.name.clone());
     if let Some(div) = &profile.court.division {
         if !div.trim().is_empty() {
@@ -83,7 +124,12 @@ fn assembled_caption_lines(profile: &CaseProfile, kind: &str) -> Vec<String> {
     lines.push(Caption::party_names(&right));
     lines.push(party_side_label(kind, false).to_string());
     lines.push(String::new());
-    lines.push(format!("Case No. {}", profile.docket_number));
+    let docket_display = if profile.docket_number.trim().is_empty() {
+        "__________ (To Be Assigned)".to_string()
+    } else {
+        profile.docket_number.clone()
+    };
+    lines.push(format!("Case No. {}", docket_display));
     lines.push(String::new());
     lines
 }
@@ -134,6 +180,15 @@ pub fn pleading_heading(kind: &str) -> &'static str {
         "appellate_brief" | "brief" => "APPELLATE BRIEF",
         "appellate_motion" => "MOTION IN THE APPELLATE COURT",
         "mandamus" => "PETITION FOR RULE TO SHOW CAUSE",
+        "will" => "LAST WILL AND TESTAMENT",
+        "lease" => "RESIDENTIAL LEASE AGREEMENT",
+        "contractor" => "INDEPENDENT CONTRACTOR AGREEMENT",
+        "power_of_attorney" => "DURABLE POWER OF ATTORNEY",
+        "demand_letter" => "FORMAL DEMAND LETTER",
+        "cure_notice" => "STATUTORY NOTICE TO CURE",
+        "security_deposit_demand" => "STATUTORY SECURITY DEPOSIT DEMAND",
+        "records_request" => "PUBLIC RECORDS REQUEST (OPRA / CORA / FOIA)",
+        "agency_appeal" => "ADMINISTRATIVE AGENCY APPEAL",
         "motion" | "reconsideration" | "enlargement" | "stay" | "amend_findings" => "MOTION",
         _ => "NOTICE OF APPEAL",
     }
@@ -154,6 +209,15 @@ fn motion_kind_label(kind: &str, profile: &CaseProfile) -> String {
         "appellate_brief" | "brief" => "Appellate brief scaffold (basic)".into(),
         "mandamus" => "Colorado C.A.R. 21 petition (basic template)".into(),
         "complaint" => "Complaint (basic template)".into(),
+        "will" => "Last Will & Testament with Self-Proving Affidavit scaffold".into(),
+        "lease" => "Residential Lease Agreement scaffold".into(),
+        "contractor" => "Independent Contractor / MSA Agreement scaffold".into(),
+        "power_of_attorney" => "Durable Power of Attorney scaffold".into(),
+        "demand_letter" => "Pre-Suit Demand Letter scaffold".into(),
+        "cure_notice" => "Statutory Notice to Cure scaffold".into(),
+        "security_deposit_demand" => "Statutory Security Deposit Demand scaffold".into(),
+        "records_request" => "Open Public Records Request (OPRA / CORA / FOIA) scaffold".into(),
+        "agency_appeal" => "Administrative Agency Appeal scaffold".into(),
         _ => "Motion (basic template)".into(),
     }
 }
@@ -210,6 +274,35 @@ fn scaffold_sections(kind: &str) -> &'static [&'static str] {
             "The finding to be amended",
             "The proposed amendment (user-supplied)",
             "Record support",
+        ],
+        "will" => &[
+            "Declaration of Testator & Revocation of Prior Wills",
+            "Specific Bequests & Residuary Estate Distribution",
+            "Appointment of Executor / Personal Representative",
+            "Two-Witness Attestation & Statutory Self-Proving Affidavit",
+        ],
+        "lease" => &[
+            "Premises, Term & Monthly Rent",
+            "Security Deposit & Statutory Trust Notice",
+            "Maintenance, Habitability & Utilities",
+            "Default, Cure Period & Termination Notice",
+        ],
+        "contractor" => &[
+            "Scope of Services & Deliverables",
+            "Compensation & Payment Milestones",
+            "Intellectual Property Ownership & Confidentiality",
+            "Independent Contractor Status & Termination",
+        ],
+        "demand_letter" | "cure_notice" | "security_deposit_demand" => &[
+            "Summary of Obligation or Statutory Violation",
+            "Chronology of Events & Supporting Proof",
+            "Specific Cure / Payment Demand & Statutory Deadline",
+            "Reservation of Rights & Intent to Escalate",
+        ],
+        "records_request" | "agency_appeal" => &[
+            "Statutory Authority (OPRA / CORA / FOIA / Agency Rule)",
+            "Specific Records Requested or Determination Challenged",
+            "Fee Waiver / Public Interest Statement",
         ],
         _ => &[],
     }

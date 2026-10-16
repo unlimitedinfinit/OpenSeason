@@ -7,6 +7,7 @@
   import CloudSyncModal from "$lib/components/CloudSyncModal.svelte";
   import PdfToolsModal from "$lib/components/PdfToolsModal.svelte";
   import SignatureStudioModal from "$lib/components/SignatureStudioModal.svelte";
+  import PortfolioRadarCard from "$lib/components/PortfolioRadarCard.svelte";
   import { ipc, runningInTauri } from "$lib/ipc";
   import { session } from "$lib/session.svelte";
   import type { WorkspaceCase, CloudSession } from "$lib/types/case";
@@ -146,6 +147,7 @@
 
   <ReviewNotice />
   <GettingStarted />
+  <PortfolioRadarCard onCreated={load} />
 
   <section class="space-y-3">
     <h2 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">What do you need?</h2>

@@ -434,6 +434,150 @@ async function mockInvoke<T>(cmd: string, args: Record<string, unknown> = {}): P
       return true as T;
     case "stamp_pdf_signature_cmd":
       return { ok: true, never_files: true, output_path: "/mock/exports/stamped.pdf", page_number: 1, stamped_text: "/s/ Mock", message: "Mock stamp applied" } as T;
+    case "portfolio_status_cmd":
+      return {
+        ok: true,
+        never_files: true,
+        never_serves: true,
+        total_matters: store.cases.length,
+        global_filer: {
+          name: "Jordan Example",
+          role: "Proceeding without an attorney",
+          address_lines: ["100 Sample Street", "Example City, ST 00000"],
+          phone: "555-0100",
+          email: "jordan.example@example.test",
+          signature_name: "Jordan Example",
+        },
+        matters: store.cases.map((c) => ({
+          case_id: c.id,
+          title: c.title,
+          matter_tier: c.matter_tier || "litigation",
+          document_kind: c.document_kind,
+          venue_code: c.governing_state || "NJ",
+          docket_number: c.docket_number,
+          completion_percent: 80,
+          next_question_prompt: null,
+          urgent_branch_title: "Motion for Reconsideration",
+          urgent_deadline: "2026-03-21",
+          days_until_due: 14,
+          parent_matter_id: c.parent_matter_id || null,
+        })),
+      } as T;
+    case "get_global_filer_cmd":
+    case "save_global_filer_cmd":
+      return (args.filer || {
+        name: "Jordan Example",
+        role: "Proceeding without an attorney",
+        address_lines: ["100 Sample Street", "Example City, ST 00000"],
+        phone: "555-0100",
+        email: "jordan.example@example.test",
+        signature_name: "Jordan Example",
+      }) as T;
+    case "intake_status_cmd":
+    case "intake_answer_cmd":
+      return {
+        ok: true,
+        never_files: true,
+        never_serves: true,
+        case_id: String(args.idOrPath || "mock"),
+        case_title: "Example Matter",
+        matter_tier: "litigation",
+        document_kind: "reconsideration",
+        venue_code: "NJ",
+        completed_steps: 4,
+        total_steps: 5,
+        completion_percent: 80,
+        next_question: {
+          id: "section:grounds",
+          step_number: 5,
+          category: "draft_section",
+          prompt: "Why should the court reconsider (in your own words)?",
+          why: "Explain what the court overlooked or misapprehended.",
+          current_value: "",
+          answered: false,
+          choices: [],
+          candidates: [],
+        },
+        questions: [],
+        scan: { scanned_files: [], candidate_dockets: [], candidate_dates: [], candidate_courts: [] },
+      } as T;
+    case "intake_scan_cmd":
+      return { scanned_files: [], candidate_dockets: [], candidate_dates: [], candidate_courts: [] } as T;
+    case "case_next_steps_cmd":
+      return {
+        ok: true,
+        never_files: true,
+        never_serves: true,
+        notice: "Formatting and assembly engine only.",
+        case_id: String(args.idOrPath || "mock"),
+        case_title: "Example Matter",
+        matter_tier: "litigation",
+        venue_code: "NJ",
+        detected_triggers: ["Order entered (2026-03-01)"],
+        branches: [
+          {
+            id: "reconsideration",
+            title: "Motion for Reconsideration",
+            rule_citation: "NJ R. 4:49-2",
+            trigger_event_title: "Order entered",
+            trigger_date: "2026-03-01",
+            trigger_kind: "service",
+            base_days: 20,
+            mail_offset_days: 0,
+            clock_interaction: "pause_remaining",
+            tolled_by_event: null,
+            days_elapsed_before_toll: null,
+            days_remaining_after_toll: null,
+            computed_deadline: "2026-03-23",
+            days_until_due: 14,
+            status: "active",
+            template_kind: "reconsideration",
+            escalation_target: null,
+            explanation: "20 days from service of order. Tolls (pauses) remaining appeal clock under R. 2:4-3(e).",
+          },
+        ],
+      } as T;
+    case "check_venue_competence_cmd":
+      return {
+        ok: true,
+        never_files: true,
+        never_serves: true,
+        matter_tier: "litigation",
+        document_kind: "reconsideration",
+        venue: {
+          venue_code: "NJ",
+          display_name: "New Jersey State Courts (Superior / Appellate Division)",
+          sworn_statement_title: "Certification Pursuant to R. 1:4-4(b)",
+          sworn_statement_citation: "N.J. Ct. R. 1:4-4(b)",
+          mandatory_oath_text: "I certify that the foregoing statements made by me are true. I am aware that if any of the foregoing statements made by me are willfully false, I am subject to punishment.",
+          requires_conferral_certificate: false,
+          conferral_rule: "Not required for standard NJ motions",
+          appeal_days: 45,
+          reconsideration_days: 20,
+          reconsideration_trigger: "service",
+          tolling_mode: "pause_remaining",
+          mail_service_adder_days: 3,
+          packet_manifest: ["Notice of Motion", "Certification (R. 1:4-4(b))", "Brief", "Proposed Order", "Certificate of Service"],
+        },
+        issues: [],
+        recommendations: [],
+      } as T;
+    case "escalate_case_cmd":
+      return {
+        ok: true,
+        never_files: true,
+        never_serves: true,
+        parent_case_id: String(args.idOrPath || "mock"),
+        new_case_dir: "/mock/escalated",
+        new_profile: sampleProfile(),
+        copied_record_files: 2,
+        message: "Escalated case created.",
+      } as T;
+    case "pdf_extract_text_cmd":
+      return { ok: true, never_files: true, path: String(args.pdfPath || ""), page_count: 1, total_chars: 42, pages: [{ page_number: 1, text: "Sample extracted text" }], full_text: "Sample extracted text" } as T;
+    case "scoped_sections_cmd":
+    case "scoped_fill_cmd":
+      return { kind: String(args.kind || "motion"), sections: [] } as T;
     default:
       throw `Unknown command in browser preview: ${cmd}`;
   }

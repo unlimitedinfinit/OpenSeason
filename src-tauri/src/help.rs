@@ -29,6 +29,15 @@ Read AGENTS.md first. Never invent facts, arguments, or citations. Never file or
 
 If a tool returns ok=false, read issues[].message. It says how to fix the field. Do not guess a cite to clear an issue.
 
+## Fast Onboarding for an Existing Folder (Legal OS)
+
+1. `case_context` (`openseason --json case context <dir>`): One call returns the complete case profile, 3-tier classification (`transactional`, `administrative`, `litigation`), governing venue rules (`NJ`, `CO`, `FEDERAL`, `SCOTUS`), timeline events, indexed exhibits, filings, Guided Intake Wizard status, and Predictive Next Steps.
+2. `intake_scan` (`openseason --json intake scan <dir>`): Extracts text offline from PDFs in `orders/` and `evidence/` and surfaces candidate docket numbers, dates, and courts with provenance.
+3. `intake_status` / `intake_answer` (`openseason --json intake status <dir>`): Drives a 1-question-at-a-time wizard (`next_question`). Supports filing-scoped sections (`--filing-id <id>`) so multiple motions never overwrite each other.
+4. `case_next_steps` (`openseason --json case next-steps <dir>`): Computes downstream procedural branches from logged events/orders, including **NJ Pause/Toll (`pause_remaining` under R. 2:4-3(e))** vs. **CO/Federal Full Clock Reset (`reset_full` under FRAP 4(a)(4) / C.R.C.P. 59)** and **Mail Service Offset (+3 days)**.
+5. `check_venue` (`openseason --json check venue <dir>`): Audits venue-specific rules (e.g. NJ R. 1:4-4(b) mandatory certification oath rejecting `"to the best of my knowledge"`, CO C.R.C.P. 121 § 1-15(8) Certificate of Conferral, SCOTUS Rule 14.1 Questions Presented, or Will 2-witness self-proving requirements).
+6. `case_escalate` (`openseason --json case escalate <dir> --target trial_lawsuit|appellate_appeal|mandamus|scotus_cert`): Graduates a Pre-Suit matter to a Lawsuit or escalates a Trial case to Appeal/Mandamus/SCOTUS while copying lower-court orders/filings into the new case's `evidence/` appendix.
+
 ## What do I need to file?
 
 Call `guide_questions` then `guide_find` with the user's state, court, situation, and optional trigger date. Recommend only forms the pack lists. If citation_status is not pack_source, tell the user it needs verification. Do not invent a deadline. `help_links` is data only — never open a browser. The window confirms before opening JustLegal.
