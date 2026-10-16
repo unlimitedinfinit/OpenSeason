@@ -38,6 +38,12 @@ pub struct CourtFrontMatter {
     pub governing_state: String,
     #[serde(default)]
     pub caption_layout: String,
+    #[serde(default)]
+    pub filer_email: String,
+    #[serde(default)]
+    pub filer_phone: String,
+    #[serde(default)]
+    pub filer_address: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -82,6 +88,9 @@ pub fn parse_front_matter(text: &str) -> (CourtFrontMatter, String) {
                     "court_address" => meta.court_address = val,
                     "governing_state" | "state" => meta.governing_state = val,
                     "caption_layout" => meta.caption_layout = val,
+                    "filer_email" | "email" => meta.filer_email = val,
+                    "filer_phone" | "phone" => meta.filer_phone = val,
+                    "filer_address" | "address" => meta.filer_address = val,
                     _ => {}
                 }
             }
@@ -105,8 +114,9 @@ pub fn assemble_lines(meta: &CourtFrontMatter, body: &str) -> Vec<String> {
             lines.push(part.trim().to_string());
         }
     }
-    if !meta.county_or_district.is_empty() {
-        lines.push(meta.county_or_district.clone());
+    let distinct_div = crate::pleading::division_if_distinct(&meta.court, &meta.county_or_district);
+    if !distinct_div.is_empty() {
+        lines.push(distinct_div);
     }
     if !meta.plaintiff.is_empty() || !meta.defendant.is_empty() {
         lines.push(String::new());
@@ -284,6 +294,7 @@ fn apply_front_matter(profile: &mut CaseProfile, meta: &CourtFrontMatter) {
     if profile.caption_layout.trim().is_empty() && !meta.caption_layout.is_empty() {
         profile.caption_layout = meta.caption_layout.clone();
     }
+    fill_filer_from_meta(profile, meta, false);
 }
 
 fn split_address(raw: &str) -> Vec<String> {
@@ -301,7 +312,8 @@ pub fn overlay_profile(profile: &CaseProfile, meta: &CourtFrontMatter) -> CasePr
         p.court.name = meta.court.clone();
     }
     if !meta.county_or_district.is_empty() {
-        p.court.division = Some(meta.county_or_district.clone());
+        let d = crate::pleading::division_if_distinct(&p.court.name, &meta.county_or_district);
+        p.court.division = if d.is_empty() { None } else { Some(d) };
     }
     if !meta.case_no.is_empty() {
         p.docket_number = meta.case_no.clone();
@@ -356,7 +368,20 @@ pub fn overlay_profile(profile: &CaseProfile, meta: &CourtFrontMatter) -> CasePr
             p.filer.signature_name = meta.plaintiff.clone();
         }
     }
+    fill_filer_from_meta(&mut p, meta, true);
     p
+}
+
+fn fill_filer_from_meta(profile: &mut CaseProfile, meta: &CourtFrontMatter, overwrite: bool) {
+    if (overwrite || profile.filer.email.trim().is_empty()) && !meta.filer_email.is_empty() {
+        profile.filer.email = meta.filer_email.clone();
+    }
+    if (overwrite || profile.filer.phone.trim().is_empty()) && !meta.filer_phone.is_empty() {
+        profile.filer.phone = meta.filer_phone.clone();
+    }
+    if (overwrite || profile.filer.address_lines.is_empty()) && !meta.filer_address.is_empty() {
+        profile.filer.address_lines = split_address(&meta.filer_address);
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -440,10 +465,20 @@ pub fn markdown_from_profile(profile: &CaseProfile, kind: &str) -> String {
         }
     };
     let addr = profile.filer.address_lines.join("\n");
+    let filer_addr = profile.filer.address_lines.join(" | ");
+    let distinct_div = crate::pleading::division_if_distinct(
+        &profile.court.name,
+        profile.court.division.as_deref().unwrap_or(""),
+    );
+    let div_line = if distinct_div.is_empty() {
+        String::new()
+    } else {
+        format!("county_or_district: {distinct_div}\n")
+    };
     format!(
-        "---\ncourt: {court}\ncounty_or_district: {div}\nplaintiff: {plaintiff}\nplaintiff_label: {plabel}\ndefendant: {defendant}\ndefendant_label: {dlabel}\ncase_no: {docket}\ncase_no_label: Docket No.\ndoc_title: {doc_title}\n---\n\n{body}\n\n::: signature\n/s/ {sig}\n{name}\n{role}\n{addr}\n{phone}\n{email}\n:::\n\n::: certificate\nI certify that on this date I served a copy of this paper on the parties listed below by the method I will use when I file. This app did not serve anyone.\n:::\n",
+        "---\ncourt: {court}\n{div_line}plaintiff: {plaintiff}\nplaintiff_label: {plabel}\ndefendant: {defendant}\ndefendant_label: {dlabel}\ncase_no: {docket}\ncase_no_label: Docket No.\ndoc_title: {doc_title}\nfiler_email: {email}\nfiler_phone: {phone}\nfiler_address: {filer_addr}\n---\n\n{body}\n\n::: signature\n/s/ {sig}\n{name}\n{role}\n{addr}\n{phone}\n{email}\n:::\n\n::: certificate\nI certify that on this date I served a copy of this paper on the parties listed below by the method I will use when I file. This app did not serve anyone.\n:::\n",
         court = profile.court.name,
-        div = profile.court.division.clone().unwrap_or_default(),
+        div_line = div_line,
         plabel = left.first().map(|p| p.role.as_str()).unwrap_or("Plaintiff"),
         dlabel = right.first().map(|p| p.role.as_str()).unwrap_or("Defendant"),
         docket = profile.docket_number,
@@ -452,6 +487,7 @@ pub fn markdown_from_profile(profile: &CaseProfile, kind: &str) -> String {
         role = profile.filer.role,
         phone = profile.filer.phone,
         email = profile.filer.email,
+        filer_addr = filer_addr,
     )
 }
 
@@ -537,6 +573,10 @@ The trial court entered the order on March 1.
         assert!(blob.contains("Appellate"));
         assert!(blob.contains("CERTIFICATE OF SERVICE"));
         assert!(blob.contains("/s/ Jordan Example"));
+        assert!(blob.contains("100 Sample Street"));
+        assert!(blob.contains("jordan.example@example.test"));
+        assert!(!blob.contains("Division / Courtroom"));
+        assert_eq!(blob.matches("Appellate Division").count(), 1);
         assert!(nj.markup_stripped);
         assert!(!blob.contains(":::"));
         assert!(!blob.contains("# Preliminary"));
@@ -548,6 +588,10 @@ The trial court entered the order on March 1.
         assert!(cob.contains("Lower Court"));
         assert!(cob.contains("24CA1000"));
         assert!(cob.contains("I declare under penalty of perjury under the law of Colorado"));
+        assert!(cob.contains("100 Sample Street"));
+        assert!(cob.contains("jordan.example@example.test"));
+        assert!(!cob.contains("DECLARATION UNDER C.R.S."));
+        assert!(!cob.contains("Certificate of Conferral (C.R.C.P. 121"));
         assert!(co.has_certificate);
         assert!(co.has_signature);
     }

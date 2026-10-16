@@ -478,14 +478,14 @@ pub fn intake_status(case_dir: &Path) -> Result<IntakeStatusReport, String> {
     });
     step += 1;
 
-    // Question 8: Colorado Rule 121 Conferral (when venue == CO and filing a motion)
-    if venue.venue_code == "CO" && tier == "litigation" {
+    // Question 8: Colorado conferral (trial-court civil motions; appellate may follow C.A.R.)
+    if venue.venue_code == "CO" && venue.requires_conferral_certificate && tier == "litigation" {
         questions.push(IntakeQuestion {
             id: "conferral_status".into(),
             step_number: step,
             category: "venue".into(),
-            prompt: "Colorado C.R.C.P. 121 § 1-15(8) Conferral: Did you confer with the opposing party before filing?".into(),
-            why: "Colorado courts require every motion to begin with a Certificate of Conferral stating whether the relief is opposed.".into(),
+            prompt: "If C.R.C.P. 121 § 1-15(8) governs this paper (needs_verification), did you confer with the opposing party?".into(),
+            why: "Trial-court civil motions in Colorado often open with a conferral paragraph (C.R.C.P. 121 § 1-15(8), needs_verification). Appellate papers may follow C.A.R. instead. Write your own sentence; the engine will not assert the rule.".into(),
             current_value: profile.conferral_status.clone(),
             answered: !profile.conferral_status.trim().is_empty(),
             choices: vec![

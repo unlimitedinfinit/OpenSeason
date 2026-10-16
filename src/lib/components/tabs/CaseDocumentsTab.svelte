@@ -22,7 +22,6 @@
     onfillsection: (id: string, text: string) => void;
     onexportkind: (kind: string) => void;
     onexportpacket: () => void;
-    onimportmarkdown: () => void;
     oninspectform: (path: string) => void;
     onfillform: (path: string) => void;
   }
@@ -40,7 +39,6 @@
     onfillsection,
     onexportkind,
     onexportpacket,
-    onimportmarkdown,
     oninspectform,
     onfillform,
   }: Props = $props();
@@ -157,19 +155,6 @@
     <input bind:value={profile.mandamus.title} class="w-full h-10 rounded-md border border-input bg-background px-3 text-sm" placeholder="Petition title" />
     <textarea bind:value={profile.mandamus.user_text} class="w-full h-32 rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Your petition text"></textarea>
     <button onclick={() => onexportkind("mandamus")} disabled={busy} class="border border-border px-4 py-2 rounded-md text-sm">Export mandamus (Word and PDF)</button>
-  </section>
-
-  <section class="space-y-4 bg-card border rounded-lg p-6">
-    <div class="flex justify-between">
-      <h2 class="font-semibold">Court Markdown (legacy buttons)</h2>
-      <span class="text-[10px] uppercase tracking-wide text-muted-foreground">Same engine as the CLI</span>
-    </div>
-    <p class="text-xs text-muted-foreground">Paste an md2court subset draft (YAML front matter, ::: signature, ::: certificate). Import writes drafts/draft.md. Export uses the same renderer as `openseason export court-md`.</p>
-    <textarea bind:value={mdDraft} class="w-full h-36 rounded-md border border-input bg-background px-3 py-2 text-sm font-mono" placeholder={"---\ncourt: ...\nplaintiff: ...\ndefendant: ...\ncase_no: ...\n---\n"}></textarea>
-    <div class="flex flex-wrap gap-2">
-      <button onclick={onimportmarkdown} disabled={busy} class="border border-border px-4 py-2 rounded-md text-sm">Import Markdown</button>
-      <button onclick={() => onexportkind("court_md")} disabled={busy} class="border border-border px-4 py-2 rounded-md text-sm">Export court Markdown (Word and PDF)</button>
-    </div>
   </section>
 
   <section class="space-y-4 bg-card border rounded-lg p-6">

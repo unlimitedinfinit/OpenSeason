@@ -18,7 +18,9 @@ pub const CO_CRS_13_27_106_OATH: &str = "I declare under penalty of perjury unde
 
 pub const FED_28_USC_1746_OATH: &str = "I declare under penalty of perjury under the laws of the United States of America that the foregoing is true and correct.";
 
-pub const CO_RULE_121_CONFERRAL_TEMPLATE: &str = "Certificate of Conferral (C.R.C.P. 121 § 1-15(8)): Undersigned certifies that they have conferred (or attempted to confer) in good faith with opposing counsel/party regarding the relief requested in this motion.";
+/// Suggested conferral sentence. citation_status is needs_verification.
+/// Appellate papers in Colorado may be governed by C.A.R. rather than C.R.C.P. 121.
+pub const CO_RULE_121_CONFERRAL_TEMPLATE: &str = "I conferred with the opposing party on [date]. The opposing party [agrees / takes no position / opposes]. Confirm whether C.R.C.P. 121 § 1-15(8) or the Colorado Appellate Rules govern this paper before filing.";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct VenueProfile {
@@ -270,26 +272,35 @@ pub fn resolve_venue(profile: &CaseProfile) -> VenueProfile {
                 ],
             }
         }
-        "CO" => VenueProfile {
-            venue_code: "CO".into(),
-            display_name: "Colorado State Courts (C.R.C.P. / C.A.R.)".into(),
-            sworn_statement_title: "Unsworn Declaration Under Penalty of Perjury".into(),
-            sworn_statement_citation: "C.R.S. § 13-27-106".into(),
-            mandatory_oath_text: CO_CRS_13_27_106_OATH.into(),
-            requires_conferral_certificate: true,
-            conferral_rule: "C.R.C.P. 121 § 1-15(8)".into(),
-            appeal_days: 49,
-            reconsideration_days: 14,
-            reconsideration_trigger: "entry".into(),
-            tolling_mode: "reset_full".into(),
-            mail_service_adder_days: 3,
-            packet_manifest: vec![
-                "Combined Motion & Incorporated Legal Authority (with C.R.C.P. 121 § 1-15(8) Conferral)".into(),
-                "Unsworn Declaration & Exhibit Index (C.R.S. § 13-27-106)".into(),
-                "Proposed Order".into(),
-                "Certificate of Service".into(),
-            ],
-        },
+        "CO" => {
+            let is_appellate = already_in_reviewing_court(profile)
+                || court_raw.contains("court of appeals");
+            VenueProfile {
+                venue_code: "CO".into(),
+                display_name: "Colorado State Courts (C.R.C.P. / C.A.R.)".into(),
+                sworn_statement_title: "Unsworn Declaration Under Penalty of Perjury".into(),
+                sworn_statement_citation: "C.R.S. § 13-27-106 (needs_verification)".into(),
+                mandatory_oath_text: CO_CRS_13_27_106_OATH.into(),
+                requires_conferral_certificate: !is_appellate,
+                conferral_rule: if is_appellate {
+                    "C.A.R. may apply; C.R.C.P. 121 § 1-15(8) is trial-court civil practice (needs_verification)".into()
+                } else {
+                    "C.R.C.P. 121 § 1-15(8) (needs_verification)".into()
+                },
+                appeal_days: 49,
+                reconsideration_days: 14,
+                reconsideration_trigger: "entry".into(),
+                tolling_mode: "reset_full".into(),
+                mail_service_adder_days: 3,
+                packet_manifest: vec![
+                    "Combined Motion & Incorporated Legal Authority".into(),
+                    "User-supplied conferral paragraph if the governing rule requires one (C.R.C.P. 121 § 1-15(8) vs C.A.R. — needs_verification)".into(),
+                    "User-supplied unsworn declaration with signing date and place if used (C.R.S. § 13-27-106 — needs_verification)".into(),
+                    "Proposed Order".into(),
+                    "Certificate of Service".into(),
+                ],
+            }
+        }
         "SCOTUS" => VenueProfile {
             venue_code: "SCOTUS".into(),
             display_name: "Supreme Court of the United States".into(),
@@ -446,19 +457,28 @@ pub fn check_venue_competence(profile: &CaseProfile) -> VenueCompetenceReport {
                 || kind == "reconsideration"
                 || kind == "enlargement"
                 || kind == "stay";
+            let is_appellate = already_in_reviewing_court(profile)
+                || profile.court.name.to_ascii_lowercase().contains("court of appeals");
             if is_motion
+                && !is_appellate
                 && profile.conferral_status.trim().is_empty()
                 && !lower_text.contains("confer")
                 && !lower_text.contains("121")
             {
                 issues.push(ValidationIssue {
                     field: "venue.co_rule_121_conferral".into(),
-                    message: "Colorado C.R.C.P. 121 § 1-15(8) requires a Certificate of Conferral at the beginning of every civil motion stating whether the movant conferred in good faith with opposing parties (or why conferral is exempt). Set conferral_status or add a Rule 121 conferral paragraph.".into(),
+                    message: "C.R.C.P. 121 § 1-15(8) conferral is trial-court civil-motion practice (needs_verification). Confirm the rule that governs this paper, then add a conferral paragraph or set conferral_status. Do not treat the C.R.C.P. 121 label as verified.".into(),
                 });
             }
-            recommendations.push(
-                "Colorado motions combine the motion and legal authority into a single document and open with a C.R.C.P. 121 § 1-15(8) conferral statement.".into(),
-            );
+            if is_appellate {
+                recommendations.push(
+                    "Colorado Court of Appeals papers may be governed by C.A.R. rather than C.R.C.P. 121 § 1-15(8). A UUDA declaration (C.R.S. § 13-27-106) often needs a signing date and place. Both labels are needs_verification — edit the user's own text; the engine will not assert them.".into(),
+                );
+            } else {
+                recommendations.push(
+                    "Colorado trial-court civil motions often combine the motion and legal authority and open with a conferral statement. Confirm whether C.R.C.P. 121 § 1-15(8) applies (needs_verification).".into(),
+                );
+            }
         }
 
         if venue.venue_code == "SCOTUS" {
@@ -905,18 +925,50 @@ mod tests {
     }
 
     #[test]
-    fn co_venue_enforces_rule_121_conferral() {
+    fn co_trial_court_flags_missing_conferral_as_needs_verification() {
         let mut p = sample_appeal_profile();
         p.governing_state = "CO".into();
         p.document_kind = "motion".into();
+        p.court.name = "Denver District Court".into();
+        p.court.division = None;
+        p.procedural_stage = "active_docket".into();
         p.motion.user_text = "Movant requests an extension of 14 days.".into();
         let report = check_venue_competence(&p);
         assert!(!report.ok);
-        assert!(report.issues.iter().any(|i| i.field == "venue.co_rule_121_conferral"));
+        let issue = report
+            .issues
+            .iter()
+            .find(|i| i.field == "venue.co_rule_121_conferral")
+            .expect("trial-court CO motion still surfaces conferral");
+        assert!(issue.message.contains("needs_verification"));
 
         p.conferral_status = "Conferred on Oct 12; opposing party does not oppose.".into();
         let report_ok = check_venue_competence(&p);
         assert!(report_ok.ok);
+    }
+
+    #[test]
+    fn co_appellate_does_not_assert_rule_121_as_verified() {
+        let mut p = sample_appeal_profile();
+        p.governing_state = "CO".into();
+        p.document_kind = "motion".into();
+        p.court.name = "Colorado Court of Appeals".into();
+        p.procedural_stage = "appellate".into();
+        p.motion.user_text = "Movant requests an extension of 14 days.".into();
+        let report = check_venue_competence(&p);
+        assert!(
+            !report
+                .issues
+                .iter()
+                .any(|i| i.field == "venue.co_rule_121_conferral"),
+            "C.R.C.P. 121 is not asserted for Court of Appeals papers"
+        );
+        assert!(report
+            .recommendations
+            .iter()
+            .any(|r| r.contains("needs_verification") && r.contains("C.A.R.")));
+        assert!(report.venue.conferral_rule.contains("needs_verification"));
+        assert!(report.venue.sworn_statement_citation.contains("needs_verification"));
     }
 
     fn trial_court_profile() -> crate::case_profile::CaseProfile {

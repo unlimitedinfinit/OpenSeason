@@ -71,7 +71,7 @@ fn tool_list() -> Value {
         tool("intake_status", "1-question-at-a-time Guided Intake Wizard status, progress percentage, and next_question prompt.", json!({"path": path, "filing_id": {"type": "string"}}), &["path"]),
         tool("intake_answer", "Answer a single question in the Guided Intake Wizard (updates profile, parties, or filing-scoped draft sections).", json!({"path": path, "question_id": {"type": "string"}, "answer": {"type": "string"}, "filing_id": {"type": "string"}}), &["path", "question_id", "answer"]),
         tool("intake_scan", "Offline PDF text extraction & candidate detection (docket numbers, dates, courts) across orders/ and evidence/.", json!({"path": path}), &["path"]),
-        tool("check_venue", "Deterministic Multi-Venue Competence Matrix check (NJ R. 1:4-4(b) oath, CO C.R.C.P. 121 § 1-15(8) conferral, 28 U.S.C. § 1746, SCOTUS Rule 14.1, Will witnesses).", json!({"path": path}), &["path"]),
+        tool("check_venue", "Deterministic Multi-Venue Competence Matrix check (NJ R. 1:4-4(b) oath, CO conferral/declaration as needs_verification, 28 U.S.C. § 1746, SCOTUS Rule 14.1, Will witnesses).", json!({"path": path}), &["path"]),
         tool("portfolio_status", "Multi-state, multi-venue Portfolio Deadline Radar across all matters in the cases directory.", json!({"root": {"type": "string"}}), &[]),
         tool("pdf_extract_text", "Extract text page-by-page from a local PDF offline (never uploads).", json!({"pdf": {"type": "string"}}), &["pdf"]),
         tool("agent_manifest", "List every CLI/MCP tool with a one-line description, MCP launch config, and a copyable starter prompt. Never files.", json!({}), &[]),

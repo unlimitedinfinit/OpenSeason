@@ -303,20 +303,6 @@
     }
   }
 
-  async function importMarkdown() {
-    if (!mdDraft.trim()) {
-      error = "Paste a Markdown draft first.";
-      return;
-    }
-    try {
-      await ipc("import_markdown_cmd", { caseId, markdown: mdDraft });
-      status = "Imported Markdown into drafts/draft.md. The checker will not invent cites from this text.";
-      await load();
-    } catch (e) {
-      error = String(e);
-    }
-  }
-
   async function fillSection(id: string, text: string) {
     try {
       guided = await ipc<GuidedDraft>("guided_fill_cmd", { caseId, id, text });
@@ -606,7 +592,6 @@
         onfillsection={fillSection}
         onexportkind={exportKind}
         onexportpacket={exportPacket}
-        onimportmarkdown={importMarkdown}
         oninspectform={inspectSelectedForm}
         onfillform={fillSelectedForm}
       />

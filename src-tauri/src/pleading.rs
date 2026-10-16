@@ -57,6 +57,21 @@ pub fn caption_venue(profile: &CaseProfile) -> CaptionVenue {
     CaptionVenue::Generic
 }
 
+/// Omit a division line when it is empty or already named in the court title
+/// (e.g. "Appellate Division" on "Superior Court of New Jersey, Appellate Division").
+pub fn division_if_distinct(court_name: &str, division: &str) -> String {
+    let d = division.trim();
+    if d.is_empty() {
+        return String::new();
+    }
+    let name = court_name.to_ascii_lowercase();
+    let div = d.to_ascii_lowercase();
+    if name.contains(&div) {
+        return String::new();
+    }
+    d.to_string()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BodyBlock {
     Heading(String),
@@ -130,10 +145,13 @@ fn typst_escape(text: &str) -> String {
 }
 
 /// Strip markdown, fence blocks, and leaked Typst so they never print in a filing.
-pub fn sanitize_draft(text: &str) -> (Vec<BodyBlock>, Vec<String>, Vec<String>) {
+/// Returns body, signature lines, certificate-of-service lines, and an optional
+/// user-supplied declaration / certification (not auto-asserted for Colorado).
+pub fn sanitize_draft(text: &str) -> (Vec<BodyBlock>, Vec<String>, Vec<String>, Vec<String>) {
     let mut body = Vec::new();
     let mut signature = Vec::new();
     let mut certificate = Vec::new();
+    let mut declaration = Vec::new();
     let mut mode = "body";
     for raw in text.replace('\r', "").lines() {
         let s = raw.trim();
@@ -156,6 +174,8 @@ pub fn sanitize_draft(text: &str) -> (Vec<BodyBlock>, Vec<String>, Vec<String>) 
                 mode = "signature";
             } else if name.starts_with("certificate") {
                 mode = "certificate";
+            } else if name.starts_with("declaration") || name.starts_with("certification") {
+                mode = "declaration";
             } else {
                 mode = "skip";
             }
@@ -171,6 +191,11 @@ pub fn sanitize_draft(text: &str) -> (Vec<BodyBlock>, Vec<String>, Vec<String>) 
             "certificate" => {
                 if !cleaned.is_empty() {
                     certificate.push(cleaned);
+                }
+            }
+            "declaration" => {
+                if !cleaned.is_empty() {
+                    declaration.push(cleaned);
                 }
             }
             "skip" => {}
@@ -194,7 +219,7 @@ pub fn sanitize_draft(text: &str) -> (Vec<BodyBlock>, Vec<String>, Vec<String>) 
             }
         }
     }
-    (body, signature, certificate)
+    (body, signature, certificate, declaration)
 }
 
 fn party_names(profile: &CaseProfile, left: bool) -> (String, String) {
@@ -236,18 +261,87 @@ fn default_certificate_lines(profile: &CaseProfile) -> Vec<String> {
     .collect()
 }
 
+/// NJ R. 1:4-4(b) is pack_source and is inserted by the engine.
+/// Colorado UUDA / C.R.S. § 13-27-106 is needs_verification: never auto-assert it.
 fn venue_certification(profile: &CaseProfile) -> Option<(String, String)> {
     match caption_venue(profile) {
         CaptionVenue::NewJersey => Some((
             "CERTIFICATION IN LIEU OF OATH (R. 1:4-4(b))".into(),
             NJ_R_1_4_4B_OATH.to_string(),
         )),
-        CaptionVenue::Colorado => Some((
-            "DECLARATION UNDER C.R.S. § 13-27-106".into(),
-            legal_os::CO_CRS_13_27_106_OATH.to_string(),
-        )),
-        CaptionVenue::Generic => None,
+        CaptionVenue::Colorado | CaptionVenue::Generic => None,
     }
+}
+
+fn looks_like_phone(s: &str) -> bool {
+    let digits: String = s.chars().filter(|c| c.is_ascii_digit()).collect();
+    digits.len() >= 10 && digits.len() <= 15
+}
+
+fn looks_like_address(s: &str) -> bool {
+    let l = s.to_ascii_lowercase();
+    if l.contains('@') || l.starts_with("/s/") {
+        return false;
+    }
+    l.contains("street")
+        || l.contains(" st.")
+        || l.contains(" avenue")
+        || l.contains(" ave")
+        || l.contains("p.o.")
+        || l.contains("po box")
+        || (s.contains(',') && s.chars().any(|c| c.is_ascii_digit()))
+}
+
+fn merge_filer_contact(profile: &CaseProfile, sig: &[String]) -> (Vec<String>, String, String) {
+    let mut addr = profile.filer.address_lines.clone();
+    let mut email = profile.filer.email.trim().to_string();
+    let mut phone = profile.filer.phone.trim().to_string();
+    for line in sig {
+        let t = line.trim();
+        if t.is_empty() || t.contains("/s/") {
+            continue;
+        }
+        if t.contains('@') {
+            if email.is_empty() {
+                email = t.to_string();
+            }
+        } else if looks_like_phone(t) {
+            if phone.is_empty() {
+                phone = t.to_string();
+            }
+        } else if looks_like_address(t) && !addr.iter().any(|a| a.trim() == t) {
+            addr.push(t.to_string());
+        }
+    }
+    (
+        addr.into_iter().filter(|a| !a.trim().is_empty()).collect(),
+        email,
+        phone,
+    )
+}
+
+fn ensure_certificate_signature(profile: &CaseProfile, mut lines: Vec<String>) -> Vec<String> {
+    let joined = lines.join("\n").to_ascii_lowercase();
+    if !joined.contains("date:") && !joined.contains("date of this draft") {
+        lines.push(format!(
+            "Date: {}",
+            chrono::Local::now().format("%B %d, %Y")
+        ));
+    }
+    if !lines.iter().any(|l| l.contains("/s/")) {
+        let sig = if profile.filer.signature_name.trim().is_empty() {
+            profile.filer.name.trim()
+        } else {
+            profile.filer.signature_name.trim()
+        };
+        if !sig.is_empty() {
+            lines.push(format!("/s/ {sig}"));
+            if !profile.filer.name.trim().is_empty() && profile.filer.name.trim() != sig {
+                lines.push(profile.filer.name.clone());
+            }
+        }
+    }
+    lines
 }
 
 fn signature_block(profile: &CaseProfile, extra: &[String]) -> Vec<String> {
@@ -287,7 +381,7 @@ pub fn assemble(
 ) -> CourtDocument {
     let (left_names, left_label) = party_names(profile, true);
     let (right_names, right_label) = party_names(profile, false);
-    let (body, sig_extra, cert_extra) = sanitize_draft(user_text);
+    let (body, sig_extra, cert_extra, decl_extra) = sanitize_draft(user_text);
     if body.iter().any(|b| match b {
         BodyBlock::Paragraph(s) | BodyBlock::Heading(s) => {
             s.to_ascii_lowercase().contains("to the best of my knowledge")
@@ -302,23 +396,38 @@ pub fn assemble(
     } else {
         title.trim().to_string()
     };
-    let (cert_h, cert_t) = match venue_certification(profile) {
-        Some(pair) => (Some(pair.0), Some(pair.1)),
-        None => (None, None),
-    };
     let venue = caption_venue(profile);
-    let certificate_lines = if cert_extra.is_empty() {
-        default_certificate_lines(profile)
-    } else {
-        cert_extra
-            .into_iter()
-            .filter(|l| !l.to_ascii_lowercase().contains("to the best of my knowledge"))
-            .collect()
+    let (cert_h, cert_t) = match venue {
+        CaptionVenue::NewJersey => match venue_certification(profile) {
+            Some(pair) => (Some(pair.0), Some(pair.1)),
+            None => (None, None),
+        },
+        _ if !decl_extra.is_empty() => (
+            Some("Declaration".into()),
+            Some(decl_extra.join(" ")),
+        ),
+        _ => (None, None),
     };
+    let certificate_lines = ensure_certificate_signature(
+        profile,
+        if cert_extra.is_empty() {
+            default_certificate_lines(profile)
+        } else {
+            cert_extra
+                .into_iter()
+                .filter(|l| !l.to_ascii_lowercase().contains("to the best of my knowledge"))
+                .collect()
+        },
+    );
+    let distinct_div = division_if_distinct(
+        &profile.court.name,
+        profile.court.division.as_deref().unwrap_or(""),
+    );
+    let (filer_address, filer_email, filer_phone) = merge_filer_contact(profile, &sig_extra);
     CourtDocument {
         style,
         court_name: profile.court.name.clone(),
-        court_division: profile.court.division.clone().unwrap_or_default(),
+        court_division: distinct_div.clone(),
         court_address: profile.court.address_lines.clone(),
         left_label,
         left_names,
@@ -326,16 +435,16 @@ pub fn assemble(
         right_names,
         appellate_no: profile.docket_number.clone(),
         trial_no: profile.notice_of_appeal.trial_court_docket.clone(),
-        division_courtroom: profile.court.division.clone().unwrap_or_default(),
+        division_courtroom: distinct_div,
         filer_name: profile.filer.name.clone(),
         filer_role: if profile.filer.role.trim().is_empty() {
             "Pro Se".into()
         } else {
             profile.filer.role.clone()
         },
-        filer_address: profile.filer.address_lines.clone(),
-        filer_email: profile.filer.email.clone(),
-        filer_phone: profile.filer.phone.clone(),
+        filer_address,
+        filer_email,
+        filer_phone,
         title: heading,
         intro: Vec::new(),
         body,
@@ -426,12 +535,15 @@ pub fn document_lines(doc: &CourtDocument) -> Vec<String> {
             BodyBlock::Blank => lines.push(String::new()),
         }
     }
-    lines.extend(doc.signature_lines.iter().cloned());
+    // Certification / declaration sits above the signature so one date and /s/
+    // close the paper. The certificate of service is its own last page.
     if let (Some(h), Some(t)) = (&doc.certification_heading, &doc.certification_text) {
         lines.push(String::new());
         lines.push(h.clone());
         lines.push(t.clone());
+        lines.push(String::new());
     }
+    lines.extend(doc.signature_lines.iter().cloned());
     lines.push(String::new());
     lines.push(doc.certificate_heading.clone());
     lines.extend(doc.certificate_lines.iter().cloned());
@@ -460,7 +572,7 @@ pub fn to_typst(doc: &CourtDocument, rules: &CourtRules) -> String {
         match block {
             BodyBlock::Heading(h) => {
                 body.push_str(&format!(
-                    "\n#block(above: 0.9em, below: 0.35em)[#text(weight: \"bold\")[{}]]\n",
+                    "\n#block(above: 1.1em, below: 0.85em)[#text(weight: \"bold\")[{}]]\n",
                     typst_escape(&h.to_ascii_uppercase())
                 ));
             }
@@ -471,19 +583,20 @@ pub fn to_typst(doc: &CourtDocument, rules: &CourtRules) -> String {
         }
     }
     let mut closing = String::new();
-    closing.push_str("\n#v(1.1em)\n");
-    for line in &doc.signature_lines {
-        closing.push_str(&format!("#text[{}] \\\n", typst_escape(line)));
-    }
+    closing.push_str("\n#block(breakable: false)[\n#set par(leading: 0.35em, justify: false, first-line-indent: 0em)\n#v(0.7em)\n");
     if let (Some(h), Some(t)) = (&doc.certification_heading, &doc.certification_text) {
         closing.push_str(&format!(
-            "\n#v(1.2em)\n#align(center)[#text(weight: \"bold\")[{}]]\n#v(0.4em)\n{}\n",
+            "#align(center)[#text(weight: \"bold\")[{}]]\n#v(0.4em)\n#set par(leading: 0.55em, justify: true)\n{}\n#v(0.75em)\n#set par(leading: 0.35em, justify: false)\n",
             typst_escape(h),
             typst_escape(t)
         ));
     }
+    for line in &doc.signature_lines {
+        closing.push_str(&format!("{} \\\n", typst_escape(line)));
+    }
+    closing.push_str("]\n");
     closing.push_str(&format!(
-        "\n#pagebreak(weak: true)\n#align(center)[#text(weight: \"bold\")[{}]]\n#v(0.5em)\n",
+        "\n#pagebreak()\n#align(center)[#text(weight: \"bold\")[{}]]\n#v(0.5em)\n",
         typst_escape(&doc.certificate_heading)
     ));
     for line in &doc.certificate_lines {
@@ -624,11 +737,18 @@ fn boxed_right_typst(doc: &CourtDocument) -> String {
         CaptionVenue::NewJersey | CaptionVenue::Generic => {
             let appellate = typst_escape(&blank_or(&doc.appellate_no));
             let trial = typst_escape(&blank_or(&doc.trial_no));
-            let div = typst_escape(&blank_or(&doc.division_courtroom));
             let heading = if doc.venue == CaptionVenue::NewJersey {
                 "COURT USE ONLY▲"
             } else {
                 "COURT USE ONLY"
+            };
+            let division_line = if doc.division_courtroom.trim().is_empty() {
+                String::new()
+            } else {
+                format!(
+                    " \\\n      Division / Courtroom: {}",
+                    typst_escape(&doc.division_courtroom)
+                )
             };
             format!(
                 r##"#align(center)[#text(weight: "bold", size: 8pt)[{heading}]]
@@ -636,13 +756,12 @@ fn boxed_right_typst(doc: &CourtDocument) -> String {
     #box(stroke: 0.5pt, width: 100%, inset: 6pt)[
       *Case Number* \
       Appellate: {appellate} \
-      Trial Court: {trial} \
-      Division / Courtroom: {div}
+      Trial Court: {trial}{division_line}
     ]"##,
                 heading = heading,
                 appellate = appellate,
                 trial = trial,
-                div = div,
+                division_line = division_line,
             )
         }
     }
@@ -671,13 +790,32 @@ fn classic_caption_typst(doc: &CourtDocument) -> String {
 }
 
 fn para_xml(text: &str, bold: bool, center: bool, size: u32, spacing: u32, font: &str) -> String {
+    para_xml_ex(text, bold, center, size, spacing, font, 0, false)
+}
+
+fn para_xml_ex(
+    text: &str,
+    bold: bool,
+    center: bool,
+    size: u32,
+    spacing: u32,
+    font: &str,
+    after: u32,
+    keep_together: bool,
+) -> String {
     let align = if center { "center" } else { "both" };
     let b = if bold { "<w:b/>" } else { "" };
+    let keep = if keep_together {
+        "<w:keepNext/>\n    <w:keepLines/>"
+    } else {
+        ""
+    };
     format!(
         r#"<w:p>
   <w:pPr>
     <w:jc w:val="{align}"/>
-    <w:spacing w:line="{spacing}" w:lineRule="auto"/>
+    <w:spacing w:after="{after}" w:line="{spacing}" w:lineRule="auto"/>
+    {keep}
   </w:pPr>
   <w:r>
     <w:rPr>
@@ -690,7 +828,9 @@ fn para_xml(text: &str, bold: bool, center: bool, size: u32, spacing: u32, font:
   </w:r>
 </w:p>"#,
         align = align,
+        after = after,
         spacing = spacing,
+        keep = keep,
         font = font,
         size = size,
         b = b,
@@ -731,17 +871,21 @@ fn boxed_caption_docx(doc: &CourtDocument, font: &str) -> String {
     }
     let appellate = blank_or(&doc.appellate_no);
     let trial = blank_or(&doc.trial_no);
-    let div = blank_or(&doc.division_courtroom);
     let lower = blank_or(&doc.lower_court_name);
+    let division_line = if doc.division_courtroom.trim().is_empty() {
+        String::new()
+    } else {
+        format!("\nDivision / Courtroom: {}", doc.division_courtroom)
+    };
     let right_text = match doc.venue {
         CaptionVenue::Colorado => format!(
             "▲ COURT USE ONLY ▲\n\nCase Number: {appellate}\nLower Court: {lower}\nLower Court Case: {trial}"
         ),
         CaptionVenue::NewJersey => format!(
-            "COURT USE ONLY▲\n\nCase Number\nAppellate: {appellate}\nTrial Court: {trial}\nDivision / Courtroom: {div}"
+            "COURT USE ONLY▲\n\nCase Number\nAppellate: {appellate}\nTrial Court: {trial}{division_line}"
         ),
         CaptionVenue::Generic => format!(
-            "COURT USE ONLY\n\nCase Number\nAppellate: {appellate}\nTrial Court: {trial}\nDivision / Courtroom: {div}"
+            "COURT USE ONLY\n\nCase Number\nAppellate: {appellate}\nTrial Court: {trial}{division_line}"
         ),
     };
 
@@ -842,7 +986,16 @@ pub fn to_docx(doc: &CourtDocument, rules: &CourtRules) -> Result<Vec<u8>, Strin
     for block in &doc.body {
         match block {
             BodyBlock::Heading(h) => {
-                body.push_str(&para_xml(&h.to_ascii_uppercase(), true, false, size, spacing, &font));
+                body.push_str(&para_xml_ex(
+                    &h.to_ascii_uppercase(),
+                    true,
+                    false,
+                    size,
+                    spacing,
+                    &font,
+                    200,
+                    false,
+                ));
             }
             BodyBlock::Paragraph(p) => {
                 body.push_str(&para_xml(p, false, false, size, spacing, &font));
@@ -852,13 +1005,24 @@ pub fn to_docx(doc: &CourtDocument, rules: &CourtRules) -> Result<Vec<u8>, Strin
             }
         }
     }
-    for line in &doc.signature_lines {
-        body.push_str(&para_xml(line, false, false, size, spacing, &font));
-    }
     if let (Some(h), Some(t)) = (&doc.certification_heading, &doc.certification_text) {
-        body.push_str(&para_xml(h, true, true, size, spacing, &font));
-        body.push_str(&para_xml(t, false, false, size, spacing, &font));
+        body.push_str(&para_xml_ex(h, true, true, size, spacing, &font, 120, true));
+        body.push_str(&para_xml_ex(t, false, false, size, spacing, &font, 160, true));
     }
+    let sig_count = doc.signature_lines.len();
+    for (i, line) in doc.signature_lines.iter().enumerate() {
+        body.push_str(&para_xml_ex(
+            line,
+            false,
+            false,
+            size,
+            240,
+            &font,
+            0,
+            i + 1 < sig_count,
+        ));
+    }
+    body.push_str(r#"<w:p><w:r><w:br w:type="page"/></w:r></w:p>"#);
     body.push_str(&para_xml(&doc.certificate_heading, true, true, size, spacing, &font));
     for line in &doc.certificate_lines {
         body.push_str(&para_xml(line, false, false, size, spacing, &font));
@@ -963,7 +1127,7 @@ mod tests {
     #[test]
     fn sanitize_strips_markdown_fences_and_typst() {
         let md = "# Preliminary statement\nHello.\n::: signature\n/s/ Jordan Example\n:::\n#v(0.5em)\n::: certificate\nI will serve this myself.\n:::";
-        let (body, sig, cert) = sanitize_draft(md);
+        let (body, sig, cert, _decl) = sanitize_draft(md);
         let headings: Vec<_> = body
             .iter()
             .filter_map(|b| match b {
@@ -1002,19 +1166,73 @@ mod tests {
         assert!(lines.contains("A-01000-24") || lines.contains(&p.docket_number));
         assert!(lines.contains("CERTIFICATE OF SERVICE"));
         assert!(lines.contains("/s/ Jordan Example"));
+        let cert_at = lines.find("CERTIFICATION IN LIEU OF OATH").unwrap();
+        let sig_at = lines.find("/s/ Jordan Example").unwrap();
+        let cos_at = lines.find("CERTIFICATE OF SERVICE").unwrap();
+        assert!(cert_at < sig_at, "certification belongs above the signature");
+        assert!(sig_at < cos_at, "certificate of service follows the signature");
+        assert!(!lines.contains("Division / Courtroom"));
+        let appellate_hits = lines.matches("Appellate Division").count();
+        assert_eq!(appellate_hits, 1, "court name already says Appellate Division");
+        let typst = to_typst(&doc, &crate::court_rules::CourtRules::generic());
+        assert!(typst.contains("#pagebreak()"));
+        assert!(!typst.contains("#pagebreak(weak"));
+        assert!(typst.contains("breakable: false"));
+        assert!(typst.contains("below: 0.85em"));
+        assert!(typst.contains("leading: 0.35em"));
     }
 
     #[test]
-    fn co_motion_uses_lower_court_box_and_crs_declaration() {
+    fn filer_address_and_email_appear_in_caption() {
+        let mut p = sample_appeal_profile();
+        p.governing_state = "NJ".into();
+        p.court.name = "Superior Court of New Jersey, Appellate Division".into();
+        p.court.division = Some("Appellate Division".into());
+        p.filer.address_lines = vec!["100 Sample Street".into(), "Example City, ST 00000".into()];
+        p.filer.email = "jordan.example@example.test".into();
+        p.filer.phone = "555-0100".into();
+        p.motion.user_text = include_str!("../../fixtures/sample-reconsideration.md")
+            .split("\n---\n")
+            .last()
+            .unwrap_or("The trial court entered an order.")
+            .to_string();
+        let doc = assemble(
+            &p,
+            "reconsideration",
+            "Motion for reconsideration",
+            &p.motion.user_text,
+            CaptionStyle::Boxed,
+        );
+        assert!(doc.filer_address.iter().any(|a| a.contains("100 Sample Street")));
+        assert_eq!(doc.filer_email, "jordan.example@example.test");
+        let lines = document_lines(&doc).join("\n");
+        assert!(lines.contains("100 Sample Street"));
+        assert!(lines.contains("jordan.example@example.test"));
+        assert!(!lines.contains("Division / Courtroom"));
+        assert_eq!(doc.court_division, "");
+        let typst = to_typst(&doc, &crate::court_rules::CourtRules::generic());
+        assert!(typst.contains("100 Sample Street"));
+        assert!(
+            typst.contains("jordan.example\\@example.test")
+                || typst.contains("jordan.example@example.test")
+        );
+        assert!(!typst.contains("Division / Courtroom"));
+    }
+
+    #[test]
+    fn co_motion_uses_lower_court_box_and_user_declaration() {
         let mut p = sample_appeal_profile();
         p.governing_state = "CO".into();
         p.court.name = "Colorado Court of Appeals".into();
+        p.court.division = Some("Court of Appeals".into());
         p.court.address_lines = vec!["2 East 14th Avenue".into(), "Denver, CO 80203".into()];
         p.docket_number = "24CA1000".into();
         p.notice_of_appeal.trial_court_name = "Denver District Court".into();
         p.notice_of_appeal.trial_court_docket = "23CV1000".into();
         p.caption.appellants[0].role = "Appellant".into();
         p.caption.appellees[0].role = "Appellee".into();
+        p.filer.address_lines = vec!["100 Sample Street".into(), "Example City, ST 00000".into()];
+        p.filer.email = "jordan.example@example.test".into();
         p.motion.user_text = include_str!("../../fixtures/sample-co-reconsideration.md")
             .split("\n---\n")
             .last()
@@ -1034,11 +1252,45 @@ mod tests {
         assert!(lines.contains("23CV1000"));
         assert!(lines.contains("Lower Court"));
         assert!(lines.contains("COURT USE ONLY"));
-        assert!(lines.contains(legal_os::CO_CRS_13_27_106_OATH));
+        assert!(lines.contains("I declare under penalty of perjury under the law of Colorado"));
+        assert!(lines.contains("needs_verification"));
+        assert!(!lines.contains("DECLARATION UNDER C.R.S."));
+        assert!(!lines.contains("Certificate of Conferral (C.R.C.P. 121"));
         assert!(lines.contains("CERTIFICATE OF SERVICE"));
         assert!(lines.contains("/s/ Jordan Example"));
+        assert!(lines.contains("100 Sample Street"));
+        assert!(lines.contains("jordan.example@example.test"));
+        assert_eq!(doc.court_division, "");
+        let decl_at = lines.find("I declare under penalty of perjury").unwrap();
+        let sig_at = lines.find("/s/ Jordan Example").unwrap();
+        let cos_at = lines.find("CERTIFICATE OF SERVICE").unwrap();
+        assert!(decl_at < sig_at);
+        assert!(sig_at < cos_at);
         assert!(!contains_forbidden_markup(&lines));
         assert!(!lines.to_ascii_lowercase().contains("to the best of my knowledge"));
         assert!(!lines.contains(REVIEW_NOTICE));
+        let typst = to_typst(&doc, &crate::court_rules::CourtRules::generic());
+        assert!(typst.contains("#pagebreak()"));
+        assert!(!typst.contains("#pagebreak(weak"));
+    }
+
+    #[test]
+    fn venue_language_marks_co_labels_needs_verification() {
+        let raw = include_str!("../../templates/venue-language.json");
+        let v: serde_json::Value = serde_json::from_str(raw).unwrap();
+        assert_eq!(v["venues"]["NJ"]["oath"]["citation_status"], "pack_source");
+        assert_eq!(v["venues"]["CO"]["oath"]["citation_status"], "needs_verification");
+        assert_eq!(
+            v["venues"]["CO"]["conferral"]["citation_status"],
+            "needs_verification"
+        );
+        assert!(v["venues"]["CO"]["conferral"]["note"]
+            .as_str()
+            .unwrap()
+            .contains("C.A.R."));
+        assert!(v["venues"]["CO"]["oath"]["note"]
+            .as_str()
+            .unwrap()
+            .contains("date and place"));
     }
 }

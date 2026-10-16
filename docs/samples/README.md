@@ -4,11 +4,11 @@ These files are **fake**. Names are Jordan Example and Sample County Clerk. Dock
 
 | File | What it shows |
 |---|---|
-| `nj-appellate-motion-jordan-example.pdf` | New Jersey Appellate Division boxed caption: appellate docket `A-01000-24`, trial-court docket `L-01000-24`, `COURT USE ONLY`, R. 1:4-4(b) certification, signature, certificate of service |
-| `co-appeals-motion-jordan-example.pdf` | Colorado Court of Appeals boxed caption: case no. `24CA1000`, lower court Denver District Court `23CV1000`, `COURT USE ONLY`, C.R.S. § 13-27-106 declaration, signature, certificate of service |
+| `nj-appellate-motion-jordan-example.pdf` | New Jersey Appellate Division boxed caption: appellate docket `A-01000-24`, trial-court docket `L-01000-24`, `COURT USE ONLY`, filer address and email, R. 1:4-4(b) certification above the signature, certificate of service on page 2 |
+| `co-appeals-motion-jordan-example.pdf` | Colorado Court of Appeals boxed caption: case no. `24CA1000`, lower court Denver District Court `23CV1000`, `COURT USE ONLY`, user-editable conferral and declaration (`needs_verification`), signature, certificate of service on page 2 |
 | `before-centered-stack.png` | What the old centered export looked like (raw markdown leaked; Arial; no page-1 footer) |
-| `nj-page-1.png` / `nj-page-2.png` | Raster of the NJ sample |
-| `co-page-1.png` / `co-page-2.png` | Raster of the CO sample |
+| `nj-page-1.png` / `nj-page-2.png` | Raster of the NJ sample. Page 2 is the certificate of service |
+| `co-page-1.png` / `co-page-2.png` | Raster of the CO sample. Page 2 is the certificate of service |
 | `ui-dashboard.png` | Calm dashboard: one Next-up card, no invented deadline |
 | `ui-draft-preview.png` | Three-click Draft to PDF with preview (NJ sample) |
 | `ui-draft-exported.png` | After Export Word and PDF |
