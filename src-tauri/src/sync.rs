@@ -9,9 +9,81 @@ use sha2::{Digest, Sha256};
 use crate::case_profile::{self, CaseMode, CaseProfile, TimelineEvent};
 use crate::seal;
 
-pub const FIREBASE_API_KEY: &str = "AIzaSyDa5rq-BEquorfFEMavuvXnv5PkbWZRIg0";
+/// Runtime / build-time env var for the Firebase Web API key. Never commit a real value.
+pub const FIREBASE_API_KEY_ENV: &str = "OPENSEASON_FIREBASE_API_KEY";
+
+/// Compile-time fallback from a gitignored `.env` (see `src-tauri/build.rs`). Absent in CI.
+const COMPILE_TIME_FIREBASE_API_KEY: Option<&str> = option_env!("OPENSEASON_FIREBASE_API_KEY");
+
+/// Public project id (not a secret). Used only after a key is resolved.
 pub const FIREBASE_PROJECT_ID: &str = "justlegalapp1";
+/// Public default bucket name (not a secret).
 pub const FIREBASE_STORAGE_BUCKET: &str = "justlegalapp1.firebasestorage.app";
+
+/// User-level config outside the repo (`%LOCALAPPDATA%/JustLegal/config.json` on Windows).
+pub fn user_config_path() -> PathBuf {
+    let base = dirs::data_local_dir()
+        .or_else(dirs::config_dir)
+        .unwrap_or_else(|| PathBuf::from("."));
+    base.join("JustLegal").join("config.json")
+}
+
+pub fn firebase_api_key_missing_message() -> String {
+    format!(
+        "Cloud sync is disabled: Firebase API key is not configured. Set the {FIREBASE_API_KEY_ENV} environment variable, add firebase_api_key to {}, or provide the key at build time via a gitignored .env (see .env.example). Offline features are unaffected.",
+        user_config_path().display()
+    )
+}
+
+/// First non-empty candidate wins: env, user config file, compile-time `option_env!`.
+pub fn resolve_firebase_api_key(
+    env_value: Option<&str>,
+    config_value: Option<&str>,
+    compile_time_value: Option<&str>,
+) -> Option<String> {
+    for candidate in [env_value, config_value, compile_time_value] {
+        if let Some(raw) = candidate {
+            let trimmed = raw.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+    None
+}
+
+pub fn load_firebase_api_key_from_config_path(path: &Path) -> Option<String> {
+    let data = fs::read_to_string(path).ok()?;
+    let value: Value = serde_json::from_str(&data).ok()?;
+    let key = value.get("firebase_api_key").and_then(|v| v.as_str())?;
+    let trimmed = key.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn env_firebase_api_key() -> Option<String> {
+    std::env::var(FIREBASE_API_KEY_ENV)
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
+/// Resolve the Firebase Web API key, or `None` if cloud sync must stay disabled.
+pub fn firebase_api_key() -> Option<String> {
+    let config = load_firebase_api_key_from_config_path(&user_config_path());
+    resolve_firebase_api_key(
+        env_firebase_api_key().as_deref(),
+        config.as_deref(),
+        COMPILE_TIME_FIREBASE_API_KEY,
+    )
+}
+
+pub fn require_firebase_api_key() -> Result<String, String> {
+    firebase_api_key().ok_or_else(firebase_api_key_missing_message)
+}
 
 /// Network-facing actions that must never receive a confidential case.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -29,6 +101,8 @@ pub enum SyncError {
     ConfidentialForbidden,
     #[error("Account sync is not implemented in this build.")]
     NotImplemented,
+    #[error("Cloud sync is disabled: Firebase API key is not configured. Set OPENSEASON_FIREBASE_API_KEY, add firebase_api_key to the JustLegal config file, or provide the key at build time via a gitignored .env. Offline features are unaffected.")]
+    NotConfigured,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -95,6 +169,9 @@ pub fn request_sync(profile: &CaseProfile, action: SyncAction) -> Result<(), Syn
     assert_sync_allowed(profile)?;
     let _ = action;
     let _ = CaseMode::Standard;
+    if firebase_api_key().is_none() {
+        return Err(SyncError::NotConfigured);
+    }
     Err(SyncError::NotImplemented)
 }
 
@@ -136,6 +213,12 @@ pub fn describe_sync_for_dir(case_dir: &Path, action: SyncAction) -> Result<Sync
             reason: SyncError::NotImplemented.to_string(),
             kind: "not_implemented".to_string(),
         }),
+        Err(SyncError::NotConfigured) => Ok(SyncRefusal {
+            action: format!("{:?}", action).to_ascii_lowercase(),
+            mode,
+            reason: SyncError::NotConfigured.to_string(),
+            kind: "not_configured".to_string(),
+        }),
     }
 }
 
@@ -158,6 +241,12 @@ pub fn describe_sync_error(profile: &CaseProfile, action: SyncAction) -> SyncRef
             mode: profile.mode.as_str().to_string(),
             reason: SyncError::NotImplemented.to_string(),
             kind: "not_implemented".to_string(),
+        },
+        Err(SyncError::NotConfigured) => SyncRefusal {
+            action: format!("{:?}", action).to_ascii_lowercase(),
+            mode: profile.mode.as_str().to_string(),
+            reason: SyncError::NotConfigured.to_string(),
+            kind: "not_configured".to_string(),
         },
     }
 }
@@ -241,10 +330,11 @@ pub fn save_case_sync_metadata(case_dir: &Path, meta: &CaseSyncMetadata) -> Resu
 // ---------------------------------------------------------------------------
 
 pub fn cloud_sign_in_password(email: &str, password: &str) -> Result<CloudSession, String> {
+    let api_key = require_firebase_api_key()?;
     let client = Client::builder().build().map_err(|e| e.to_string())?;
     let url = format!(
         "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={}",
-        FIREBASE_API_KEY
+        api_key
     );
     let payload = json!({
         "email": email.trim(),
@@ -325,6 +415,7 @@ pub fn cloud_pull_all(
     target_root: &Path,
     filter_case_id: Option<&str>,
 ) -> Result<PullReport, String> {
+    require_firebase_api_key()?;
     let client = Client::builder().build().map_err(|e| e.to_string())?;
     let run_query_url = format!(
         "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents:runQuery",
@@ -598,6 +689,7 @@ pub fn cloud_push_case(case_dir: &Path, session: &CloudSession) -> Result<PushRe
     if profile.is_sync_forbidden() {
         return Err(SyncError::ConfidentialForbidden.to_string());
     }
+    require_firebase_api_key()?;
 
     let client = Client::builder().build().map_err(|e| e.to_string())?;
 
@@ -787,9 +879,67 @@ mod tests {
         let profile = sample_appeal_profile();
         assert!(!profile.is_sync_forbidden());
         let err = request_sync(&profile, SyncAction::Backup).unwrap_err();
-        assert_eq!(err, SyncError::NotImplemented);
+        assert!(
+            matches!(err, SyncError::NotImplemented | SyncError::NotConfigured),
+            "standard cases must not be treated as confidential; got {err:?}"
+        );
         let described = describe_sync_error(&profile, SyncAction::Backup);
-        assert_eq!(described.kind, "not_implemented");
+        assert!(
+            described.kind == "not_implemented" || described.kind == "not_configured",
+            "unexpected kind {}",
+            described.kind
+        );
+    }
+
+    #[test]
+    fn firebase_api_key_resolver_prefers_env_then_config_then_build() {
+        assert!(resolve_firebase_api_key(None, None, None).is_none());
+        assert!(resolve_firebase_api_key(Some("   "), Some(""), Some("")).is_none());
+        assert_eq!(
+            resolve_firebase_api_key(Some(" from-env "), Some("from-file"), Some("from-build"))
+                .as_deref(),
+            Some("from-env")
+        );
+        assert_eq!(
+            resolve_firebase_api_key(None, Some("from-file"), Some("from-build")).as_deref(),
+            Some("from-file")
+        );
+        assert_eq!(
+            resolve_firebase_api_key(None, None, Some("from-build")).as_deref(),
+            Some("from-build")
+        );
+    }
+
+    #[test]
+    fn user_config_json_supplies_api_key() {
+        let dir = std::env::temp_dir().join(format!("os-fb-cfg-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("config.json");
+        fs::write(&path, r#"{ "firebase_api_key": " test-key-value " }"#).unwrap();
+        assert_eq!(
+            load_firebase_api_key_from_config_path(&path).as_deref(),
+            Some("test-key-value")
+        );
+        fs::write(&path, r#"{}"#).unwrap();
+        assert!(load_firebase_api_key_from_config_path(&path).is_none());
+        fs::write(&path, "not-json").unwrap();
+        assert!(load_firebase_api_key_from_config_path(&path).is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn missing_api_key_message_is_actionable_and_does_not_crash() {
+        let msg = firebase_api_key_missing_message();
+        assert!(msg.contains(FIREBASE_API_KEY_ENV));
+        assert!(msg.contains("config.json"));
+        assert!(msg.to_ascii_lowercase().contains("disabled"));
+        assert!(msg.to_ascii_lowercase().contains("offline"));
+        let sign_in = cloud_sign_in_password("user@example.test", "not-a-real-password");
+        if firebase_api_key().is_none() {
+            let err = sign_in.expect_err("sign-in must not panic or succeed without a key");
+            assert!(err.contains(FIREBASE_API_KEY_ENV));
+            assert!(err.to_ascii_lowercase().contains("disabled"));
+        }
     }
 
     #[test]
@@ -811,5 +961,67 @@ mod tests {
         assert_eq!(route_doctype_to_subfolder("Court Filing"), "filings");
         assert_eq!(route_doctype_to_subfolder("Evidence"), "evidence");
         assert_eq!(route_doctype_to_subfolder("Receipt"), "evidence");
+    }
+
+    fn contains_firebase_web_api_key(text: &str) -> bool {
+        let bytes = text.as_bytes();
+        let prefix = b"AIza";
+        let mut i = 0;
+        while i + 39 <= bytes.len() {
+            if &bytes[i..i + 4] == prefix
+                && bytes[i + 4..i + 39]
+                    .iter()
+                    .all(|b| b.is_ascii_alphanumeric() || *b == b'_' || *b == b'-')
+            {
+                return true;
+            }
+            i += 1;
+        }
+        false
+    }
+
+    #[test]
+    fn firebase_key_pattern_rejects_placeholders() {
+        assert!(!contains_firebase_web_api_key("OPENSEASON_FIREBASE_API_KEY="));
+        assert!(!contains_firebase_web_api_key("AIza[0-9A-Za-z_-]{35}"));
+        assert!(!contains_firebase_web_api_key("your-web-api-key"));
+        let fake = format!("AIza{}", "x".repeat(35));
+        assert!(contains_firebase_web_api_key(&fake));
+    }
+
+    #[test]
+    fn tracked_files_must_not_contain_firebase_web_api_keys() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
+        let output = std::process::Command::new("git")
+            .args(["ls-files", "-z"])
+            .current_dir(&root)
+            .output()
+            .expect("git ls-files must run so committed secrets can be detected");
+        assert!(
+            output.status.success(),
+            "git ls-files failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+
+        let mut hits = Vec::new();
+        for path in output.stdout.split(|b| *b == 0).filter(|p| !p.is_empty()) {
+            let rel = String::from_utf8_lossy(path);
+            let full = root.join(rel.as_ref());
+            let Ok(bytes) = std::fs::read(&full) else {
+                continue;
+            };
+            let Ok(text) = String::from_utf8(bytes) else {
+                continue;
+            };
+            if contains_firebase_web_api_key(&text) {
+                hits.push(rel.into_owned());
+            }
+        }
+
+        assert!(
+            hits.is_empty(),
+            "Firebase Web API key pattern found in tracked files: {hits:?}. \
+             Remove the literal and load the key at runtime."
+        );
     }
 }

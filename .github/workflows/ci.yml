@@ -13,6 +13,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Reject committed Firebase Web API keys
+        run: |
+          set -euo pipefail
+          if git grep -nEI 'AIza[0-9A-Za-z_-]{35}' -- .; then
+            echo "::error::Firebase Web API key pattern found in tracked files. Remove the literal and load the key at runtime."
+            exit 1
+          fi
+          echo "No Firebase Web API key pattern in tracked files."
       - uses: dtolnay/rust-toolchain@stable
       - name: Install Tauri Linux libraries
         run: |

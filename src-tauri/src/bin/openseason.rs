@@ -1303,7 +1303,9 @@ fn run(cli: Cli) -> Result<(), String> {
                 other => return Err(format!("Unknown action '{}'", other)),
             };
             let result = sync::describe_sync_for_dir(&path, action)?;
-            let refused = result.kind == "confidential_forbidden" || result.kind == "not_implemented";
+            let refused = result.kind == "confidential_forbidden"
+                || result.kind == "not_implemented"
+                || result.kind == "not_configured";
             if json {
                 let issues = if refused {
                     vec![case_profile::ValidationIssue {

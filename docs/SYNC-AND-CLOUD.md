@@ -21,6 +21,16 @@ This document specifies the technical design, security rules, and interface refe
   ```
 - **Integrity Guarantee:** Deleting `.sealed` or tampering with `case.json` does not bypass the airgap if either marker persists.
 
+### Firebase Web API key (not in source)
+
+The Firebase Web API key is **not** stored in this repository. Resolve it at runtime, first match wins:
+
+1. `OPENSEASON_FIREBASE_API_KEY` environment variable
+2. User config file outside the repo: `%LOCALAPPDATA%/JustLegal/config.json` (or the equivalent Application Support / `.local/share` path) with `{ "firebase_api_key": "..." }`
+3. Compile-time `option_env!("OPENSEASON_FIREBASE_API_KEY")` from a gitignored `.env` (see `.env.example` and `src-tauri/build.rs`)
+
+If none of those are set, login and sync are disabled with a clear message. Offline features keep working.
+
 ---
 
 ## 2. Authentication & Token Management

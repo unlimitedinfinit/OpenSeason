@@ -83,6 +83,26 @@ npm run tauri dev
 
 Windows owners: follow [docs/TESTING-ON-WINDOWS.md](docs/TESTING-ON-WINDOWS.md) for Visual Studio Build Tools, `npm run tauri build`, and a manual checklist.
 
+### JustLegal Cloud (optional)
+
+Cloud sync is **off** unless a Firebase Web API key is provided. Offline drafting, checks, and export do not need it, and the app does not crash if the key is missing.
+
+Supply the key in one of these ways (first match wins):
+
+1. Environment variable `OPENSEASON_FIREBASE_API_KEY`
+2. User config file **outside the repo**:
+   - Windows: `%LOCALAPPDATA%\JustLegal\config.json`
+   - macOS: `~/Library/Application Support/JustLegal/config.json`
+   - Linux: `~/.local/share/JustLegal/config.json`
+
+   ```json
+   { "firebase_api_key": "your-web-api-key" }
+   ```
+
+3. Build-time: copy [`.env.example`](.env.example) to `.env` (gitignored) and set `OPENSEASON_FIREBASE_API_KEY`. `src-tauri/build.rs` forwards it to `option_env!` so a release binary can include a key that is not in source.
+
+If the key is missing, login and sync return a clear "cloud sync is disabled" message. Do not commit real keys. A key that was previously hardcoded must be rotated or restricted in Google Cloud / Firebase; it remains in git history until you rotate it.
+
 ### Tests and checks
 
 ```bash

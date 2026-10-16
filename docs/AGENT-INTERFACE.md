@@ -111,7 +111,7 @@ Equivalent without npm: `cargo run --manifest-path src-tauri/Cargo.toml --bin op
 | `check venue DIR` | Deterministic Multi-Venue Competence Matrix check (NJ R. 1:4-4(b), CO Rule 121 conferral, 28 U.S.C. § 1746, SCOTUS Rule 14.1, Will witnesses) |
 | `portfolio status [--root DIR]` | Multi-state, multi-venue Portfolio Deadline Radar & Global Filer Profile |
 | `mcp` | Stdio MCP server (same tools) |
-| `sync DIR --action backup` | Stub. Standard: `not_implemented`. Confidential: refused |
+| `sync DIR --action backup` | Stub. Standard: `not_implemented` (or `not_configured` if the Firebase API key is missing). Confidential: refused |
 
 ## MCP (stdio)
 
