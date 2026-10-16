@@ -43,8 +43,5 @@ jordan.example@example.test
 :::
 
 ::: certificate
-I will serve a copy of this paper myself. This software did not serve anyone.
-Recipient: Sample County Clerk
-Method: electronic mail
-Date: October 1, 2026
+I certify that on October 2, 2026 I served a copy of this motion on Sample County Clerk by electronic mail.
 :::

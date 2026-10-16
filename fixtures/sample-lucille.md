@@ -26,5 +26,5 @@ Example City, ST 00000
 :::
 
 ::: certificate
-I will serve a copy of this paper myself. This software did not serve anyone.
+I certify that on ____________ I served a copy of this paper on ____________ by ____________.
 :::

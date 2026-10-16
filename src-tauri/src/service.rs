@@ -123,7 +123,7 @@ pub fn generate_certificate_of_service(
   #text(8pt, fill: rgb(120, 120, 120))[CERTIFICATE OF SERVICE --- {docket_header}]
 ])
 #set text(font: "Times New Roman", size: 12pt)
-#set par(justify: true, leading: 0.8em)
+#set par(justify: false, leading: 0.8em)
 
 #align(center)[
   #strong[{court_name}] \
@@ -301,7 +301,7 @@ pub fn generate_proposed_order(
         r##"
 #set page(paper: "us-letter", margin: (x: 1in, y: 1in))
 #set text(font: "Times New Roman", size: 12pt)
-#set par(justify: true, leading: 0.8em)
+#set par(justify: false, leading: 0.8em)
 
 #align(center)[
   #strong[{court_name}] \

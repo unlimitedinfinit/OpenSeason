@@ -53,10 +53,7 @@ jordan.example@example.test
 :::
 
 ::: certificate
-I will serve a copy of this paper myself. This software did not serve anyone.
-Recipient: Sample County Clerk
-Method: electronic mail
-Date: October 1, 2026
+I certify that on October 16, 2026 I served a copy of this motion on Sample County Clerk by electronic mail.
 :::
 `;
 
@@ -105,10 +102,7 @@ jordan.example@example.test
 :::
 
 ::: certificate
-I will serve a copy of this paper myself. This software did not serve anyone.
-Recipient: Sample County Clerk
-Method: electronic mail
-Date: October 1, 2026
+I certify that on October 2, 2026 I served a copy of this motion on Sample County Clerk by electronic mail.
 :::
 `;
 
@@ -239,6 +233,9 @@ Date: October 1, 2026
         {#if preview.has_certificate} · certificate of service{/if}
       </p>
       <p class="text-sm font-semibold">{preview.title}</p>
+      {#if preview.notice}
+        <p class="text-sm text-muted-foreground">{preview.notice}</p>
+      {/if}
       <pre class="text-xs whitespace-pre-wrap font-serif leading-relaxed max-h-80 overflow-auto">{preview.lines.join("\n")}</pre>
     </div>
   {/if}

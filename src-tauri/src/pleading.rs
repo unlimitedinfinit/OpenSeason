@@ -181,7 +181,8 @@ pub fn sanitize_draft(text: &str) -> (Vec<BodyBlock>, Vec<String>, Vec<String>, 
             }
             continue;
         }
-        let cleaned = strip_verification_flags(&s.replace("**", "").replace("__", ""));
+        let cleaned = s.replace("**", "").replace("__", "");
+        let cleaned = cleaned.trim().to_string();
         match mode {
             "signature" => {
                 if !cleaned.is_empty() {
@@ -244,29 +245,263 @@ fn party_names(profile: &CaseProfile, left: bool) -> (String, String) {
 }
 
 pub const DATE_BLANK: &str = "Date: ____________";
-pub const CERTIFICATE_EXPORT_BLOCKED: &str = "Cannot export: the certificate of service is missing a recipient, a method, or a service date. Add them in the ::: certificate block (Recipient, Method, Date). Preview may show a blank fill-in form; export will not invent those facts. This software did not serve anyone.";
+pub const CERTIFICATE_BLANK: &str = "____________";
 
-fn strip_verification_flags(s: &str) -> String {
-    let mut t = s.to_string();
-    loop {
-        let lower = t.to_ascii_lowercase();
-        let pat = if lower.contains("(needs_verification)") {
-            "(needs_verification)"
-        } else if lower.contains("needs_verification") {
-            "needs_verification"
-        } else {
-            break;
-        };
-        if let Some(idx) = lower.find(pat) {
-            t.replace_range(idx..idx + pat.len(), "");
-        } else {
-            break;
+pub fn certificate_sentence(date: &str, paper: &str, recipient: &str, method: &str) -> String {
+    format!("I certify that on {date} I served a copy of this {paper} on {recipient} by {method}.")
+}
+
+pub fn paper_noun(title: &str) -> &'static str {
+    let t = title.to_ascii_lowercase();
+    if t.contains("notice") {
+        "notice"
+    } else if t.contains("brief") {
+        "brief"
+    } else if t.contains("complaint") {
+        "complaint"
+    } else if t.contains("petition") {
+        "petition"
+    } else if t.contains("motion") {
+        "motion"
+    } else {
+        "paper"
+    }
+}
+
+fn find_ci(haystack: &str, needle: &str) -> Option<usize> {
+    haystack.to_ascii_lowercase().find(&needle.to_ascii_lowercase())
+}
+
+/// Parse "I certify that on [date] I served a copy of this [paper] on [recipient] by [method]."
+fn parse_served_sentence(line: &str) -> Option<(String, String, String, String)> {
+    let lower = line.to_ascii_lowercase();
+    let prefix = "i certify that on ";
+    let mid = " i served a copy of this ";
+    let start = find_ci(&lower, prefix)?;
+    let after_on = start + prefix.len();
+    let mid_at = find_ci(&lower[after_on..], mid)? + after_on;
+    let date = line[after_on..mid_at].trim().trim_end_matches(',').trim();
+    let after_this = mid_at + mid.len();
+    let on_at = find_ci(&lower[after_this..], " on ")? + after_this;
+    let paper = line[after_this..on_at].trim();
+    let after_recip = on_at + " on ".len();
+    let by_at = find_ci(&lower[after_recip..], " by ")? + after_recip;
+    let recipient = line[after_recip..by_at].trim();
+    let method_raw = line[by_at + " by ".len()..].trim();
+    let method = method_raw
+        .split('.')
+        .next()
+        .unwrap_or(method_raw)
+        .trim()
+        .trim_end_matches(',');
+    Some((
+        date.to_string(),
+        paper.to_string(),
+        recipient.to_string(),
+        method.to_string(),
+    ))
+}
+
+fn filled_cert_value(value: &str) -> Option<String> {
+    let t = value.trim();
+    if is_fill_in_blank(t) {
+        return None;
+    }
+    Some(t.to_string())
+}
+
+#[derive(Debug, Clone, Default)]
+struct CertificateFacts {
+    recipient: Option<String>,
+    method: Option<String>,
+    date: Option<String>,
+    extras: Vec<String>,
+}
+
+fn is_future_service_line(line: &str) -> bool {
+    let t = line.to_ascii_lowercase();
+    t.contains("i will serve") || t.contains("will serve a copy")
+}
+
+fn is_engine_disclaimer_line(line: &str) -> bool {
+    let t = line.to_ascii_lowercase();
+    t.contains("this software did not") || t.contains("this app did not")
+}
+
+fn is_blank_cert_label(line: &str) -> bool {
+    let t = line.trim().to_ascii_lowercase();
+    (t.starts_with("recipient") || t.starts_with("method") || is_date_label_line(line))
+        && labeled_value(
+            line,
+            &[
+                "Recipient",
+                "Served on",
+                "Party served",
+                "To",
+                "Method",
+                "Manner",
+                "By",
+                "Date",
+                "Service date",
+                "Date of service",
+            ],
+        )
+        .is_none()
+}
+
+fn extract_certificate_facts(lines: &[String]) -> CertificateFacts {
+    let mut facts = CertificateFacts::default();
+    for l in lines {
+        if is_engine_disclaimer_line(l) {
+            continue;
+        }
+        if let Some((date, _paper, recipient, method)) = parse_served_sentence(l) {
+            if let Some(v) = filled_cert_value(&date) {
+                if v.chars().any(|c| c.is_ascii_digit()) {
+                    facts.date = Some(v);
+                }
+            }
+            if let Some(v) = filled_cert_value(&recipient) {
+                facts.recipient = Some(v);
+            }
+            if let Some(v) = filled_cert_value(&method) {
+                facts.method = Some(v);
+            }
+            continue;
+        }
+        if is_future_service_line(l) || is_blank_cert_label(l) {
+            continue;
+        }
+        if let Some(v) = labeled_value(l, &["Recipient", "Served on", "Party served", "To"]) {
+            facts.recipient = Some(v.to_string());
+            continue;
+        }
+        if let Some(v) = labeled_value(l, &["Method", "Manner", "By"]) {
+            facts.method = Some(v.to_string());
+            continue;
+        }
+        if date_line_has_value(l) {
+            if let Some(v) = labeled_value(l, &["Date", "Service date", "Date of service"]) {
+                facts.date = Some(v.to_string());
+            }
+            continue;
+        }
+        if line_has_service_method(l) && facts.method.is_none() {
+            facts.method = Some(l.trim().to_string());
+            continue;
+        }
+        if !l.trim().is_empty() {
+            facts.extras.push(l.clone());
         }
     }
-    while t.contains("  ") {
-        t = t.replace("  ", " ");
+    facts
+}
+
+#[derive(Debug, Clone)]
+pub struct VerificationLeak {
+    pub block: &'static str,
+    pub line_number: usize,
+    pub snippet: String,
+}
+
+fn body_without_front_matter(text: &str) -> &str {
+    let trimmed = text.trim_start_matches('\u{feff}');
+    if !trimmed.starts_with("---") {
+        return trimmed;
     }
-    t.replace(" .", ".").replace(" ,", ",").trim().to_string()
+    let rest = trimmed[3..].trim_start_matches('\n');
+    if let Some(end) = rest.find("\n---") {
+        rest[end + 4..].trim_start_matches('\n')
+    } else {
+        trimmed
+    }
+}
+
+pub fn find_verification_leaks(user_text: &str) -> Vec<VerificationLeak> {
+    let body = body_without_front_matter(user_text);
+    let mut leaks = Vec::new();
+    let mut block = "body";
+    for (i, raw) in body.replace('\r', "").lines().enumerate() {
+        let s = raw.trim();
+        if s.starts_with(":::") {
+            let name = s.trim_start_matches(':').trim();
+            block = if name.is_empty() {
+                "body"
+            } else if name.starts_with("signature") {
+                "signature"
+            } else if name.starts_with("certificate") {
+                "certificate"
+            } else if name.starts_with("declaration") || name.starts_with("certification") {
+                "declaration"
+            } else {
+                "body"
+            };
+            continue;
+        }
+        if s.to_ascii_lowercase().contains("needs_verification") {
+            let snippet = if s.chars().count() > 80 {
+                let cut: String = s.chars().take(77).collect();
+                format!("{cut}…")
+            } else {
+                s.to_string()
+            };
+            leaks.push(VerificationLeak {
+                block,
+                line_number: i + 1,
+                snippet,
+            });
+        }
+    }
+    leaks
+}
+
+pub fn format_verification_leaks(leaks: &[VerificationLeak]) -> String {
+    leaks
+        .iter()
+        .map(|l| format!("{} line {}: \"{}\"", l.block, l.line_number, l.snippet))
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+pub fn require_no_verification_leak(user_text: &str) -> Result<(), String> {
+    let leaks = find_verification_leaks(user_text);
+    if leaks.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "Cannot export: user-authored text contains 'needs_verification' ({}). Keep that flag in template YAML metadata, not in the paper. Export will not rewrite your sentences.",
+            format_verification_leaks(&leaks)
+        ))
+    }
+}
+
+pub fn require_exportable(doc: &CourtDocument, user_text: &str) -> Result<(), String> {
+    require_no_verification_leak(user_text)?;
+    let assembled = document_lines(doc).join("\n");
+    if assembled.to_ascii_lowercase().contains("needs_verification") {
+        return Err(
+            "Cannot export: assembled paper contains 'needs_verification'. Keep that flag in template YAML metadata, not in the paper. Export will not rewrite your sentences."
+                .into(),
+        );
+    }
+    require_complete_certificate(doc)
+}
+
+fn join_en(items: &[&str]) -> String {
+    match items {
+        [] => String::new(),
+        [a] => (*a).to_string(),
+        [a, b] => format!("{a} and {b}"),
+        [first, rest @ ..] => {
+            let last = rest[rest.len() - 1];
+            let mid = &rest[..rest.len() - 1];
+            if mid.is_empty() {
+                format!("{first} and {last}")
+            } else {
+                format!("{first}, {} and {last}", mid.join(", "))
+            }
+        }
+    }
 }
 
 fn is_fill_in_blank(value: &str) -> bool {
@@ -354,60 +589,70 @@ fn line_has_service_method(line: &str) -> bool {
 }
 
 pub fn certificate_gaps(lines: &[String]) -> CertificateGaps {
-    let has_recipient = lines.iter().any(|l| {
-        labeled_value(l, &["Recipient", "Served on", "Party served", "To"]).is_some()
-    });
-    let has_method = lines.iter().any(|l| {
-        labeled_value(l, &["Method", "Manner", "By"]).is_some() || line_has_service_method(l)
-    });
-    let has_date = lines.iter().any(|l| date_line_has_value(l));
+    let facts = extract_certificate_facts(lines);
     CertificateGaps {
-        recipient: !has_recipient,
-        method: !has_method,
-        date: !has_date,
+        recipient: facts.recipient.is_none(),
+        method: facts.method.is_none(),
+        date: facts.date.is_none(),
     }
 }
 
 pub fn require_complete_certificate(doc: &CourtDocument) -> Result<(), String> {
     let gaps = certificate_gaps(&doc.certificate_lines);
     if gaps.is_empty() {
+        if doc
+            .certificate_lines
+            .iter()
+            .any(|l| is_future_service_line(l))
+        {
+            return Err(
+                "Cannot export: the certificate of service uses future tense (\"I will serve\"). State completed service: \"I certify that on [date] I served a copy of this [paper] on [recipient] by [method].\""
+                    .into(),
+            );
+        }
         Ok(())
-    } else if gaps.missing_labels().len() == 3 {
-        Err(CERTIFICATE_EXPORT_BLOCKED.into())
     } else {
+        let list = join_en(&gaps.missing_labels());
         Err(format!(
-            "Cannot export: the certificate of service is missing {}. Add them in the ::: certificate block (Recipient, Method, Date). Preview may show a blank fill-in form; export will not invent those facts. This software did not serve anyone.",
-            gaps.missing_labels().join(", ")
+            "Cannot export: the certificate of service is missing the {list}. Add the {list} in the ::: certificate block. Preview may show a blank fill-in form; export will not invent those facts."
         ))
     }
 }
 
-fn default_certificate_lines() -> Vec<String> {
-    vec!["I will serve a copy of this paper myself. This software did not file or serve anyone.".into()]
+fn default_certificate_lines(paper: &str) -> Vec<String> {
+    vec![certificate_sentence(
+        CERTIFICATE_BLANK,
+        paper,
+        CERTIFICATE_BLANK,
+        CERTIFICATE_BLANK,
+    )]
 }
 
-fn polish_certificate(profile: &CaseProfile, mut lines: Vec<String>) -> Vec<String> {
-    let gaps = certificate_gaps(&lines);
-    if gaps.recipient && !lines.iter().any(|l| l.to_ascii_lowercase().starts_with("recipient")) {
-        lines.push("Recipient: ____________".into());
+fn polish_certificate(profile: &CaseProfile, lines: Vec<String>, paper: &str) -> Vec<String> {
+    let facts = extract_certificate_facts(&lines);
+    let sentence = certificate_sentence(
+        facts.date.as_deref().unwrap_or(CERTIFICATE_BLANK),
+        paper,
+        facts.recipient.as_deref().unwrap_or(CERTIFICATE_BLANK),
+        facts.method.as_deref().unwrap_or(CERTIFICATE_BLANK),
+    );
+    let mut out = vec![sentence];
+    for extra in facts.extras {
+        if extra.contains("/s/") || extra.to_ascii_lowercase().starts_with("/s/") {
+            out.push(extra);
+        }
     }
-    if gaps.method && !lines.iter().any(|l| l.to_ascii_lowercase().starts_with("method")) {
-        lines.push("Method: ____________".into());
-    }
-    if gaps.date && !lines.iter().any(|l| is_date_label_line(l)) {
-        lines.push(DATE_BLANK.into());
-    }
-    if !lines.iter().any(|l| l.contains("/s/")) {
+    if !out.iter().any(|l| l.contains("/s/")) {
         let sig = if profile.filer.signature_name.trim().is_empty() {
             profile.filer.name.trim()
         } else {
             profile.filer.signature_name.trim()
         };
         if !sig.is_empty() {
-            lines.push(format!("/s/ {sig}"));
+            out.push(format!("/s/ {sig}"));
         }
     }
-    lines
+    out
 }
 
 /// NJ R. 1:4-4(b) is pack_source and is inserted by the engine.
@@ -546,16 +791,18 @@ pub fn assemble(
         ),
         _ => (None, None),
     };
+    let paper = paper_noun(&heading);
     let certificate_lines = polish_certificate(
         profile,
         if cert_extra.is_empty() {
-            default_certificate_lines()
+            default_certificate_lines(paper)
         } else {
             cert_extra
                 .into_iter()
                 .filter(|l| !l.to_ascii_lowercase().contains("to the best of my knowledge"))
                 .collect()
         },
+        paper,
     );
     let distinct_div = division_if_distinct(
         &profile.court.name,
@@ -732,7 +979,7 @@ pub fn to_typst(doc: &CourtDocument, rules: &CourtRules) -> String {
     closing.push_str("\n#block(breakable: false)[\n#set par(leading: 0.35em, justify: false, first-line-indent: 0em)\n#v(0.7em)\n");
     if let (Some(h), Some(t)) = (&doc.certification_heading, &doc.certification_text) {
         closing.push_str(&format!(
-            "#align(center)[#text(weight: \"bold\")[{}]]\n#v(0.4em)\n#set par(leading: 0.55em, justify: true)\n{}\n#v(0.75em)\n#set par(leading: 0.35em, justify: false)\n",
+            "#align(center)[#text(weight: \"bold\")[{}]]\n#v(0.4em)\n#set par(leading: 0.55em, justify: false)\n{}\n#v(0.75em)\n#set par(leading: 0.35em, justify: false)\n",
             typst_escape(h),
             typst_escape(t)
         ));
@@ -759,7 +1006,7 @@ pub fn to_typst(doc: &CourtDocument, rules: &CourtRules) -> String {
   }}
 )
 #set text(font: ({fonts}), size: {size}pt)
-#set par(leading: {leading}em, spacing: {leading}em, justify: true, first-line-indent: 0em)
+#set par(leading: {leading}em, spacing: {leading}em, justify: false, first-line-indent: 0em)
 
 {caption}
 
@@ -941,7 +1188,7 @@ fn para_xml_ex(
     after: u32,
     keep_together: bool,
 ) -> String {
-    let align = if center { "center" } else { "both" };
+    let align = if center { "center" } else { "left" };
     let b = if bold { "<w:b/>" } else { "" };
     let keep = if keep_together {
         "<w:keepNext/>\n    <w:keepLines/>"
@@ -1258,10 +1505,11 @@ pub fn write_review_sidecar(exports_dir: &Path) -> Result<(), String> {
 mod tests {
     use super::*;
     use crate::case_profile::sample_appeal_profile;
+    use std::io::Read;
 
     #[test]
     fn sanitize_strips_markdown_fences_and_typst() {
-        let md = "# Preliminary statement\nHello.\n::: signature\n/s/ Jordan Example\n:::\n#v(0.5em)\n::: certificate\nI will serve this myself.\n:::";
+        let md = "# Preliminary statement\nHello.\n::: signature\n/s/ Jordan Example\n:::\n#v(0.5em)\n::: certificate\nI certify that on ____________ I served a copy of this paper on ____________ by ____________.\n:::";
         let (body, sig, cert, _decl) = sanitize_draft(md);
         let headings: Vec<_> = body
             .iter()
@@ -1272,7 +1520,7 @@ mod tests {
             .collect();
         assert_eq!(headings, ["Preliminary statement"]);
         assert!(sig.iter().any(|s| s.contains("/s/ Jordan Example")));
-        assert!(cert.iter().any(|s| s.contains("I will serve")));
+        assert!(cert.iter().any(|s| s.contains("I served a copy of this paper")));
         let blob = format!("{body:?}");
         assert!(!blob.contains(":::"));
         assert!(!blob.contains("#v("));
@@ -1414,9 +1662,8 @@ mod tests {
         assert!(!typst.contains("#pagebreak(weak"));
         assert!(typst.contains("leading: 0.85em"));
         assert!(lines.contains("Case Number:"));
-        assert!(lines.contains("Recipient: Sample County Clerk"));
-        assert!(lines.contains("Method: electronic mail"));
-        assert!(lines.contains("Date: October 1, 2026"));
+        assert!(lines.contains("I certify that on October 2, 2026 I served a copy of this motion on Sample County Clerk by electronic mail."));
+        assert!(!lines.to_ascii_lowercase().contains("i will serve"));
         assert!(doc.signature_lines.iter().any(|l| l == DATE_BLANK));
     }
 
@@ -1509,13 +1756,18 @@ mod tests {
         p.motion.user_text = "# Body\nHello.\n::: signature\n/s/ Jordan Example\n:::\n::: certificate\nI will serve this myself.\n:::".into();
         let doc = assemble(&p, "motion", "Motion", &p.motion.user_text, CaptionStyle::Boxed);
         let lines = document_lines(&doc).join("\n");
-        assert!(lines.contains("Recipient: ____________"));
-        assert!(lines.contains("Method: ____________"));
-        assert!(lines.contains(DATE_BLANK));
+        assert!(lines.contains("I certify that on ____________ I served a copy of this motion on ____________ by ____________."));
+        assert!(!lines.to_ascii_lowercase().contains("i will serve"));
         let err = require_complete_certificate(&doc).unwrap_err();
-        assert!(err.contains("recipient"));
-        assert!(err.contains("method"));
-        assert!(err.contains("service date"));
+        assert!(err.contains("missing the recipient, method and service date"));
+        assert!(err.contains("Add the recipient, method and service date"));
+
+        p.motion.user_text = "# Body\nHello.\n::: signature\n/s/ Jordan Example\n:::\n::: certificate\nI certify that on October 16, 2026 I served a copy of this motion on Sample County Clerk by ____________.\n:::".into();
+        let missing_method = assemble(&p, "motion", "Motion", &p.motion.user_text, CaptionStyle::Boxed);
+        let err = require_complete_certificate(&missing_method).unwrap_err();
+        assert!(err.contains("missing the method"));
+        assert!(err.contains("Add the method"));
+        assert!(!err.contains("recipient, method"));
 
         p.motion.user_text = include_str!("../../fixtures/sample-reconsideration.md")
             .split("\n---\n")
@@ -1524,6 +1776,65 @@ mod tests {
             .to_string();
         let complete = assemble(&p, "motion", "Motion", &p.motion.user_text, CaptionStyle::Boxed);
         require_complete_certificate(&complete).unwrap();
+        let complete_lines = document_lines(&complete).join("\n");
+        assert!(complete_lines.contains("I certify that on October 16, 2026 I served a copy of this motion on Sample County Clerk by electronic mail."));
+    }
+
+    #[test]
+    fn user_authored_needs_verification_is_not_rewritten_and_blocks_export() {
+        let mut p = sample_appeal_profile();
+        p.governing_state = "CO".into();
+        p.court.name = "Colorado Court of Appeals".into();
+        let md = "# Body\nRelief is sought under C.A.R. 40 (needs_verification).\n::: signature\n/s/ Jordan Example\n:::\n::: certificate\nI certify that on October 16, 2026 I served a copy of this motion on Sample County Clerk by electronic mail.\n:::";
+        let doc = assemble(&p, "motion", "Motion", md, CaptionStyle::Boxed);
+        let lines = document_lines(&doc).join("\n");
+        assert!(
+            lines.contains("needs_verification"),
+            "preview must not silently rewrite the user's sentence"
+        );
+        let err = require_exportable(&doc, md).unwrap_err();
+        assert!(err.contains("needs_verification"));
+        assert!(err.contains("body line"));
+        assert!(err.contains("will not rewrite"));
+    }
+
+    #[test]
+    fn nj_and_co_body_is_left_aligned_ragged_right() {
+        for (state, court) in [
+            ("NJ", "Superior Court of New Jersey, Appellate Division"),
+            ("CO", "Colorado Court of Appeals"),
+        ] {
+            let mut p = sample_appeal_profile();
+            p.governing_state = state.into();
+            p.court.name = court.into();
+            p.motion.user_text = "# Body\nHello.\n::: signature\n/s/ Jordan Example\n:::".into();
+            let doc = assemble(&p, "motion", "Motion", &p.motion.user_text, CaptionStyle::Boxed);
+            let typst = to_typst(&doc, &crate::court_rules::CourtRules::generic());
+            assert!(
+                typst.contains("justify: false"),
+                "{state} typst body must be ragged right"
+            );
+            assert!(
+                !typst.contains("justify: true"),
+                "{state} typst must not justify body text"
+            );
+            let docx = to_docx(&doc, &crate::court_rules::CourtRules::generic()).unwrap();
+            let mut archive = zip::ZipArchive::new(std::io::Cursor::new(docx)).unwrap();
+            let mut xml = String::new();
+            archive
+                .by_name("word/document.xml")
+                .unwrap()
+                .read_to_string(&mut xml)
+                .unwrap();
+            assert!(
+                xml.contains("w:jc w:val=\"left\""),
+                "{state} docx body must be left aligned"
+            );
+            assert!(
+                !xml.contains("w:jc w:val=\"both\""),
+                "{state} docx must not justify body text"
+            );
+        }
     }
 
     #[test]

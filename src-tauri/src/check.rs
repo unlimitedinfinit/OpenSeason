@@ -852,10 +852,7 @@ The trial court entered the order on March 1. Relief is sought under R. 2:11-6.
 :::
 
 ::: certificate
-I will serve a copy of this paper myself. This software did not serve anyone.
-Recipient: Sample County Clerk
-Method: electronic mail
-Date: October 1, 2026
+I certify that on October 16, 2026 I served a copy of this motion on Sample County Clerk by electronic mail.
 :::
 "#;
         crate::court_md::import_markdown(&dir, md).unwrap();

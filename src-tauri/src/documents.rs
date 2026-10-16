@@ -403,7 +403,7 @@ fn build_docx_bytes_from_lines(
 
     let mut body = String::new();
     for para in paras {
-        let align = if para.center { "center" } else { "both" };
+        let align = if para.center { "center" } else { "left" };
         let bold = if para.bold { "<w:b/>" } else { "" };
         let text = xml_escape(&para.text);
         body.push_str(&format!(
@@ -542,7 +542,7 @@ fn build_typst_source_from_lines(lines: &[String], heading: &str, rules: &CourtR
   }}
 )
 #set text(font: ({fonts}), size: {size}pt)
-#set par(leading: {leading}em, justify: true)
+#set par(leading: {leading}em, justify: false)
 
 {blocks}
 "#,
@@ -667,7 +667,7 @@ pub fn export_pleading(
     };
     let style = crate::pleading::caption_style(profile, &key, None);
     let doc = crate::pleading::assemble(profile, &key, &title, body, style);
-    crate::pleading::require_complete_certificate(&doc)?;
+    crate::pleading::require_exportable(&doc, body)?;
     let rules = CourtRules::load_for_case(case_dir);
     let dest = out_dir
         .map(|p| p.to_path_buf())
@@ -717,7 +717,7 @@ pub fn export_custom_filing(
     let heading = if title.trim().is_empty() { "MOTION" } else { title.trim() };
     let style = crate::pleading::caption_style(profile, "motion", None);
     let court_doc = crate::pleading::assemble(profile, "motion", heading, user_text, style);
-    crate::pleading::require_complete_certificate(&court_doc)?;
+    crate::pleading::require_exportable(&court_doc, user_text)?;
     let rules = CourtRules::load_for_case(case_dir);
     let dest = out_dir
         .map(|p| p.to_path_buf())
@@ -793,7 +793,7 @@ pub fn export_court_markdown(
     };
     let style = crate::pleading::caption_style(&working, "motion", None);
     let court_doc = crate::pleading::assemble(&working, "motion", heading, &parsed.body, style);
-    crate::pleading::require_complete_certificate(&court_doc)?;
+    crate::pleading::require_exportable(&court_doc, &parsed.body)?;
     let rules = CourtRules::load_for_case(case_dir);
     let dest = out_dir
         .map(|p| p.to_path_buf())
@@ -1131,8 +1131,22 @@ mod tests {
         assert!(!co_text.to_ascii_lowercase().contains("needs_verification"));
         assert!(nj_text.contains("Case Number"));
         assert!(co_text.contains("Case Number"));
-        assert!(nj_text.contains("Recipient: Sample County Clerk"));
-        assert!(co_text.contains("Recipient: Sample County Clerk"));
+        assert!(nj_text.contains("I served a copy"));
+        assert!(nj_text.contains("Sample County Clerk"));
+        assert!(
+            nj_text.contains("electronic mail")
+                || (nj_text.contains("electronic") && nj_text.contains("mail")),
+            "NJ COS method missing: {nj_text}"
+        );
+        assert!(co_text.contains("I served a copy"));
+        assert!(co_text.contains("Sample County Clerk"));
+        assert!(
+            co_text.contains("electronic mail")
+                || (co_text.contains("electronic") && co_text.contains("mail")),
+            "CO COS method missing: {co_text}"
+        );
+        assert!(!nj_text.to_ascii_lowercase().contains("i will serve"));
+        assert!(!co_text.to_ascii_lowercase().contains("i will serve"));
         let _ = fs::remove_dir_all(&nj_dir);
         let _ = fs::remove_dir_all(&co_dir);
     }
@@ -1158,7 +1172,8 @@ mod tests {
         assert!(blob.contains("APPELLATE BRIEF") || blob.contains("Appellate brief"));
         assert!(blob.contains("user's own brief point"));
         assert!(blob.contains("CERTIFICATE OF SERVICE"));
-        assert!(blob.contains("did not file or serve"));
+        assert!(blob.contains("I certify that on ____________ I served a copy of this"));
+        assert!(!blob.to_ascii_lowercase().contains("i will serve"));
         assert!(blob.contains("Jordan Example"));
     }
 }

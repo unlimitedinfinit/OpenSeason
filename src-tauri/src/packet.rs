@@ -65,8 +65,7 @@ fn part_lines(profile: &CaseProfile, id: &str) -> (String, Vec<String>) {
         "certificate" => (
             "CERTIFICATE OF SERVICE",
             vec![
-                "I certify that on the date I actually serve this packet, I will serve a copy on the parties listed in the caption by a method the court rules allow.",
-                "This software did not serve anyone.",
+                "I certify that on ____________ I served a copy of this paper on ____________ by ____________.",
             ],
         ),
         _ => (

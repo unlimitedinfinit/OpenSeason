@@ -418,6 +418,15 @@ pub fn preview_markdown(profile: &CaseProfile, markdown: &str) -> CourtPreview {
     let doc = crate::pleading::assemble(&working, "motion", heading, &parsed.body, style);
     let lines = crate::pleading::document_lines(&doc);
     let blob = lines.join("\n");
+    let leaks = crate::pleading::find_verification_leaks(&parsed.body);
+    let notice = if leaks.is_empty() {
+        "Preview only. Nothing was filed or served. Review every line before you export.".into()
+    } else {
+        format!(
+            "Warning: user-authored text contains 'needs_verification' ({}). Export will refuse until you remove it from the paper (YAML metadata is fine). Preview does not rewrite your sentences.",
+            crate::pleading::format_verification_leaks(&leaks)
+        )
+    };
     CourtPreview {
         ok: !parsed.body.trim().is_empty() || !working.motion.user_text.trim().is_empty(),
         never_files: true,
@@ -431,8 +440,7 @@ pub fn preview_markdown(profile: &CaseProfile, markdown: &str) -> CourtPreview {
         has_signature: blob.contains("/s/"),
         has_certificate: blob.contains("CERTIFICATE OF SERVICE"),
         markup_stripped: !crate::pleading::contains_forbidden_markup(&blob),
-        notice: "Preview only. Nothing was filed or served. Review every line before you export."
-            .into(),
+        notice,
         lines,
     }
 }
@@ -476,7 +484,7 @@ pub fn markdown_from_profile(profile: &CaseProfile, kind: &str) -> String {
         format!("county_or_district: {distinct_div}\n")
     };
     format!(
-        "---\ncourt: {court}\n{div_line}plaintiff: {plaintiff}\nplaintiff_label: {plabel}\ndefendant: {defendant}\ndefendant_label: {dlabel}\ncase_no: {docket}\ncase_no_label: Docket No.\ndoc_title: {doc_title}\nfiler_email: {email}\nfiler_phone: {phone}\nfiler_address: {filer_addr}\n---\n\n{body}\n\n::: signature\n/s/ {sig}\n{name}\n{role}\n{addr}\n{phone}\n{email}\n:::\n\n::: certificate\nI will serve a copy of this paper myself. This software did not serve anyone.\nRecipient: ____________\nMethod: ____________\nDate: ____________\n:::\n",
+        "---\ncourt: {court}\n{div_line}plaintiff: {plaintiff}\nplaintiff_label: {plabel}\ndefendant: {defendant}\ndefendant_label: {dlabel}\ncase_no: {docket}\ncase_no_label: Docket No.\ndoc_title: {doc_title}\nfiler_email: {email}\nfiler_phone: {phone}\nfiler_address: {filer_addr}\n---\n\n{body}\n\n::: signature\n/s/ {sig}\n{name}\n{role}\n{addr}\n{phone}\n{email}\n:::\n\n::: certificate\nI certify that on ____________ I served a copy of this paper on ____________ by ____________.\n:::\n",
         court = profile.court.name,
         div_line = div_line,
         plabel = left.first().map(|p| p.role.as_str()).unwrap_or("Plaintiff"),
@@ -572,6 +580,8 @@ The trial court entered the order on March 1.
         assert!(blob.contains("COURT USE ONLY"));
         assert!(blob.contains("Appellate"));
         assert!(blob.contains("CERTIFICATE OF SERVICE"));
+        assert!(blob.contains("I certify that on October 16, 2026 I served a copy of this motion on Sample County Clerk by electronic mail."));
+        assert!(!blob.to_ascii_lowercase().contains("i will serve"));
         assert!(blob.contains("/s/ Jordan Example"));
         assert!(blob.contains("100 Sample Street"));
         assert!(blob.contains("jordan.example@example.test"));
@@ -595,7 +605,8 @@ The trial court entered the order on March 1.
         assert!(!cob.contains("DECLARATION UNDER C.R.S."));
         assert!(!cob.contains("Certificate of Conferral (C.R.C.P. 121"));
         assert!(!cob.to_ascii_lowercase().contains("needs_verification"));
-        assert!(cob.contains("Recipient: Sample County Clerk"));
+        assert!(cob.contains("I certify that on October 2, 2026 I served a copy of this motion on Sample County Clerk by electronic mail."));
+        assert!(!cob.to_ascii_lowercase().contains("i will serve"));
         assert!(co.has_certificate);
         assert!(co.has_signature);
     }
@@ -621,9 +632,8 @@ I will serve a copy of this paper myself. This software did not serve anyone.
 "#;
         let preview = preview_markdown(&empty, md);
         let blob = preview.lines.join("\n");
-        assert!(blob.contains("Recipient: ____________"));
-        assert!(blob.contains("Method: ____________"));
-        assert!(blob.contains(crate::pleading::DATE_BLANK));
+        assert!(blob.contains("I certify that on ____________ I served a copy of this motion on ____________ by ____________."));
+        assert!(!blob.to_ascii_lowercase().contains("i will serve"));
         assert!(!blob.contains("parties listed below"));
 
         let dir = std::env::temp_dir().join(format!("os-cos-{}", uuid::Uuid::new_v4()));
