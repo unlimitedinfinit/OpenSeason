@@ -1,18 +1,17 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
-  import ReviewNotice from "$lib/components/ReviewNotice.svelte";
   import CloudSyncModal from "$lib/components/CloudSyncModal.svelte";
   import PdfToolsModal from "$lib/components/PdfToolsModal.svelte";
   import SignatureStudioModal from "$lib/components/SignatureStudioModal.svelte";
-  import PortfolioRadarCard from "$lib/components/PortfolioRadarCard.svelte";
   import PromptDialog from "$lib/components/PromptDialog.svelte";
   import { ipc, runningInTauri } from "$lib/ipc";
   import { session } from "$lib/session.svelte";
-  import type { WorkspaceCase, CloudSession, FolderImportReport, BootstrapResult } from "$lib/types/case";
+  import type { WorkspaceCase, CloudSession, FolderImportReport, BootstrapResult, PortfolioStatusReport, PortfolioCaseItem } from "$lib/types/case";
 
   let cases = $state<WorkspaceCase[]>([]);
   let casesRoot = $state("");
+  let portfolio = $state<PortfolioStatusReport | null>(null);
   let loadError = $state("");
   let actionError = $state("");
   let status = $state("");
@@ -21,7 +20,24 @@
   let showSignatureModal = $state(false);
   let cloudSession = $state<CloudSession | null>(null);
   let promptKind = $state<"folder" | "osb" | "import" | "bootstrap" | null>(null);
-  let showLocalCases = $state(true);
+  let heroQuery = $state("");
+
+  const QUICK_GOALS = [
+    { label: "⏱️ Need 30-Day Extension", goal: "Assess baseline 30-day extension safeguard and draft opposing counsel conferral email" },
+    { label: "📁 Auto-Organize Court Folder", action: () => (promptKind = "bootstrap") },
+    { label: "⚖️ Audit Court Order", goal: "Audit court order findings and test factual discrepancies against evidence" },
+    { label: "📝 File Notice of Appeal", goal: "Prepare and file Notice of Appeal with jurisdictional mail audit" },
+    { label: "🔍 Search Legal Forms", action: () => goto("/forms") },
+  ];
+
+  const RESOURCE_CATEGORIES = [
+    { id: "housing", label: "Housing", desc: "Eviction defense, leases, repairs", icon: "🏠" },
+    { id: "family", label: "Family", desc: "Custody, support, parenting", icon: "👨‍👩‍👧" },
+    { id: "wills", label: "Wills & Estates", desc: "Probate, directives, POA", icon: "📜" },
+    { id: "contracts", label: "Contracts", desc: "NDAs, contractor, bills of sale", icon: "💼" },
+    { id: "court", label: "Court Forms", desc: "Fee waivers, summons, notices", icon: "⚖️" },
+    { id: "all", label: "Full Library", desc: "Browse all official packs", icon: "📚" },
+  ];
 
   onMount(() => {
     load();
@@ -40,10 +56,17 @@
     try {
       casesRoot = await ipc<string>("get_cases_root");
       cases = await ipc<WorkspaceCase[]>("list_workspace_cases");
+      portfolio = await ipc<PortfolioStatusReport>("portfolio_status_cmd").catch(() => null);
       loadError = "";
     } catch (e) {
       loadError = String(e);
     }
+  }
+
+  function handleHeroSubmit() {
+    const q = heroQuery.trim();
+    if (!q) return;
+    goto(`/ai?goal=${encodeURIComponent(q)}`);
   }
 
   function startNew(kind: string = "reconsideration") {
@@ -94,315 +117,283 @@
     actionError = "";
     try {
       const profile = await ipc<{ id: string }>("seed_sample_cmd");
-      status = "Opened the fake Lucille Example sample. Nothing was filed.";
+      status = "Opened sample case (Lucille Example). Nothing was filed.";
       await load();
       goto(`/case/${profile.id}`);
     } catch (e) {
       actionError = String(e);
     }
   }
+
+  function getMatterUrgency(caseId: string): PortfolioCaseItem | undefined {
+    return portfolio?.matters?.find((m) => m.case_id === caseId);
+  }
 </script>
 
-<main class="container mx-auto p-6 md:p-8 space-y-8 max-w-5xl">
-  <!-- Top App Header -->
-  <div class="flex flex-col sm:flex-row justify-between items-start gap-4">
-    <div class="space-y-1">
-      <div class="flex items-center gap-2">
-        <h1 class="text-2xl md:text-3xl font-bold tracking-tight text-foreground">JustLegal Desktop</h1>
-        <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-primary/20 text-primary border border-primary/30">Local-First</span>
+<main class="container mx-auto p-4 md:p-6 space-y-5 max-w-6xl">
+  <!-- Top Bar: Apple-Style Compact Header -->
+  <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+    <div class="flex items-center gap-2.5">
+      <div class="w-8 h-8 rounded-xl bg-primary/20 border border-primary/30 flex items-center justify-center text-primary font-bold shadow-sm">
+        ⚖️
       </div>
-      <p class="text-sm text-muted-foreground">
-        Your legal workspace · Private and local-first
-      </p>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-xl md:text-2xl font-bold tracking-tight text-foreground">JustLegal Desktop</h1>
+          <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+            Local-First · Private
+          </span>
+        </div>
+        <p class="text-xs text-muted-foreground">Your sovereign legal operating system and case workspace</p>
+      </div>
     </div>
-    <div class="flex flex-wrap items-center gap-2 shrink-0">
-      <button onclick={() => (showPdfToolsModal = true)} class="text-xs border border-border bg-card hover:border-primary/50 text-foreground px-3 py-1.5 rounded-md transition-colors" aria-label="PDF tools">
-        PDF tools
+
+    <!-- Quick Utilities Ribbon -->
+    <div class="flex flex-wrap items-center gap-1.5 shrink-0">
+      <button onclick={() => (showPdfToolsModal = true)} class="text-xs border border-border/80 bg-card/80 hover:border-primary/50 text-foreground px-3 py-1.5 rounded-xl transition-all shadow-sm">
+        PDF Studio
       </button>
-      <button onclick={() => (showSignatureModal = true)} class="text-xs border border-border bg-card hover:border-primary/50 text-foreground px-3 py-1.5 rounded-md transition-colors" aria-label="Signature stamp">
-        Signature
+      <button onclick={() => (showSignatureModal = true)} class="text-xs border border-border/80 bg-card/80 hover:border-primary/50 text-foreground px-3 py-1.5 rounded-xl transition-all shadow-sm">
+        Signature Block
       </button>
-      <button onclick={() => (showCloudModal = true)} class="text-xs border border-border bg-card hover:border-primary/50 text-foreground px-3 py-1.5 rounded-md transition-colors" aria-label="JustLegal Cloud">
-        {cloudSession ? `Account: ${cloudSession.email.split("@")[0]}` : "Continue from JustLegal.me"}
+      <button onclick={() => (showCloudModal = true)} class="text-xs border border-border/80 bg-card/80 hover:border-primary/50 text-foreground px-3 py-1.5 rounded-xl transition-all shadow-sm">
+        {cloudSession ? `Account: ${cloudSession.email.split("@")[0]}` : "JustLegal.me"}
       </button>
-      <button onclick={() => goto("/confidential")} class="text-xs border border-red-500/40 text-red-300 hover:bg-red-500/10 px-3 py-1.5 rounded-md transition-colors">
-        {session.unlocked ? "Confidential tools" : "Unlock Confidential"}
+      <button onclick={() => goto("/confidential")} class="text-xs border border-red-500/30 text-red-300 hover:bg-red-500/10 px-3 py-1.5 rounded-xl transition-all shadow-sm">
+        {session.unlocked ? "Confidential Vault" : "Unlock Vault"}
       </button>
     </div>
   </div>
 
-  {#if actionError}<p class="text-sm text-destructive bg-destructive/10 p-3 rounded-md border border-destructive/20">{actionError}</p>{/if}
-  {#if status}<p class="text-sm text-primary bg-primary/10 p-3 rounded-md border border-primary/20">{status}</p>{/if}
+  {#if actionError}
+    <div class="p-3 bg-destructive/10 border border-destructive/30 rounded-xl text-xs text-destructive flex items-center justify-between">
+      <span>{actionError}</span>
+      <button class="font-bold text-sm px-1 text-destructive" onclick={() => (actionError = "")}>&times;</button>
+    </div>
+  {/if}
 
-  <!-- Section 1: Your Workspace -->
-  <section class="space-y-3">
-    <h2 class="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Your workspace</h2>
-    <div class="grid gap-3 sm:grid-cols-3">
-      <!-- Start a new case -->
-      <button
-        onclick={() => startNew("reconsideration")}
-        class="group text-left p-5 rounded-lg border border-border bg-card hover:border-primary/60 hover:bg-card/80 transition-all flex items-start gap-4"
-      >
-        <div class="p-2.5 rounded-md bg-secondary text-foreground group-hover:text-primary transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-          </svg>
-        </div>
-        <div>
-          <h3 class="font-semibold text-foreground group-hover:text-primary transition-colors">Start a new case</h3>
-          <p class="text-xs text-muted-foreground mt-0.5">Guided setup or custom matter</p>
-        </div>
-      </button>
+  {#if status}
+    <div class="p-3 bg-primary/10 border border-primary/30 rounded-xl text-xs text-primary flex items-center justify-between">
+      <span>{status}</span>
+      <button class="font-bold text-sm px-1 text-primary" onclick={() => (status = "")}>&times;</button>
+    </div>
+  {/if}
 
-      <!-- Case Rescue: Already have a case? Let's get organized -->
-      <button
-        onclick={() => (promptKind = "bootstrap")}
-        class="group text-left p-5 rounded-lg border border-amber-500/30 bg-amber-950/10 hover:border-amber-500/60 hover:bg-amber-950/20 transition-all flex items-start gap-4"
-      >
-        <div class="p-2.5 rounded-md bg-amber-500/20 text-amber-300 group-hover:text-amber-200 transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-          </svg>
-        </div>
-        <div>
-          <h3 class="font-semibold text-amber-200 group-hover:text-amber-100 transition-colors">Case Rescue</h3>
-          <p class="text-xs text-amber-300/70 mt-0.5">Already have a folder? Auto-organize orders & filings</p>
-        </div>
-      </button>
+  <!-- Spotlight Hero: Central AI Command Bar -->
+  <div class="rounded-3xl border border-primary/30 bg-gradient-to-b from-card/80 to-card/50 backdrop-blur-2xl p-5 md:p-6 space-y-3.5 shadow-xl">
+    <div class="space-y-1">
+      <div class="flex items-center justify-between">
+        <label for="hero-assistant-input" class="text-sm font-semibold text-foreground flex items-center gap-2">
+          <span>What are you trying to accomplish?</span>
+          <span class="text-[10px] text-muted-foreground font-normal">(Explain in plain English; assistant handles the mechanics)</span>
+        </label>
+        <button
+          onclick={() => goto("/ai")}
+          class="text-xs text-primary hover:underline font-medium flex items-center gap-1"
+        >
+          Open Full AI Studio →
+        </button>
+      </div>
 
-      <!-- Continue from JustLegal.me -->
-      <button
-        onclick={() => (showCloudModal = true)}
-        class="group text-left p-5 rounded-lg border border-border bg-card hover:border-primary/60 hover:bg-card/80 transition-all flex items-start gap-4"
-      >
-        <div class="p-2.5 rounded-md bg-secondary text-foreground group-hover:text-primary transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-          </svg>
-        </div>
-        <div>
-          <h3 class="font-semibold text-foreground group-hover:text-primary transition-colors">Continue from JustLegal.me</h3>
-          <p class="text-xs text-muted-foreground mt-0.5">Connect account & choose case to sync</p>
-        </div>
-      </button>
+      <div class="flex gap-2">
+        <input
+          id="hero-assistant-input"
+          type="text"
+          bind:value={heroQuery}
+          onkeydown={(e) => e.key === "Enter" && handleHeroSubmit()}
+          placeholder="e.g. I need a 30-day extension, or I have a folder of court orders to organize, or I need eviction defense forms..."
+          class="flex-1 px-4 py-3 text-sm rounded-2xl border border-border bg-background/90 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary shadow-inner"
+        />
+        <button
+          onclick={handleHeroSubmit}
+          disabled={!heroQuery.trim()}
+          class="px-5 py-3 bg-primary hover:opacity-90 disabled:opacity-50 text-primary-foreground font-semibold text-sm rounded-2xl shadow-md transition-opacity flex items-center gap-1.5 shrink-0"
+        >
+          <span>Ask Assistant</span>
+        </button>
+      </div>
     </div>
 
-    <!-- Open an existing local case banner -->
-    <div class="rounded-lg border border-border bg-card overflow-hidden">
-      <button
-        onclick={() => (showLocalCases = !showLocalCases)}
-        class="w-full text-left p-4 hover:bg-muted/40 transition-colors flex items-center justify-between gap-4"
-      >
-        <div class="flex items-center gap-3.5">
-          <div class="p-2 rounded-md bg-secondary text-foreground">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-            </svg>
-          </div>
-          <div>
-            <h3 class="text-sm font-semibold text-foreground">Open an existing local case</h3>
-            <p class="text-xs text-muted-foreground">Recent matters and case folders on this computer</p>
-          </div>
+    <!-- Quick Action Pills -->
+    <div class="flex flex-wrap items-center gap-2 pt-1">
+      <span class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mr-1">Quick Goals:</span>
+      {#each QUICK_GOALS as qg}
+        <button
+          type="button"
+          onclick={() => {
+            if (qg.action) qg.action();
+            else if (qg.goal) goto(`/ai?goal=${encodeURIComponent(qg.goal)}`);
+          }}
+          class="text-xs px-3 py-1.5 rounded-full border border-border/80 bg-secondary/70 hover:border-primary/60 hover:bg-card text-foreground transition-all shadow-sm"
+        >
+          {qg.label}
+        </button>
+      {/each}
+    </div>
+  </div>
+
+  <!-- Main Split Hub: Dense, Proportional Viewport Layout -->
+  <div class="grid gap-5 lg:grid-cols-12 items-start">
+    <!-- Left Column (7 cols): Active Matters & Case Workspaces -->
+    <section class="lg:col-span-7 rounded-2xl border border-border/70 bg-card/60 backdrop-blur-xl p-5 space-y-4 shadow-sm">
+      <div class="flex items-center justify-between border-b border-border/40 pb-3">
+        <div class="flex items-center gap-2.5">
+          <span class="w-2.5 h-2.5 rounded-full bg-primary"></span>
+          <h2 class="text-sm font-bold uppercase tracking-wider text-foreground">Your Matters</h2>
+          <span class="text-xs font-mono px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
+            {cases.length} {cases.length === 1 ? 'matter' : 'matters'}
+          </span>
         </div>
         <div class="flex items-center gap-2">
-          <span class="text-xs text-muted-foreground font-mono">{cases.length} {cases.length === 1 ? 'case' : 'cases'}</span>
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-muted-foreground transition-transform {showLocalCases ? 'rotate-90' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-          </svg>
+          <button onclick={() => (promptKind = "folder")} class="text-xs text-muted-foreground hover:text-foreground transition-colors">
+            Browse folder
+          </button>
+          <span class="text-muted-foreground text-xs">·</span>
+          <button onclick={trySample} class="text-xs text-muted-foreground hover:text-foreground transition-colors">
+            Sample case
+          </button>
+          <button
+            onclick={() => startNew("reconsideration")}
+            class="text-xs font-semibold bg-primary/10 text-primary hover:bg-primary/20 border border-primary/30 px-3 py-1 rounded-xl transition-colors ml-1"
+          >
+            + New Case
+          </button>
         </div>
-      </button>
+      </div>
 
-      {#if showLocalCases}
-        <div class="p-4 pt-0 border-t border-border/50 space-y-3">
-          <div class="flex flex-wrap items-center justify-between gap-2 pt-3">
-            <span class="text-xs font-mono text-muted-foreground truncate max-w-sm">{casesRoot || "Default cases folder"}</span>
-            <div class="flex gap-2">
-              <button onclick={() => (promptKind = "folder")} class="text-xs border border-border px-2.5 py-1 rounded hover:border-primary/50">
-                Browse folder
-              </button>
-              <button onclick={() => (promptKind = "import")} class="text-xs border border-border px-2.5 py-1 rounded hover:border-primary/50">
-                Import papers
-              </button>
-              <button onclick={trySample} class="text-xs border border-border px-2.5 py-1 rounded hover:border-primary/50">
-                Sample case
-              </button>
-            </div>
+      {#if loadError}
+        <p class="text-xs text-destructive">{loadError}</p>
+      {:else if cases.length === 0}
+        <div class="p-8 text-center border border-dashed border-border/80 rounded-2xl space-y-3 bg-background/30">
+          <p class="text-sm text-foreground font-medium">No legal cases detected yet.</p>
+          <p class="text-xs text-muted-foreground max-w-sm mx-auto">
+            Start a guided case setup, or point Case Rescue at a folder of court papers to organize your docket automatically.
+          </p>
+          <div class="flex justify-center gap-2.5 pt-2">
+            <button onclick={() => startNew("reconsideration")} class="text-xs font-semibold bg-primary text-primary-foreground px-4 py-2 rounded-xl shadow-sm hover:opacity-90 transition-opacity">
+              Start Guided Intake
+            </button>
+            <button onclick={() => (promptKind = "bootstrap")} class="text-xs font-semibold border border-amber-500/40 text-amber-300 hover:bg-amber-500/10 px-4 py-2 rounded-xl transition-colors">
+              Rescue Court Folder
+            </button>
           </div>
-
-          {#if loadError}
-            <p class="text-xs text-destructive">Could not load cases: {loadError}</p>
-          {:else if cases.length === 0}
-            <p class="text-xs text-muted-foreground p-4 text-center border border-dashed border-border rounded-md">
-              No local cases yet. Click "Start a new case" above to begin.
-            </p>
-          {:else}
-            <div class="grid gap-2.5 sm:grid-cols-2 pt-1">
-              {#each cases as item}
-                <button
-                  onclick={() => goto(`/case/${item.profile.id}`)}
-                  class="text-left p-3.5 rounded-md border border-border bg-background/60 hover:border-primary/50 transition-colors space-y-1.5 group"
-                >
-                  <div class="flex justify-between items-start gap-2">
-                    <h4 class="text-sm font-semibold text-foreground group-hover:text-primary transition-colors truncate">
-                      {item.profile.title || "Untitled case"}
-                    </h4>
-                    <span class="text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded border {item.profile.mode === 'confidential' ? 'border-red-500/40 text-red-300' : 'border-border text-muted-foreground'} shrink-0">
-                      {item.profile.mode}{item.sealed ? " · sealed" : ""}
+        </div>
+      {:else}
+        <div class="space-y-2.5 max-h-[460px] overflow-y-auto pr-1">
+          {#each cases as item}
+            {@const urgency = getMatterUrgency(item.profile.id)}
+            <button
+              onclick={() => goto(`/case/${item.profile.id}`)}
+              class="w-full text-left p-4 rounded-xl border border-border/70 bg-background/60 hover:border-primary/60 hover:bg-background/90 transition-all space-y-2 group shadow-sm"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="space-y-0.5 truncate">
+                  <h4 class="text-sm font-semibold text-foreground group-hover:text-primary transition-colors truncate">
+                    {item.profile.title || "Untitled Matter"}
+                  </h4>
+                  <p class="text-xs text-muted-foreground truncate font-mono">
+                    {item.profile.court.name || "Court unassigned"} {item.profile.docket_number ? `· Docket #${item.profile.docket_number}` : ""}
+                  </p>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <span class="text-[10px] font-mono uppercase px-2 py-0.5 rounded-full border border-border/60 bg-secondary/80 text-muted-foreground">
+                    {item.profile.document_kind.replaceAll("_", " ")}
+                  </span>
+                  {#if item.sealed}
+                    <span class="text-[10px] font-mono px-2 py-0.5 rounded-full border border-red-500/30 bg-red-500/10 text-red-300">
+                      Sealed
                     </span>
-                  </div>
-                  <p class="text-xs text-muted-foreground truncate">
-                    {item.profile.court.name || "Court not filled"} {item.profile.docket_number ? `· ${item.profile.docket_number}` : ""}
-                  </p>
-                  <p class="text-[10px] text-muted-foreground">
-                    {item.profile.document_kind.replaceAll("_", " ") || "case workspace"}
-                  </p>
-                </button>
-              {/each}
-            </div>
-          {/if}
+                  {/if}
+                </div>
+              </div>
+
+              {#if urgency && urgency.urgent_deadline}
+                <div class="flex items-center justify-between text-xs pt-1 border-t border-border/30">
+                  <span class="text-muted-foreground text-[11px] truncate">
+                    Next: <strong class="text-foreground">{urgency.urgent_branch_title}</strong>
+                  </span>
+                  <span class="text-[11px] font-mono font-semibold px-2 py-0.5 rounded-full {urgency.days_until_due != null && urgency.days_until_due <= 7 ? 'bg-red-500/20 text-red-300 border border-red-500/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'}">
+                    {urgency.days_until_due != null ? `${urgency.days_until_due}d remaining` : urgency.urgent_deadline}
+                  </span>
+                </div>
+              {/if}
+            </button>
+          {/each}
         </div>
       {/if}
+    </section>
+
+    <!-- Right Column (5 cols): Case Starters & Compact Resource Hub -->
+    <div class="lg:col-span-5 space-y-4">
+      <!-- Fast Starters Ribbon -->
+      <section class="rounded-2xl border border-border/70 bg-card/60 backdrop-blur-xl p-4 space-y-2.5 shadow-sm">
+        <h3 class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Quick Setup</h3>
+        <div class="grid gap-2">
+          <button
+            onclick={() => startNew("reconsideration")}
+            class="text-left p-3 rounded-xl border border-border/60 bg-background/50 hover:border-primary/50 hover:bg-background transition-all flex items-center justify-between group"
+          >
+            <div>
+              <h4 class="text-xs font-semibold text-foreground group-hover:text-primary transition-colors">Start a New Case</h4>
+              <p class="text-[11px] text-muted-foreground">Guided intake wizard or custom matter</p>
+            </div>
+            <span class="text-xs text-muted-foreground group-hover:text-primary transition-colors">→</span>
+          </button>
+
+          <button
+            onclick={() => (promptKind = "bootstrap")}
+            class="text-left p-3 rounded-xl border border-amber-500/30 bg-amber-950/10 hover:border-amber-500/60 transition-all flex items-center justify-between group"
+          >
+            <div>
+              <h4 class="text-xs font-semibold text-amber-200">Case Rescue</h4>
+              <p class="text-[11px] text-amber-300/70">Drop a messy folder to auto-organize dockets</p>
+            </div>
+            <span class="text-xs text-amber-300">→</span>
+          </button>
+
+          <button
+            onclick={() => (showCloudModal = true)}
+            class="text-left p-3 rounded-xl border border-border/60 bg-background/50 hover:border-primary/50 hover:bg-background transition-all flex items-center justify-between group"
+          >
+            <div>
+              <h4 class="text-xs font-semibold text-foreground group-hover:text-primary transition-colors">Continue from JustLegal.me</h4>
+              <p class="text-[11px] text-muted-foreground">Sync cloud workspace & verified forms</p>
+            </div>
+            <span class="text-xs text-muted-foreground group-hover:text-primary transition-colors">→</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Compact Legal Resource & Forms Navigator -->
+      <section class="rounded-2xl border border-border/70 bg-card/60 backdrop-blur-xl p-4 space-y-3 shadow-sm">
+        <div class="flex items-center justify-between">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-muted-foreground">Forms & Resources</h3>
+          <button onclick={() => goto("/forms")} class="text-[11px] text-primary hover:underline font-medium">
+            Browse All (30+) →
+          </button>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          {#each RESOURCE_CATEGORIES as cat}
+            <button
+              onclick={() => goto(cat.id === "all" ? "/forms" : `/forms?category=${cat.id}`)}
+              class="text-left p-2.5 rounded-xl border border-border/50 bg-background/50 hover:border-primary/50 hover:bg-background transition-all group space-y-0.5"
+            >
+              <div class="text-sm">{cat.icon}</div>
+              <h4 class="text-xs font-semibold text-foreground group-hover:text-primary transition-colors truncate">{cat.label}</h4>
+              <p class="text-[10px] text-muted-foreground line-clamp-1">{cat.desc}</p>
+            </button>
+          {/each}
+        </div>
+      </section>
     </div>
-  </section>
+  </div>
 
-  <!-- Section 2: Or find a form, document, or resource -->
-  <section class="space-y-3">
-    <div>
-      <h2 class="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Or find a form, document, or resource</h2>
-      <p class="text-xs text-muted-foreground mt-0.5">No active lawsuit or case setup required.</p>
-    </div>
-
-    <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
-      <!-- Housing -->
-      <button
-        onclick={() => goto("/forms?category=housing")}
-        class="group p-4 rounded-lg border border-border bg-card hover:border-primary/60 hover:bg-card/80 transition-all flex flex-col items-start gap-2.5 text-left"
-      >
-        <div class="p-2 rounded-md bg-secondary text-foreground group-hover:text-primary transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-          </svg>
-        </div>
-        <div>
-          <h3 class="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">Housing</h3>
-          <p class="text-xs text-muted-foreground">Leases, eviction defenses, repair demands</p>
-        </div>
-      </button>
-
-      <!-- Family -->
-      <button
-        onclick={() => goto("/forms?category=family")}
-        class="group p-4 rounded-lg border border-border bg-card hover:border-primary/60 hover:bg-card/80 transition-all flex flex-col items-start gap-2.5 text-left"
-      >
-        <div class="p-2 rounded-md bg-secondary text-foreground group-hover:text-primary transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-          </svg>
-        </div>
-        <div>
-          <h3 class="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">Family</h3>
-          <p class="text-xs text-muted-foreground">Custody, support, parenting plans</p>
-        </div>
-      </button>
-
-      <!-- Wills & Estates -->
-      <button
-        onclick={() => goto("/forms?category=wills")}
-        class="group p-4 rounded-lg border border-border bg-card hover:border-primary/60 hover:bg-card/80 transition-all flex flex-col items-start gap-2.5 text-left"
-      >
-        <div class="p-2 rounded-md bg-secondary text-foreground group-hover:text-primary transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-        </div>
-        <div>
-          <h3 class="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">Wills & estates</h3>
-          <p class="text-xs text-muted-foreground">Wills, powers of attorney, healthcare directives</p>
-        </div>
-      </button>
-
-      <!-- Contracts -->
-      <button
-        onclick={() => goto("/forms?category=contracts")}
-        class="group p-4 rounded-lg border border-border bg-card hover:border-primary/60 hover:bg-card/80 transition-all flex flex-col items-start gap-2.5 text-left"
-      >
-        <div class="p-2 rounded-md bg-secondary text-foreground group-hover:text-primary transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-          </svg>
-        </div>
-        <div>
-          <h3 class="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">Contracts</h3>
-          <p class="text-xs text-muted-foreground">NDAs, contractor agreements, bills of sale</p>
-        </div>
-      </button>
-
-      <!-- Court forms -->
-      <button
-        onclick={() => goto("/forms?category=court")}
-        class="group p-4 rounded-lg border border-border bg-card hover:border-primary/60 hover:bg-card/80 transition-all flex flex-col items-start gap-2.5 text-left"
-      >
-        <div class="p-2 rounded-md bg-secondary text-foreground group-hover:text-primary transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3" />
-          </svg>
-        </div>
-        <div>
-          <h3 class="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">Court forms</h3>
-          <p class="text-xs text-muted-foreground">Fee waivers, summons, notices of appeal</p>
-        </div>
-      </button>
-
-      <!-- Full library -->
-      <button
-        onclick={() => goto("/forms")}
-        class="group p-4 rounded-lg border border-border bg-card hover:border-primary/60 hover:bg-card/80 transition-all flex flex-col items-start gap-2.5 text-left"
-      >
-        <div class="p-2 rounded-md bg-secondary text-foreground group-hover:text-primary transition-colors">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-          </svg>
-        </div>
-        <div>
-          <h3 class="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">Full library</h3>
-          <p class="text-xs text-muted-foreground">Search and browse all official forms & templates</p>
-        </div>
-      </button>
-    </div>
-  </section>
-
-  <!-- Section 3: Need help getting started? (Assistant Launcher) -->
-  <section>
-    <div class="p-5 rounded-lg border border-border bg-card hover:border-primary/50 transition-colors flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-      <div class="flex items-start gap-3.5">
-        <div class="p-2.5 rounded-md bg-secondary text-foreground shrink-0 mt-0.5 sm:mt-0">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-          </svg>
-        </div>
-        <div>
-          <h3 class="font-semibold text-foreground">Need help getting started?</h3>
-          <p class="text-xs text-muted-foreground mt-0.5">
-            Work with your connected assistant to organize a case, find resources, and use JustLegal tools.
-          </p>
-        </div>
-      </div>
-      <div class="flex gap-2 shrink-0 w-full sm:w-auto">
-        <button onclick={() => goto("/guide")} class="flex-1 sm:flex-none text-xs border border-border px-3.5 py-2 rounded-md hover:border-primary/50 text-foreground transition-colors">
-          Intake Guide
-        </button>
-        <button onclick={() => goto("/ai")} class="flex-1 sm:flex-none text-xs bg-primary text-primary-foreground px-3.5 py-2 rounded-md hover:opacity-90 transition-opacity">
-          Open AI CLI & Tools
-        </button>
-      </div>
-    </div>
-  </section>
-
-  <!-- Active Litigation Portfolio Radar -->
-  <PortfolioRadarCard onCreated={load} />
-
-  <!-- Legal Disclaimer & Attorney Notice -->
-  <ReviewNotice />
+  <!-- Bottom: Discreet Review & Legal Notice -->
+  <footer class="pt-2 text-center">
+    <p class="text-[11px] text-muted-foreground">
+      OpenSeason / JustLegal OS formats user-authored material into court-compliant files. It does not provide legal advice and never files or serves documents without human review.
+    </p>
+  </footer>
 
   <!-- Modals -->
   <CloudSyncModal bind:open={showCloudModal} onclose={() => (showCloudModal = false)} onsynced={() => { load(); checkCloud(); }} />

@@ -16,8 +16,10 @@
       <button onclick={() => goto("/")} class="text-muted-foreground hover:text-foreground transition-colors">Workspace</button>
       <button onclick={() => goto("/forms")} class="text-muted-foreground hover:text-foreground transition-colors">Forms & Templates</button>
       <button onclick={() => goto("/draft")} class="text-muted-foreground hover:text-foreground transition-colors">Draft to PDF</button>
-      <button onclick={() => goto("/guide")} class="text-muted-foreground hover:text-foreground transition-colors">What to file</button>
-      <button onclick={() => goto("/ai")} class="text-muted-foreground hover:text-foreground transition-colors">For your AI</button>
+      <button onclick={() => goto("/ai")} class="flex items-center gap-1.5 text-primary hover:opacity-90 font-medium transition-opacity">
+        <span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+        <span>AI Assistant</span>
+      </button>
     </nav>
     <HelpMenu />
   </header>
