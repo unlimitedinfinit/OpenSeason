@@ -98,6 +98,23 @@ Platform installers (`npm run tauri build`) need a full desktop toolchain. This 
 
 The CLI is a first-class surface, equal to the window. Read [AGENTS.md](AGENTS.md) and [docs/AGENT-INTERFACE.md](docs/AGENT-INTERFACE.md). `--json` returns `{ ok, never_files, never_serves, issues, data }`. `openseason mcp` is the same engine over stdio.
 
+### MCP stdio server
+
+`openseason mcp` is an offline JSON-RPC server on stdin/stdout. It calls the same Rust engine as the window. It does not file, serve, invent legal text, or talk to JustLegal Cloud.
+
+Cases live under `~/Documents/JustLegal/Cases` unless you set `OPENSEASON_CASES_ROOT`. All MCP writes stay inside that folder. Write tools (`case_create`, `draft_import`, `evidence_add`, exports, and the rest) **default to dry-run**: they report the planned action and change nothing on disk unless you pass `"dry_run": false`.
+
+```bash
+# Default cases root: ~/Documents/JustLegal/Cases
+cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- mcp
+
+# Point the server at a folder you own (tests, a scratch workspace, a USB copy)
+OPENSEASON_CASES_ROOT=/path/to/JustLegal/Cases \
+  cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- mcp
+```
+
+`tools/list` includes `case_list` (same scan as the window). Cloud sync (`cloud_pull` / `cloud_push`), `pdf_redact`, and `form_fill` are not on the MCP surface. Review every exported line before filing. This is not legal advice.
+
 ```bash
 bash examples/agent-e2e.sh
 # or, one command at a time:

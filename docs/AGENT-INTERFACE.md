@@ -120,28 +120,27 @@ Equivalent without npm: `cargo run --manifest-path src-tauri/Cargo.toml --bin op
 
 ## MCP (stdio)
 
-`openseason mcp` speaks JSON-RPC 2.0 with `Content-Length` framing **or newline-delimited JSON**. Tools include:
+`openseason mcp` speaks JSON-RPC 2.0 with `Content-Length` framing **or newline-delimited JSON**. Cases root is `OPENSEASON_CASES_ROOT` or `~/Documents/JustLegal/Cases`. All MCP writes stay under that folder. Write tools default to dry-run; pass `"dry_run": false` to apply. Tools include:
+- `case_list`: List cases under the cases root. Same `case.json` scan as the window.
 - `agent_manifest`: Tool list, MCP launch, starter prompt.
-- `import_folder`: Copy a folder of drafts/notes/orders. Does not auto-commit guesses.
+- `import_folder`: Copy a folder of drafts/notes/orders. Does not auto-commit guesses. Defaults to dry-run.
 - `case_context`: One-call consolidated Legal OS context bundle for immediate AI agent orientation.
 - `case_next_steps`: Predictive Procedural State Graph (NJ `pause_remaining` vs. CO/Federal `reset_full` tolling + mail service offset).
-- `case_escalate`: Cross-venue graduation/escalation (`trial_lawsuit`, `appellate_appeal`, `mandamus`, `scotus_cert`) with automatic appendix record carryover.
-- `intake_status`, `intake_answer`, `intake_scan`: 1-question-at-a-time Guided Intake Wizard & offline PDF candidate discovery.
+- `case_escalate`: Cross-venue graduation/escalation (`trial_lawsuit`, `appellate_appeal`, `mandamus`, `scotus_cert`) with automatic appendix record carryover. Defaults to dry-run.
+- `intake_status`, `intake_answer`, `intake_scan`: 1-question-at-a-time Guided Intake Wizard & offline PDF candidate discovery. `intake_answer` defaults to dry-run.
 - `check_venue`: Multi-Venue Competence Matrix audit (`NJ`, `CO`, `FEDERAL`, `SCOTUS`, and Tier 1 Wills/Leases/Contracts).
-- `portfolio_status`: Multi-state deadline radar across all matters.
-- `pdf_extract_text`: Page-by-page offline PDF text extraction.
-- `motion_list`, `motion_create`, `motion_export`: Autonomous multi-motion docket drafting & compilation.
-- `service_cert` & `service_order`: Court-mandated proof of service and judge-ready proposed order generation.
-- `pdf_merge`, `pdf_split`, `pdf_rotate`, `pdf_redact`: Local airgapped PDF power manipulation without cloud surveillance.
-- `sign_pdf`: Automated AcroForm and PDF electronic signature placement.
+- `portfolio_status`: Multi-state deadline radar across all matters in the cases root.
+- `pdf_extract_text`: Page-by-page offline PDF text extraction (path must stay under the cases root).
+- `motion_list`, `motion_create`, `motion_export`: Multi-motion docket list and user-text compilation. Creates/exports default to dry-run.
+- `pdf_merge`, `pdf_split`, `pdf_rotate`: Local PDF page tools. Outputs stay under the cases root. Defaults to dry-run.
 - `check_preflight`: Run comprehensive court readiness pre-flight checklist.
 - `check_transcripts`: Index transcripts and cross-reference assertions against record lines.
-- `export_exhibit_packet`: Generate Bates-stamped exhibit packet and Table of Exhibits.
-- `form_inspect`: Inspect official court PDF forms and list AcroForm fields.
-- `form_fill`: Auto-map `case.json` profile values into official court forms.
-- `cloud_pull` & `cloud_push`: Autonomous additive sync with JustLegal Cloud (airgap protected).
-- Motion path tools: `case_create`, `draft_import`, `check_fact`, `check_authority`, `check_deadline`, `check_signoff`, `export_pleading`, `export_court_md`.
-- Form packs & guide: `packs_install`, `packs_verify`, `guide_find`, `help_links`.
+- `export_exhibit_packet`: Assemble Bates-stamped exhibit packet and Table of Exhibits. Defaults to dry-run.
+- `form_inspect`: Inspect official court PDF forms and list AcroForm fields. Does not fill the form.
+- Motion path tools: `case_create`, `draft_import`, `check_fact`, `check_authority`, `check_deadline`, `check_all`, `export_court`. Writes default to dry-run. `check_all` stays `ok=false` until a human completes sign-off (there is no MCP sign-off tool).
+- Form packs & guide: `packs_install`, `packs_verify`, `guide_find`, `help_links`. Pack installs default to dry-run.
+
+Not on the MCP surface: `cloud_pull`, `cloud_push`, `pdf_redact`, `form_fill`, `sign_pdf`, `service_cert`, `service_order`. Those generate or edit legal content, or call cloud sync. Use the window or CLI if you need them, and review every line.
 
 `guide_find` and `help_links` return `help_links` as data and never open a browser.
 

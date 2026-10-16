@@ -73,7 +73,8 @@ pub fn playbook() -> String {
 pub fn agent_manifest() -> Value {
     let tools = vec![
         json!({"name": "playbook", "cli": "docs playbook", "mcp": "playbook", "summary": "Read the offline motion playbook first. Never invent cites. Never file."}),
-        json!({"name": "case_create", "cli": "case create", "mcp": "case_create", "summary": "Create a local case folder from a title and kind."}),
+        json!({"name": "case_list", "cli": "(window case list)", "mcp": "case_list", "summary": "List cases under OPENSEASON_CASES_ROOT or ~/Documents/JustLegal/Cases. Same scan as the window."}),
+        json!({"name": "case_create", "cli": "case create", "mcp": "case_create", "summary": "Create a local case folder from a title and kind. MCP defaults to dry-run unless dry_run is false."}),
         json!({"name": "import_folder", "cli": "case import-folder", "mcp": "import_folder", "summary": "Copy drafts, notes, and orders into a case. Proposes names and dates. Does not auto-commit guesses."}),
         json!({"name": "draft_import", "cli": "draft import", "mcp": "draft_import", "summary": "Import the user's Markdown draft. Does not invent body text."}),
         json!({"name": "draft_preview", "cli": "draft preview --md FILE", "mcp": "draft_preview", "summary": "Preview caption and body from Markdown. Does not write files."}),
@@ -88,11 +89,12 @@ pub fn agent_manifest() -> Value {
         "never_files": true,
         "never_serves": true,
         "notice": NEVER_FILE_NOTICE,
-        "case_folder": "Documents/JustLegal/Cases/{caseId}/",
+        "case_folder": "Documents/JustLegal/Cases/{caseId}/ (override with OPENSEASON_CASES_ROOT)",
         "mcp_launch": {
             "command": "openseason",
             "args": ["mcp"],
-            "cwd": "(repository root or the folder that contains openseason-cli)"
+            "cwd": "(repository root or the folder that contains openseason-cli)",
+            "env": {"OPENSEASON_CASES_ROOT": "(optional absolute path; default ~/Documents/JustLegal/Cases)"}
         },
         "tools": tools,
         "starter_prompt": "You are helping with OpenSeason, an offline formatting engine. Read AGENTS.md. Never invent facts, citations, or deadlines. Never file or serve. Call `openseason --json docs playbook` (or MCP playbook) first. If a tool returns ok:false, stop and ask the user. Use only values from the case folder the user points you at."
@@ -119,7 +121,8 @@ pub fn how_to_fix(field: &str) -> String {
     if f.contains("docket") {
         return "Fix: copy the case number from a court paper into case.json docket_number.".into();
     }
-    "Fix: fill the field with a value from the user's papers. Leave it blank rather than guessing.".into()
+    "Fix: fill the field with a value from the user's papers. Leave it blank rather than guessing."
+        .into()
 }
 
 #[cfg(test)]
@@ -138,7 +141,10 @@ mod tests {
         let m = agent_manifest();
         assert_eq!(m["never_files"], true);
         assert!(m["tools"].as_array().unwrap().len() >= 5);
-        assert!(m["starter_prompt"].as_str().unwrap().contains("Never invent"));
+        assert!(m["starter_prompt"]
+            .as_str()
+            .unwrap()
+            .contains("Never invent"));
         assert!(m["mcp_launch"]["args"][0] == "mcp");
     }
 }

@@ -302,7 +302,9 @@ impl CaseProfile {
     }
 
     pub fn is_pre_filing(&self) -> bool {
-        self.procedural_stage.trim().eq_ignore_ascii_case("pre_filing")
+        self.procedural_stage
+            .trim()
+            .eq_ignore_ascii_case("pre_filing")
     }
 
     pub fn new_standard(title: &str, document_kind: &str) -> Self {
@@ -383,7 +385,15 @@ impl CaseProfile {
     }
 }
 
+/// Standard-case folder. `OPENSEASON_CASES_ROOT` overrides the default
+/// `~/Documents/JustLegal/Cases` (same default the window uses).
 pub fn default_cases_root() -> PathBuf {
+    if let Ok(p) = std::env::var("OPENSEASON_CASES_ROOT") {
+        let trimmed = p.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed);
+        }
+    }
     dirs::document_dir()
         .or_else(dirs::home_dir)
         .unwrap_or_else(|| PathBuf::from("."))
@@ -423,7 +433,8 @@ pub fn load_case(case_dir: &Path) -> Result<CaseProfile, String> {
 pub fn save_case(case_dir: &Path, profile: &CaseProfile) -> Result<(), String> {
     if crate::seal::is_dir_sealed(case_dir) {
         return Err(
-            "This case is sealed. The Documents folder is a pointer only and cannot be edited.".to_string(),
+            "This case is sealed. The Documents folder is a pointer only and cannot be edited."
+                .to_string(),
         );
     }
     ensure_case_layout(case_dir)?;
@@ -471,7 +482,9 @@ pub fn create_case_folder(
     if app_data.exists() {
         if let Ok(app_canon) = app_data.canonicalize() {
             if resolved == app_canon || resolved.starts_with(&app_canon) {
-                return Err("Refusing to create a case folder inside the app data directory.".to_string());
+                return Err(
+                    "Refusing to create a case folder inside the app data directory.".to_string(),
+                );
             }
         }
     }
@@ -515,7 +528,8 @@ pub fn resolve_case_dir(id_or_path: &str) -> PathBuf {
     default_cases_root().join(id_or_path)
 }
 
-pub fn list_cases_in(root: &Path) -> Result<Vec<CaseProfile>, String> {
+/// List case folders under `root`. Same scan the window uses (`case.json` in each child directory).
+pub fn list_cases_with_folders(root: &Path) -> Result<Vec<(PathBuf, CaseProfile)>, String> {
     if !root.exists() {
         return Ok(Vec::new());
     }
@@ -525,12 +539,19 @@ pub fn list_cases_in(root: &Path) -> Result<Vec<CaseProfile>, String> {
         let path = entry.path();
         if path.is_dir() && path.join("case.json").exists() {
             if let Ok(profile) = load_case(&path) {
-                cases.push(profile);
+                cases.push((path, profile));
             }
         }
     }
-    cases.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    cases.sort_by(|a, b| b.1.updated_at.cmp(&a.1.updated_at));
     Ok(cases)
+}
+
+pub fn list_cases_in(root: &Path) -> Result<Vec<CaseProfile>, String> {
+    Ok(list_cases_with_folders(root)?
+        .into_iter()
+        .map(|(_, profile)| profile)
+        .collect())
 }
 
 pub fn layout_missing(case_dir: &Path) -> Vec<String> {
@@ -645,7 +666,9 @@ pub fn validate_case(profile: &CaseProfile, case_dir: Option<&Path>) -> Validati
         if is_blank(&profile.notice_of_appeal.user_text) {
             issues.push(ValidationIssue {
                 field: "notice_of_appeal.user_text".into(),
-                message: "Paste the user's own Notice of Appeal text. OpenSeason will not invent it.".into(),
+                message:
+                    "Paste the user's own Notice of Appeal text. OpenSeason will not invent it."
+                        .into(),
             });
         }
         let combined = format!(
@@ -662,13 +685,21 @@ pub fn validate_case(profile: &CaseProfile, case_dir: Option<&Path>) -> Validati
             });
         }
     } else if tier != "litigation" {
-        if is_blank(&profile.motion.user_text) && is_blank(&profile.complaint.user_text) && is_blank(&profile.court_markdown) {
+        if is_blank(&profile.motion.user_text)
+            && is_blank(&profile.complaint.user_text)
+            && is_blank(&profile.court_markdown)
+        {
             issues.push(ValidationIssue {
                 field: "motion.user_text".into(),
-                message: "Instrument or notice body text is required. OpenSeason will not invent terms.".into(),
+                message:
+                    "Instrument or notice body text is required. OpenSeason will not invent terms."
+                        .into(),
             });
         }
-        let combined = format!("{} {} {}", profile.motion.user_text, profile.complaint.user_text, profile.title);
+        let combined = format!(
+            "{} {} {}",
+            profile.motion.user_text, profile.complaint.user_text, profile.title
+        );
         push_placeholder_issues(&combined, &mut issues);
     }
 
@@ -774,7 +805,9 @@ pub fn validate_pleading(
             if is_blank(&profile.brief.user_text) {
                 issues.push(ValidationIssue {
                     field: "brief.user_text".into(),
-                    message: "Paste the user's own brief text. The scaffold will not invent argument.".into(),
+                    message:
+                        "Paste the user's own brief text. The scaffold will not invent argument."
+                            .into(),
                 });
             }
             push_placeholder_issues(&profile.brief.user_text, &mut issues);
@@ -805,9 +838,20 @@ pub fn validate_pleading(
                 });
             }
         }
-        "motion" | "reconsideration" | "enlargement" | "stay" | "amend_findings" | "will"
-        | "lease" | "contractor" | "power_of_attorney" | "demand_letter" | "cure_notice"
-        | "security_deposit_demand" | "records_request" | "agency_appeal" => {
+        "motion"
+        | "reconsideration"
+        | "enlargement"
+        | "stay"
+        | "amend_findings"
+        | "will"
+        | "lease"
+        | "contractor"
+        | "power_of_attorney"
+        | "demand_letter"
+        | "cure_notice"
+        | "security_deposit_demand"
+        | "records_request"
+        | "agency_appeal" => {
             if is_blank(&profile.motion.user_text) {
                 issues.push(ValidationIssue {
                     field: "motion.user_text".into(),
@@ -832,14 +876,17 @@ pub fn validate_pleading(
             if is_blank(&profile.notice_of_appeal.judgment_description) {
                 issues.push(ValidationIssue {
                     field: "notice_of_appeal.judgment_description".into(),
-                    message: "Describe the order or judgment being appealed, in the user's own words."
-                        .into(),
+                    message:
+                        "Describe the order or judgment being appealed, in the user's own words."
+                            .into(),
                 });
             }
             if is_blank(&profile.notice_of_appeal.user_text) {
                 issues.push(ValidationIssue {
                     field: "notice_of_appeal.user_text".into(),
-                    message: "Paste the user's own Notice of Appeal text. OpenSeason will not invent it.".into(),
+                    message:
+                        "Paste the user's own Notice of Appeal text. OpenSeason will not invent it."
+                            .into(),
                 });
             }
             push_placeholder_issues(
@@ -1000,7 +1047,8 @@ mod tests {
 
     #[test]
     fn fixture_sample_case_validates() {
-        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../fixtures/sample-appeal-case");
+        let fixture =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../fixtures/sample-appeal-case");
         let profile = load_case(&fixture).expect("sample fixture should load");
         let report = validate_case(&profile, Some(&fixture));
         assert!(report.ok, "{:?}", report.issues);
@@ -1013,7 +1061,10 @@ mod tests {
         profile.complaint.user_text.clear();
         let report = validate_pleading(&profile, None, "complaint");
         assert!(!report.ok);
-        assert!(report.issues.iter().any(|i| i.field == "complaint.user_text"));
+        assert!(report
+            .issues
+            .iter()
+            .any(|i| i.field == "complaint.user_text"));
         profile.complaint.user_text = "User drafted claim text without placeholders.".into();
         assert!(validate_pleading(&profile, None, "complaint").ok);
         profile.motion.user_text.clear();
