@@ -905,6 +905,26 @@ mod tests {
         })
     }
 
+    /// JSON-RPC `tools/call` envelope (`ok`, `never_files`, `data`, `issues`).
+    fn mcp_envelope(name: &str, args: &Value) -> Value {
+        let reply = handle(&json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": name, "arguments": args}
+        }))
+        .expect("MCP tools/call should reply");
+        assert_ne!(
+            reply["result"]["isError"], true,
+            "MCP tool {name} returned isError: {reply}"
+        );
+        let text = reply["result"]["content"][0]["text"]
+            .as_str()
+            .expect("MCP content text");
+        serde_json::from_str(text)
+            .unwrap_or_else(|e| panic!("envelope JSON for {name}: {e}; {text}"))
+    }
+
     #[test]
     fn initialize_and_tools_list() {
         let init = handle(&json!({
@@ -1198,6 +1218,144 @@ mod tests {
             .any(|l| l["id"] == "find-legal-help"));
         let links = call_tool("help_links", &json!({})).unwrap();
         assert_eq!(links["opens_browser"], false);
+    }
+
+    #[test]
+    fn check_all_stays_not_ok_until_human_signoff_and_cloud_tools_absent() {
+        let names = tool_names();
+        assert!(
+            !names.contains(&"cloud_pull".to_string()),
+            "cloud_pull must be absent from tools/list, got {names:?}"
+        );
+        assert!(
+            !names.contains(&"cloud_push".to_string()),
+            "cloud_push must be absent from tools/list, got {names:?}"
+        );
+        assert!(
+            !names.iter().any(|n| n.contains("cloud")),
+            "no cloud* tool on the MCP surface, got {names:?}"
+        );
+        assert!(
+            !names
+                .iter()
+                .any(|n| { n.contains("signoff") || n.contains("sign_off") || n == "set_signoff" }),
+            "sign-off is a human gate; MCP must not expose a sign-off tool, got {names:?}"
+        );
+
+        let guard = CasesRootGuard::new();
+        let dir = guard.case_dir("signoff-example");
+        call_tool(
+            "case_create",
+            &json!({
+                "path": dir,
+                "title": "Example v. Sample County Clerk",
+                "kind": "reconsideration",
+                "pack": "nj-app-div",
+                "dry_run": false
+            }),
+        )
+        .unwrap();
+        call_tool(
+            "draft_import",
+            &json!({"path": dir, "markdown": sample_markdown(), "dry_run": false}),
+        )
+        .unwrap();
+        let exhibit = dir.join("order-excerpt.txt");
+        std::fs::write(&exhibit, b"Order granting dismissal (fake exhibit)\n").unwrap();
+        call_tool(
+            "evidence_add",
+            &json!({"path": dir, "file": exhibit, "description": "Dkt. 12", "dry_run": false}),
+        )
+        .unwrap();
+
+        let check_args = json!({
+            "path": dir,
+            "pack": "nj-app-div",
+            "rule": "reconsideration-appellate",
+            "trigger_date": "2026-01-09"
+        });
+        let before = mcp_envelope("check_all", &check_args);
+        assert_eq!(before["never_files"], true);
+        assert_eq!(before["never_serves"], true);
+        assert_eq!(
+            before["ok"], false,
+            "MCP check_all envelope ok=false before human sign-off: {before}"
+        );
+        assert_eq!(before["data"]["ok"], false);
+        assert_eq!(before["data"]["signoff"]["ok"], false);
+
+        // User-supplied fixture cites (not invented by MCP). Isolates the sign-off gate.
+        let fact_rows = before["data"]["fact"]["rows"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        assert!(
+            !fact_rows.is_empty(),
+            "sample draft should produce fact rows: {before}"
+        );
+        for row in &fact_rows {
+            let id = row["id"].as_u64().unwrap() as u32;
+            check::set_fact_cite(
+                &dir,
+                id,
+                "Ex. A (order-excerpt.txt, Dkt. 12)",
+                "order-excerpt.txt",
+                true,
+            )
+            .unwrap();
+        }
+        let authority_rows = before["data"]["authority"]["rows"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        for row in &authority_rows {
+            let id = row["id"].as_u64().unwrap() as u32;
+            check::set_authority_status(
+                &dir,
+                id,
+                check::AuthorityStatus::Verified,
+                "fixture://sample-reconsideration.md",
+                "test fixture: user-supplied verification",
+            )
+            .unwrap();
+        }
+
+        let unsigned = mcp_envelope("check_all", &check_args);
+        assert_eq!(
+            unsigned["ok"], false,
+            "MCP check_all stays ok=false while sign-off boxes are unchecked: {unsigned}"
+        );
+        assert_eq!(unsigned["data"]["ok"], false);
+        assert_eq!(unsigned["data"]["fact"]["ok"], true);
+        assert_eq!(unsigned["data"]["authority"]["ok"], true);
+        assert_eq!(unsigned["data"]["signoff"]["ok"], false);
+        assert!(unsigned["issues"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|i| i["field"] == "signoff"));
+
+        let items = unsigned["data"]["signoff"]["items"]
+            .as_array()
+            .cloned()
+            .unwrap();
+        assert!(!items.is_empty());
+        for item in &items {
+            check::set_signoff(&dir, item["id"].as_str().unwrap(), true).unwrap();
+        }
+
+        let signed = mcp_envelope("check_all", &check_args);
+        assert_eq!(signed["never_files"], true);
+        assert_eq!(signed["never_serves"], true);
+        assert_eq!(
+            signed["data"]["signoff"]["ok"], true,
+            "engine sign-off should check every box: {signed}"
+        );
+        assert_eq!(
+            signed["ok"], true,
+            "MCP check_all ok=true only after the human sign-off gate: {signed}"
+        );
+        assert_eq!(signed["data"]["ok"], true);
     }
 }
 
