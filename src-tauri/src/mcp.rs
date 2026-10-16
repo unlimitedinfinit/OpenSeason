@@ -1,6 +1,10 @@
 //! Minimal MCP stdio server. Same engine as the CLI. Offline. Never files.
+//!
+//! Write tools default to dry-run. Set `dry_run: false` to apply. Cloud sync,
+//! PDF redaction, form fill, and other legal-content generators are not exposed.
 
 use std::io::{BufRead, BufReader, Write};
+use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
@@ -11,6 +15,41 @@ use crate::court_md;
 use crate::documents;
 use crate::rule_pack::RulePack;
 
+const WRITE_TOOLS: &[&str] = &[
+    "case_create",
+    "case_seed",
+    "draft_import",
+    "draft_fill",
+    "evidence_add",
+    "evidence_index",
+    "evidence_link",
+    "export_court",
+    "export_packet",
+    "export_ics",
+    "export_exhibit_packet",
+    "packs_install",
+    "packs_remove",
+    "gaps_add",
+    "motion_create",
+    "motion_export",
+    "pdf_merge",
+    "pdf_split",
+    "pdf_rotate",
+    "case_escalate",
+    "intake_answer",
+    "import_folder",
+];
+
+const BLOCKED_TOOLS: &[&str] = &[
+    "cloud_pull",
+    "cloud_push",
+    "pdf_redact",
+    "form_fill",
+    "sign_pdf",
+    "service_cert",
+    "service_order",
+];
+
 fn tool(name: &str, description: &str, props: Value, required: &[&str]) -> Value {
     json!({
         "name": name,
@@ -19,214 +58,406 @@ fn tool(name: &str, description: &str, props: Value, required: &[&str]) -> Value
     })
 }
 
+fn dry_run_schema() -> Value {
+    json!({
+        "type": "boolean",
+        "description": "Default true: report the planned action and change nothing on disk. Set false to apply."
+    })
+}
+
+fn write_tool(name: &str, description: &str, mut props: Value, required: &[&str]) -> Value {
+    if let Some(map) = props.as_object_mut() {
+        map.insert("dry_run".into(), dry_run_schema());
+    }
+    tool(name, description, props, required)
+}
+
+fn is_write_tool(name: &str) -> bool {
+    WRITE_TOOLS.contains(&name)
+}
+
+fn is_explicit_apply(args: &Value) -> bool {
+    matches!(args.get("dry_run"), Some(v) if v.as_bool() == Some(false))
+}
+
+fn arg_str(args: &Value, k: &str) -> String {
+    args.get(k)
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string()
+}
+
+fn cases_root() -> PathBuf {
+    case_profile::default_cases_root()
+}
+
+fn resolve_under_cases_root(raw: &str) -> Result<PathBuf, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("A path is required.".into());
+    }
+    let root = cases_root();
+    let path = PathBuf::from(trimmed);
+    let candidate = if path.is_absolute() {
+        path
+    } else {
+        root.join(path)
+    };
+    crate::sandbox::assert_under_root(&root, &candidate)
+}
+
+fn case_path(args: &Value) -> Result<PathBuf, String> {
+    resolve_under_cases_root(&arg_str(args, "path"))
+}
+
+fn optional_case_path(args: &Value) -> Result<Option<PathBuf>, String> {
+    let raw = arg_str(args, "path");
+    if raw.trim().is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(resolve_under_cases_root(&raw)?))
+}
+
+fn dry_run_report(name: &str, args: &Value) -> Value {
+    let path = arg_str(args, "path");
+    let would = match name {
+        "case_create" => format!(
+            "Create a case folder at {} with title {:?}. Write nothing until dry_run is false.",
+            if path.is_empty() { "<path>" } else { path.as_str() },
+            arg_str(args, "title")
+        ),
+        "case_seed" => format!("Seed the fake Lucille Example case at {path}. Write nothing until dry_run is false."),
+        "draft_import" => format!("Import the user-supplied Markdown into {path}/drafts/draft.md. Write nothing until dry_run is false."),
+        "draft_fill" => format!(
+            "Fill guided section {:?} in {} with the user-supplied text. Write nothing until dry_run is false.",
+            arg_str(args, "id"),
+            path
+        ),
+        "evidence_add" => format!(
+            "Copy exhibit {:?} into {}/evidence/. Write nothing until dry_run is false.",
+            arg_str(args, "file"),
+            path
+        ),
+        "evidence_index" => format!("Rebuild the exhibit index in {path}. Write nothing until dry_run is false."),
+        "evidence_link" => format!("Link a fact row to an exhibit letter in {path}. Write nothing until dry_run is false."),
+        "export_court" => format!("Export Word and PDF for {path} into the case exports folder. Write nothing until dry_run is false."),
+        "export_packet" => format!("Assemble the motion packet for {path}. Write nothing until dry_run is false."),
+        "export_ics" => format!("Write a deadline calendar file for {path}. Write nothing until dry_run is false."),
+        "export_exhibit_packet" => format!("Assemble a Bates-stamped exhibit packet for {path}. Write nothing until dry_run is false."),
+        "packs_install" => format!(
+            "Install the forms pack for state {:?}. Write nothing until dry_run is false.",
+            arg_str(args, "state")
+        ),
+        "packs_remove" => format!(
+            "Remove the forms pack for state {:?}. Write nothing until dry_run is false.",
+            arg_str(args, "state")
+        ),
+        "gaps_add" => format!("Append a justice-gap note in {path}. Write nothing until dry_run is false."),
+        "motion_create" => format!(
+            "Add a docket motion titled {:?} in {}. Write nothing until dry_run is false.",
+            arg_str(args, "title"),
+            path
+        ),
+        "motion_export" => format!("Export motion {:?} in {} to Word and PDF. Write nothing until dry_run is false.", arg_str(args, "id"), path),
+        "pdf_merge" => "Merge PDFs into an output path under the cases root. Write nothing until dry_run is false.".into(),
+        "pdf_split" => "Split a PDF into an output path under the cases root. Write nothing until dry_run is false.".into(),
+        "pdf_rotate" => "Rotate a PDF into an output path under the cases root. Write nothing until dry_run is false.".into(),
+        "case_escalate" => format!(
+            "Escalate {} to target {:?}. Write nothing until dry_run is false.",
+            path,
+            arg_str(args, "target")
+        ),
+        "intake_answer" => format!(
+            "Record the user-supplied answer for question {:?} in {}. Write nothing until dry_run is false.",
+            arg_str(args, "question_id"),
+            path
+        ),
+        "import_folder" => format!(
+            "Copy (never move) files from {:?} into {}. Write nothing until dry_run is false.",
+            arg_str(args, "from"),
+            path
+        ),
+        other => format!("Run {other}. Write nothing until dry_run is false."),
+    };
+    json!({
+        "dry_run": true,
+        "tool": name,
+        "would": would,
+        "changed": false,
+        "never_files": true,
+        "never_serves": true
+    })
+}
+
 fn tool_list() -> Value {
-    let path = json!({"type": "string", "description": "Absolute path to the case folder (contains case.json)."});
+    let path = json!({"type": "string", "description": "Case folder. Must stay under OPENSEASON_CASES_ROOT (default ~/Documents/JustLegal/Cases)."});
     json!([
         tool("playbook", "Return the offline motion playbook. Read this first. Never invent cites. Never file.", json!({}), &[]),
-        tool("case_create", "Create a local case folder. kind: reconsideration|enlargement|stay|amend_findings|appellate_motion|appellate_brief|notice_of_appeal. Never files.", json!({"path": path, "title": {"type": "string", "description": "Caption like Lucille Example v. Sample County Board"}, "kind": {"type": "string"}, "pack": {"type": "string", "description": "nj-app-div, co-mandamus, or generic-us-appellate"}}), &["path", "title"]),
-        tool("case_seed", "Copy the fake Lucille Example reconsideration case into path. For tests only.", json!({"path": path}), &["path"]),
-        tool("draft_import", "Import a court-markdown draft (YAML caption, ::: signature, ::: certificate).", json!({"path": path, "markdown": {"type": "string"}}), &["path", "markdown"]),
+        tool("case_list", "List cases under the cases root (OPENSEASON_CASES_ROOT or ~/Documents/JustLegal/Cases). Same scan as the window.", json!({"root": {"type": "string", "description": "Optional subdirectory of the cases root"}}), &[]),
+        write_tool("case_create", "Create a local case folder. kind: reconsideration|enlargement|stay|amend_findings|appellate_motion|appellate_brief|notice_of_appeal. Defaults to dry-run. Never files.", json!({"path": path, "title": {"type": "string", "description": "Caption like Lucille Example v. Sample County Board"}, "kind": {"type": "string"}, "pack": {"type": "string", "description": "nj-app-div, co-mandamus, or generic-us-appellate"}}), &["path", "title"]),
+        write_tool("case_seed", "Copy the fake Lucille Example reconsideration case into path. For tests only. Defaults to dry-run.", json!({"path": path}), &["path"]),
+        write_tool("draft_import", "Import a court-markdown draft (YAML caption, ::: signature, ::: certificate). Passes the user's Markdown through. Defaults to dry-run.", json!({"path": path, "markdown": {"type": "string"}}), &["path", "markdown"]),
         tool("draft_preview", "Preview a Markdown draft as a court caption (NJ or CO boxed) plus body. Does not write files. Never files.", json!({"path": path, "markdown": {"type": "string"}}), &["markdown"]),
         tool("draft_sections", "List guided drafting sections and hints for this case kind.", json!({"path": path}), &["path"]),
-        tool("draft_fill", "Fill one guided section with the user's own words. Do not invent text.", json!({"path": path, "id": {"type": "string", "description": "Section id from draft_sections"}, "text": {"type": "string"}}), &["path", "id", "text"]),
-        tool("evidence_add", "Copy an exhibit into evidence/. First file becomes Ex. A after evidence_index.", json!({"path": path, "file": {"type": "string"}, "description": {"type": "string"}}), &["path", "file"]),
-        tool("evidence_index", "Rebuild the exhibit index (Ex. A, Ex. B).", json!({"path": path}), &["path"]),
-        tool("evidence_link", "Link a fact-check row to an exhibit letter. Does not invent a cite.", json!({"path": path, "fact_id": {"type": "integer"}, "letter": {"type": "string"}}), &["path", "fact_id", "letter"]),
+        write_tool("draft_fill", "Fill one guided section with the user's own words. Do not invent text. Defaults to dry-run.", json!({"path": path, "id": {"type": "string", "description": "Section id from draft_sections"}, "text": {"type": "string"}}), &["path", "id", "text"]),
+        write_tool("evidence_add", "Copy an exhibit into evidence/. First file becomes Ex. A after evidence_index. Defaults to dry-run.", json!({"path": path, "file": {"type": "string"}, "description": {"type": "string"}}), &["path", "file"]),
+        write_tool("evidence_index", "Rebuild the exhibit index (Ex. A, Ex. B). Defaults to dry-run.", json!({"path": path}), &["path"]),
+        write_tool("evidence_link", "Link a fact-check row to an exhibit letter. Does not invent a cite. Defaults to dry-run.", json!({"path": path, "fact_id": {"type": "integer"}, "letter": {"type": "string"}}), &["path", "fact_id", "letter"]),
         tool("check_fact", "Split the draft into sentences. Missing cites stay issues. Optional id/cite/exhibit to attach a user cite.", json!({"path": path, "id": {"type": "integer"}, "cite": {"type": "string"}, "exhibit": {"type": "string"}, "verified": {"type": "boolean"}}), &["path"]),
         tool("check_authority", "List cites already in the draft. Status starts unverified. Never invents a cite.", json!({"path": path, "id": {"type": "integer"}, "status": {"type": "string", "description": "verified|unverified|not_found"}, "source": {"type": "string"}}), &["path"]),
         tool("check_deadline", "Compute a deadline from a rule pack. Weekend/holiday roll. Does not file.", json!({"path": path, "pack": {"type": "string"}, "rule": {"type": "string"}, "trigger_date": {"type": "string", "description": "YYYY-MM-DD"}}), &["path", "pack", "rule", "trigger_date"]),
         tool("check_all", "Run fact, authority, deadline, and sign-off. ok=false until a human checks every box.", json!({"path": path, "pack": {"type": "string"}, "rule": {"type": "string"}, "trigger_date": {"type": "string"}}), &["path"]),
-        tool("export_court", "Render Word and PDF. Never files or serves.", json!({"path": path, "kind": {"type": "string"}}), &["path"]),
-        tool("export_packet", "Assemble notice of motion, motion, certification, proposed order, certificate of service.", json!({"path": path}), &["path"]),
-        tool("export_ics", "Write a .ics reminder for a computed deadline.", json!({"path": path, "pack": {"type": "string"}, "rule": {"type": "string"}, "trigger_date": {"type": "string"}}), &["path", "pack", "rule", "trigger_date"]),
+        write_tool("export_court", "Render Word and PDF. Never files or serves. Defaults to dry-run.", json!({"path": path, "kind": {"type": "string"}}), &["path"]),
+        write_tool("export_packet", "Assemble notice of motion, motion, certification, proposed order, certificate of service. Defaults to dry-run.", json!({"path": path}), &["path"]),
+        write_tool("export_ics", "Write a .ics reminder for a computed deadline. Defaults to dry-run.", json!({"path": path, "pack": {"type": "string"}, "rule": {"type": "string"}, "trigger_date": {"type": "string"}}), &["path", "pack", "rule", "trigger_date"]),
         tool("packs_list", "List bundled rule packs and installable form packs. Shows download sizes. Never files.", json!({"catalog": {"type": "string"}}), &[]),
         tool("packs_validate", "Validate a rule-pack JSON file. New states are data, not code.", json!({"file": {"type": "string"}}), &["file"]),
-        tool("packs_install", "Install a forms pack for a state (optional situation). Uses a local file or catalog local_dir. Does not open a browser. Never files.", json!({"state": {"type": "string"}, "situation": {"type": "string"}, "file": {"type": "string"}, "catalog": {"type": "string"}}), &["state"]),
-        tool("packs_remove", "Remove an installed forms pack.", json!({"state": {"type": "string"}}), &["state"]),
+        write_tool("packs_install", "Install a forms pack for a state (optional situation). Uses a local file or catalog local_dir. Does not open a browser. Defaults to dry-run. Never files.", json!({"state": {"type": "string"}, "situation": {"type": "string"}, "file": {"type": "string"}, "catalog": {"type": "string"}}), &["state"]),
+        write_tool("packs_remove", "Remove an installed forms pack. Defaults to dry-run.", json!({"state": {"type": "string"}}), &["state"]),
         tool("packs_verify", "Verify SHA-256 hashes of installed form files.", json!({"state": {"type": "string"}}), &[]),
         tool("guide_questions", "What do I need to file? Return the plain-language questions. Legal information, not advice.", json!({}), &[]),
         tool("guide_find", "Recommend forms or a packet from pack data. Never invents a rule. Includes help_links as data and never opens a browser.", json!({"state": {"type": "string"}, "court": {"type": "string"}, "situation": {"type": "string"}, "trigger_date": {"type": "string", "description": "YYYY-MM-DD"}}), &["state", "situation"]),
         tool("help_links", "JustLegal Get legal help / Find resources URLs as data. Never opens a browser. UI must confirm first.", json!({}), &[]),
-        tool("gaps_add", "Capture a justice-gap note. Fake names only.", json!({"path": path, "title": {"type": "string"}, "court": {"type": "string"}, "rule": {"type": "string"}, "happened": {"type": "string"}, "hard": {"type": "string"}}), &["path", "title"]),
+        write_tool("gaps_add", "Capture a justice-gap note. Fake names only. Defaults to dry-run.", json!({"path": path, "title": {"type": "string"}, "court": {"type": "string"}, "rule": {"type": "string"}, "happened": {"type": "string"}, "hard": {"type": "string"}}), &["path", "title"]),
         tool("check_preflight", "Court readiness pre-flight checklist. Verifies caption, docket, filer, deadline, fact cites, authorities, transcripts, and packet parts.", json!({"path": path}), &["path"]),
         tool("check_transcripts", "Audit hearing transcripts in evidence/ and check grounding of [Tr. Page:Line] citations.", json!({"path": path}), &["path"]),
-        tool("export_exhibit_packet", "Assemble Table of Exhibits and Bates-stamped Exhibit Packet PDF with exhibit divider sheets.", json!({"path": path, "prefix": {"type": "string"}, "start": {"type": "integer"}}), &["path"]),
-        tool("form_inspect", "Inspect court PDF form fields (e.g. Colorado JDF series or NJ forms) and map values from case.json.", json!({"pdf": {"type": "string"}, "path": path}), &["pdf"]),
-        tool("form_fill", "Auto-fill an official court PDF companion and JSON field map using case profile data.", json!({"pdf": {"type": "string"}, "path": path}), &["pdf", "path"]),
-        tool("cloud_pull", "Pull matters, orders, and evidence from JustLegal Cloud (justlegal.me) into local folders.", json!({"case": {"type": "string"}, "root": {"type": "string"}}), &[]),
-        tool("cloud_push", "Push local case exports and filings to JustLegal Cloud.", json!({"path": path}), &["path"]),
+        write_tool("export_exhibit_packet", "Assemble Table of Exhibits and Bates-stamped Exhibit Packet PDF with exhibit divider sheets. Defaults to dry-run.", json!({"path": path, "prefix": {"type": "string"}, "start": {"type": "integer"}}), &["path"]),
+        tool("form_inspect", "Inspect court PDF form fields (e.g. Colorado JDF series or NJ forms). Does not fill or edit the form.", json!({"pdf": {"type": "string"}, "path": path}), &["pdf"]),
         tool("motion_list", "List all motions and filings in a case docket.", json!({"path": path}), &["path"]),
-        tool("motion_create", "Add a new motion or filing to the case docket.", json!({"path": path, "title": {"type": "string"}, "kind": {"type": "string"}, "rule": {"type": "string"}, "text": {"type": "string"}}), &["path", "title"]),
-        tool("motion_export", "Export a specific motion from the case docket to Word and PDF.", json!({"path": path, "id": {"type": "string"}}), &["path", "id"]),
-        tool("service_cert", "Generate a court Certificate of Service PDF and plain text with auto-populated opposing parties.", json!({"path": path, "filing": {"type": "string"}, "method": {"type": "string"}, "date": {"type": "string"}}), &["path"]),
-        tool("service_order", "Generate a court Proposed Form of Order PDF and Word docx.", json!({"path": path, "title": {"type": "string"}, "relief": {"type": "string"}}), &["path"]),
-        tool("pdf_merge", "Merge multiple PDFs into one unified court submission PDF.", json!({"files": {"type": "array", "items": {"type": "string"}}, "out": {"type": "string"}}), &["files", "out"]),
-        tool("pdf_split", "Extract specific pages from a PDF.", json!({"pdf": {"type": "string"}, "pages": {"type": "string"}, "out": {"type": "string"}}), &["pdf", "pages", "out"]),
-        tool("pdf_rotate", "Rotate PDF pages by 90, 180, or 270 degrees.", json!({"pdf": {"type": "string"}, "degrees": {"type": "integer"}, "out": {"type": "string"}}), &["pdf", "degrees", "out"]),
-        tool("pdf_redact", "Scrub SSNs, phone numbers, or custom keywords from a PDF at the byte level.", json!({"pdf": {"type": "string"}, "words": {"type": "array", "items": {"type": "string"}}, "out": {"type": "string"}}), &["pdf", "out"]),
-        tool("sign_pdf", "Stamp court-compliant electronic signature block onto a PDF.", json!({"pdf": {"type": "string"}, "name": {"type": "string"}, "page": {"type": "integer"}, "x": {"type": "number"}, "y": {"type": "number"}, "out": {"type": "string"}}), &["pdf", "name"]),
+        write_tool("motion_create", "Add a new motion or filing to the case docket using the user's title and text. Defaults to dry-run.", json!({"path": path, "title": {"type": "string"}, "kind": {"type": "string"}, "rule": {"type": "string"}, "text": {"type": "string"}}), &["path", "title"]),
+        write_tool("motion_export", "Export a specific motion from the case docket to Word and PDF. Defaults to dry-run.", json!({"path": path, "id": {"type": "string"}}), &["path", "id"]),
+        write_tool("pdf_merge", "Merge multiple PDFs into one file under the cases root. Defaults to dry-run.", json!({"files": {"type": "array", "items": {"type": "string"}}, "out": {"type": "string"}}), &["files", "out"]),
+        write_tool("pdf_split", "Extract specific pages from a PDF into a file under the cases root. Defaults to dry-run.", json!({"pdf": {"type": "string"}, "pages": {"type": "string"}, "out": {"type": "string"}}), &["pdf", "pages", "out"]),
+        write_tool("pdf_rotate", "Rotate PDF pages by 90, 180, or 270 degrees. Output stays under the cases root. Defaults to dry-run.", json!({"pdf": {"type": "string"}, "degrees": {"type": "integer"}, "out": {"type": "string"}}), &["pdf", "degrees", "out"]),
         tool("case_context", "Consolidated 1-call Legal OS snapshot: profile, tier, venue rules, timeline, exhibits, filings, intake wizard status, and predictive next steps.", json!({"path": path}), &["path"]),
         tool("case_next_steps", "Predictive Procedural State Graph: compute downstream branches, deadlines, and tolling (NJ pause vs CO/Fed reset) from timeline & orders.", json!({"path": path, "event": {"type": "string"}, "trigger_date": {"type": "string"}}), &["path"]),
-        tool("case_escalate", "Graduate Tier 2 Pre-Suit -> Tier 3 Lawsuit or escalate Trial -> Appellate / Mandamus / SCOTUS, carrying over record exhibits.", json!({"path": path, "target": {"type": "string", "description": "trial_lawsuit|appellate_appeal|mandamus|scotus_cert"}}), &["path", "target"]),
+        write_tool("case_escalate", "Graduate Tier 2 Pre-Suit -> Tier 3 Lawsuit or escalate Trial -> Appellate / Mandamus / SCOTUS, carrying over record exhibits. Defaults to dry-run.", json!({"path": path, "target": {"type": "string", "description": "trial_lawsuit|appellate_appeal|mandamus|scotus_cert"}}), &["path", "target"]),
         tool("intake_status", "1-question-at-a-time Guided Intake Wizard status, progress percentage, and next_question prompt.", json!({"path": path, "filing_id": {"type": "string"}}), &["path"]),
-        tool("intake_answer", "Answer a single question in the Guided Intake Wizard (updates profile, parties, or filing-scoped draft sections).", json!({"path": path, "question_id": {"type": "string"}, "answer": {"type": "string"}, "filing_id": {"type": "string"}}), &["path", "question_id", "answer"]),
+        write_tool("intake_answer", "Answer a single question in the Guided Intake Wizard with the user's words. Defaults to dry-run.", json!({"path": path, "question_id": {"type": "string"}, "answer": {"type": "string"}, "filing_id": {"type": "string"}}), &["path", "question_id", "answer"]),
         tool("intake_scan", "Offline PDF text extraction & candidate detection (docket numbers, dates, courts) across orders/ and evidence/.", json!({"path": path}), &["path"]),
         tool("check_venue", "Deterministic Multi-Venue Competence Matrix check (NJ R. 1:4-4(b) oath, CO conferral/declaration as needs_verification, 28 U.S.C. § 1746, SCOTUS Rule 14.1, Will witnesses).", json!({"path": path}), &["path"]),
         tool("portfolio_status", "Multi-state, multi-venue Portfolio Deadline Radar across all matters in the cases directory.", json!({"root": {"type": "string"}}), &[]),
-        tool("pdf_extract_text", "Extract text page-by-page from a local PDF offline (never uploads).", json!({"pdf": {"type": "string"}}), &["pdf"]),
+        tool("pdf_extract_text", "Extract text page-by-page from a PDF under the cases root (never uploads).", json!({"pdf": {"type": "string"}}), &["pdf"]),
         tool("agent_manifest", "List every CLI/MCP tool with a one-line description, MCP launch config, and a copyable starter prompt. Never files.", json!({}), &[]),
-        tool("import_folder", "Copy (never move) drafts/notes/orders from a folder into a case. Proposes parties, dockets, and order dates. Does not auto-commit guesses.", json!({"path": path, "from": {"type": "string", "description": "Folder of drafts, notes, and orders"}, "title": {"type": "string"}}), &["path", "from"]),
+        write_tool("import_folder", "Copy (never move) drafts/notes/orders from a folder into a case. Proposes parties, dockets, and order dates. Does not auto-commit guesses. Defaults to dry-run.", json!({"path": path, "from": {"type": "string", "description": "Folder of drafts, notes, and orders"}, "title": {"type": "string"}}), &["path", "from"]),
     ])
 }
 
 fn call_tool(name: &str, args: &Value) -> Result<Value, String> {
-    let s = |k: &str| args.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
+    if BLOCKED_TOOLS.contains(&name) {
+        return Err(format!(
+            "Tool '{name}' is not available on the MCP surface. Cloud sync, PDF redaction, form fill, and generated legal papers stay off this server."
+        ));
+    }
+    if is_write_tool(name) && !is_explicit_apply(args) {
+        return Ok(dry_run_report(name, args));
+    }
+    dispatch_tool(name, args)
+}
+
+fn dispatch_tool(name: &str, args: &Value) -> Result<Value, String> {
     match name {
+        "case_list" => {
+            let root = if arg_str(args, "root").is_empty() {
+                cases_root()
+            } else {
+                resolve_under_cases_root(&arg_str(args, "root"))?
+            };
+            let listed = case_profile::list_cases_with_folders(&root)?;
+            let cases: Vec<Value> = listed
+                .into_iter()
+                .map(|(folder, profile)| {
+                    json!({
+                        "id": profile.id,
+                        "title": profile.title,
+                        "document_kind": profile.document_kind,
+                        "mode": profile.mode,
+                        "docket_number": profile.docket_number,
+                        "rule_pack_id": profile.rule_pack_id,
+                        "updated_at": profile.updated_at,
+                        "folder": folder,
+                        "sealed_at": profile.sealed_at,
+                    })
+                })
+                .collect();
+            Ok(json!({
+                "root": root,
+                "cases": cases,
+                "never_files": true,
+                "never_serves": true
+            }))
+        }
         "case_create" => {
-            let path = std::path::PathBuf::from(s("path"));
-            let kind = if s("kind").is_empty() { "motion".into() } else { s("kind") };
+            let path = case_path(args)?;
+            let kind = if arg_str(args, "kind").is_empty() {
+                "motion".into()
+            } else {
+                arg_str(args, "kind")
+            };
             let (dir, mut profile) = case_profile::create_case_folder(
                 &path,
-                &s("title"),
+                &arg_str(args, "title"),
                 case_profile::CaseMode::Standard,
                 &kind,
             )?;
-            if !s("pack").is_empty() {
-                profile.rule_pack_id = s("pack");
-                profile.court.id = s("pack");
+            if !arg_str(args, "pack").is_empty() {
+                profile.rule_pack_id = arg_str(args, "pack");
+                profile.court.id = arg_str(args, "pack");
                 case_profile::save_case(&dir, &profile)?;
             }
-            Ok(json!({"id": profile.id, "folder": dir, "never_files": true}))
+            Ok(json!({"id": profile.id, "folder": dir, "never_files": true, "dry_run": false}))
         }
         "draft_import" => {
-            let doc = court_md::import_markdown(std::path::Path::new(&s("path")), &s("markdown"))?;
-            Ok(json!({"lines": doc.lines.len(), "case_no": doc.meta.case_no, "never_files": true}))
+            let path = case_path(args)?;
+            let doc = court_md::import_markdown(&path, &arg_str(args, "markdown"))?;
+            Ok(json!({"lines": doc.lines.len(), "case_no": doc.meta.case_no, "never_files": true, "dry_run": false}))
         }
         "draft_preview" => {
-            let profile = if s("path").is_empty() {
-                case_profile::CaseProfile::new_standard("Preview", "motion")
-            } else {
-                case_profile::load_case(std::path::Path::new(&s("path")))?
+            let profile = match optional_case_path(args)? {
+                None => case_profile::CaseProfile::new_standard("Preview", "motion"),
+                Some(path) => case_profile::load_case(&path)?,
             };
-            let preview = court_md::preview_markdown(&profile, &s("markdown"));
+            let preview = court_md::preview_markdown(&profile, &arg_str(args, "markdown"));
             Ok(serde_json::to_value(preview).unwrap())
         }
         "evidence_add" => {
-            let file = s("file");
+            let path = case_path(args)?;
+            let file = arg_str(args, "file");
             let bytes = std::fs::read(&file).map_err(|e| e.to_string())?;
             let dest = check::add_exhibit(
-                std::path::Path::new(&s("path")),
-                std::path::Path::new(&file)
+                &path,
+                Path::new(&file)
                     .file_name()
                     .and_then(|n| n.to_str())
                     .unwrap_or("exhibit.bin"),
                 &bytes,
-                &s("description"),
+                &arg_str(args, "description"),
             )?;
-            Ok(json!({"path": dest, "never_files": true}))
+            Ok(json!({"path": dest, "never_files": true, "dry_run": false}))
         }
         "check_fact" => {
-            let draft = check::draft_text_for_case(std::path::Path::new(&s("path")))?;
-            let report = check::run_fact_check(std::path::Path::new(&s("path")), &draft)?;
+            let path = case_path(args)?;
+            let draft = check::draft_text_for_case(&path)?;
+            let report = check::run_fact_check(&path, &draft)?;
             Ok(serde_json::to_value(report).unwrap())
         }
         "check_authority" => {
-            let draft = check::draft_text_for_case(std::path::Path::new(&s("path")))?;
-            let report = check::run_authority_check(std::path::Path::new(&s("path")), &draft)?;
+            let path = case_path(args)?;
+            let draft = check::draft_text_for_case(&path)?;
+            let report = check::run_authority_check(&path, &draft)?;
             Ok(serde_json::to_value(report).unwrap())
         }
         "check_deadline" => {
+            let path = case_path(args)?;
             let report = check::run_deadline(
-                std::path::Path::new(&s("path")),
-                &s("pack"),
-                &s("rule"),
-                &s("trigger_date"),
+                &path,
+                &arg_str(args, "pack"),
+                &arg_str(args, "rule"),
+                &arg_str(args, "trigger_date"),
             )?;
             Ok(serde_json::to_value(report).unwrap())
         }
         "check_all" => {
-            let pack = s("pack");
-            let rule = s("rule");
-            let trigger = s("trigger_date");
+            let path = case_path(args)?;
+            let pack = arg_str(args, "pack");
+            let rule = arg_str(args, "rule");
+            let trigger = arg_str(args, "trigger_date");
             let report = check::run_all(
-                std::path::Path::new(&s("path")),
+                &path,
                 if pack.is_empty() { None } else { Some(pack.as_str()) },
                 if rule.is_empty() { None } else { Some(rule.as_str()) },
-                if trigger.is_empty() { None } else { Some(trigger.as_str()) },
+                if trigger.is_empty() {
+                    None
+                } else {
+                    Some(trigger.as_str())
+                },
             )?;
             Ok(serde_json::to_value(report).unwrap())
         }
         "export_court" => {
-            let path = std::path::PathBuf::from(s("path"));
+            let path = case_path(args)?;
             let profile = case_profile::load_case(&path)?;
-            let kind = if s("kind").is_empty() { "court_md".into() } else { s("kind") };
+            let kind = if arg_str(args, "kind").is_empty() {
+                "court_md".into()
+            } else {
+                arg_str(args, "kind")
+            };
             let exported = documents::export_pleading(&path, &profile, &kind, None)?;
-            Ok(json!({"docx": exported.docx, "pdf": exported.pdf, "never_files": true}))
+            Ok(json!({"docx": exported.docx, "pdf": exported.pdf, "never_files": true, "dry_run": false}))
         }
         "playbook" => Ok(json!({"playbook": crate::help::playbook()})),
         "case_seed" => {
-            let (dir, profile) = crate::seed::seed_lucille(std::path::Path::new(&s("path")))?;
-            Ok(json!({"folder": dir, "id": profile.id, "title": profile.title, "never_files": true}))
+            let path = case_path(args)?;
+            let (dir, profile) = crate::seed::seed_lucille(&path)?;
+            Ok(json!({"folder": dir, "id": profile.id, "title": profile.title, "never_files": true, "dry_run": false}))
         }
         "draft_sections" => {
-            let profile = case_profile::load_case(std::path::Path::new(&s("path")))?;
-            let draft = crate::guided::load_or_init(std::path::Path::new(&s("path")), &profile.document_kind)?;
+            let path = case_path(args)?;
+            let profile = case_profile::load_case(&path)?;
+            let draft = crate::guided::load_or_init(&path, &profile.document_kind)?;
             Ok(serde_json::to_value(draft).unwrap())
         }
         "draft_fill" => {
-            let draft = crate::guided::set_section(std::path::Path::new(&s("path")), &s("id"), &s("text"))?;
+            let path = case_path(args)?;
+            let draft = crate::guided::set_section(&path, &arg_str(args, "id"), &arg_str(args, "text"))?;
             Ok(serde_json::to_value(draft).unwrap())
         }
         "evidence_index" => {
-            Ok(serde_json::to_value(crate::exhibits::rebuild(std::path::Path::new(&s("path")))?).unwrap())
+            Ok(serde_json::to_value(crate::exhibits::rebuild(&case_path(args)?)?).unwrap())
         }
         "evidence_link" => {
+            let path = case_path(args)?;
             let fact_id = args.get("fact_id").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
             Ok(serde_json::to_value(crate::exhibits::link_fact(
-                std::path::Path::new(&s("path")),
+                &path,
                 fact_id,
-                &s("letter"),
+                &arg_str(args, "letter"),
             )?)
             .unwrap())
         }
         "export_packet" => {
-            Ok(serde_json::to_value(crate::packet::assemble_for_case(std::path::Path::new(&s("path")))?).unwrap())
+            Ok(serde_json::to_value(crate::packet::assemble_for_case(&case_path(args)?)?).unwrap())
         }
         "export_ics" => {
-            let dir = std::path::PathBuf::from(s("path"));
-            let result = check::run_deadline(&dir, &s("pack"), &s("rule"), &s("trigger_date"))?;
+            let dir = case_path(args)?;
+            let result = check::run_deadline(
+                &dir,
+                &arg_str(args, "pack"),
+                &arg_str(args, "rule"),
+                &arg_str(args, "trigger_date"),
+            )?;
             let ics = crate::calendar::write_ics(&dir, &result)?;
-            Ok(json!({"ics": ics, "due": result.due, "never_files": true}))
+            Ok(json!({"ics": ics, "due": result.due, "never_files": true, "dry_run": false}))
         }
         "packs_list" => {
-            let catalog = if s("catalog").is_empty() {
+            let catalog = if arg_str(args, "catalog").is_empty() {
                 None
             } else {
-                Some(std::path::PathBuf::from(s("catalog")))
+                Some(PathBuf::from(arg_str(args, "catalog")))
             };
             Ok(serde_json::to_value(crate::forms::list_packs(catalog.as_deref(), None)?).unwrap())
         }
         "packs_validate" => {
-            Ok(serde_json::to_value(RulePack::validate_file(std::path::Path::new(&s("file")))?).unwrap())
+            Ok(serde_json::to_value(RulePack::validate_file(Path::new(&arg_str(args, "file")))?).unwrap())
         }
         "packs_install" => {
-            let file = if s("file").is_empty() {
+            let file = if arg_str(args, "file").is_empty() {
                 None
             } else {
-                Some(std::path::PathBuf::from(s("file")))
+                Some(PathBuf::from(arg_str(args, "file")))
             };
-            let catalog = if s("catalog").is_empty() {
+            let catalog = if arg_str(args, "catalog").is_empty() {
                 None
             } else {
-                Some(std::path::PathBuf::from(s("catalog")))
+                Some(PathBuf::from(arg_str(args, "catalog")))
             };
-            let situation = if s("situation").is_empty() {
+            let situation = if arg_str(args, "situation").is_empty() {
                 None
             } else {
-                Some(s("situation"))
+                Some(arg_str(args, "situation"))
             };
             Ok(serde_json::to_value(crate::forms::install(crate::forms::InstallOpts {
-                state: s("state"),
+                state: arg_str(args, "state"),
                 situation,
                 catalog,
                 file,
@@ -235,174 +466,151 @@ fn call_tool(name: &str, args: &Value) -> Result<Value, String> {
             })?)
             .unwrap())
         }
-        "packs_remove" => Ok(json!({"removed": crate::forms::remove_pack(&s("state"), None)?})),
+        "packs_remove" => Ok(json!({"removed": crate::forms::remove_pack(&arg_str(args, "state"), None)?, "dry_run": false})),
         "packs_verify" => {
-            let state = if s("state").is_empty() {
+            let state = if arg_str(args, "state").is_empty() {
                 None
             } else {
-                Some(s("state"))
+                Some(arg_str(args, "state"))
             };
             Ok(serde_json::to_value(crate::forms::verify_pack(state.as_deref(), None)?).unwrap())
         }
         "guide_questions" => Ok(serde_json::to_value(crate::guide::questions()?).unwrap()),
         "guide_find" => {
-            let court = if s("court").is_empty() {
+            let court = if arg_str(args, "court").is_empty() {
                 None
             } else {
-                Some(s("court"))
+                Some(arg_str(args, "court"))
             };
-            let trigger = if s("trigger_date").is_empty() {
+            let trigger = if arg_str(args, "trigger_date").is_empty() {
                 None
             } else {
-                Some(s("trigger_date"))
+                Some(arg_str(args, "trigger_date"))
             };
-            Ok(serde_json::to_value(crate::guide::find(&s("state"), court.as_deref(), &s("situation"), trigger.as_deref())?).unwrap())
+            Ok(serde_json::to_value(crate::guide::find(
+                &arg_str(args, "state"),
+                court.as_deref(),
+                &arg_str(args, "situation"),
+                trigger.as_deref(),
+            )?)
+            .unwrap())
         }
         "help_links" => Ok(serde_json::to_value(crate::help_links::HelpLinks::load()?).unwrap()),
         "gaps_add" => Ok(serde_json::to_value(crate::gaps::add(
-            std::path::Path::new(&s("path")),
-            &s("title"),
-            &s("court"),
-            &s("rule"),
-            &s("happened"),
-            &s("hard"),
+            &case_path(args)?,
+            &arg_str(args, "title"),
+            &arg_str(args, "court"),
+            &arg_str(args, "rule"),
+            &arg_str(args, "happened"),
+            &arg_str(args, "hard"),
         )?)
         .unwrap()),
         "check_preflight" => {
-            let p_str = s("path");
-            let report = check::preflight_audit(std::path::Path::new(&p_str))?;
+            let report = check::preflight_audit(&case_path(args)?)?;
             Ok(serde_json::to_value(report).unwrap())
         }
         "check_transcripts" => {
-            let p_str = s("path");
-            let dir = std::path::Path::new(&p_str);
-            let profile = case_profile::load_case(dir)?;
+            let dir = case_path(args)?;
+            let profile = case_profile::load_case(&dir)?;
             let draft = profile.notice_of_appeal.user_text.as_str();
-            let report = check::check_transcripts(dir, draft)?;
+            let report = check::check_transcripts(&dir, draft)?;
             Ok(serde_json::to_value(report).unwrap())
         }
         "export_exhibit_packet" => {
-            let p_str = s("path");
-            let dir = std::path::Path::new(&p_str);
-            let p_prefix = s("prefix");
-            let prefix = if p_prefix.is_empty() { None } else { Some(p_prefix.as_str()) };
+            let dir = case_path(args)?;
+            let prefix_s = arg_str(args, "prefix");
+            let prefix = if prefix_s.is_empty() {
+                None
+            } else {
+                Some(prefix_s.as_str())
+            };
             let start = args.get("start").and_then(|v| v.as_u64()).map(|n| n as u32);
-            let report = crate::packet::assemble_exhibit_packet(dir, prefix, start)?;
+            let report = crate::packet::assemble_exhibit_packet(&dir, prefix, start)?;
             Ok(serde_json::to_value(report).unwrap())
         }
         "form_inspect" => {
-            let pdf = std::path::PathBuf::from(s("pdf"));
-            let case = if s("path").is_empty() { None } else { Some(std::path::PathBuf::from(s("path"))) };
+            let pdf = PathBuf::from(arg_str(args, "pdf"));
+            let case = optional_case_path(args)?;
             let report = crate::forms::inspect_court_form(&pdf, case.as_deref())?;
             Ok(serde_json::to_value(report).unwrap())
         }
-        "form_fill" => {
-            let pdf = std::path::PathBuf::from(s("pdf"));
-            let case = std::path::PathBuf::from(s("path"));
-            let report = crate::forms::fill_court_form(&pdf, &case, None, None)?;
-            Ok(serde_json::to_value(report).unwrap())
-        }
-        "cloud_pull" => {
-            let session = crate::sync::load_cloud_session().ok_or_else(|| "Not logged in to JustLegal cloud. Run cloud login first.".to_string())?;
-            let root = if s("root").is_empty() { case_profile::default_cases_root() } else { std::path::PathBuf::from(s("root")) };
-            let case_filter = if s("case").is_empty() { None } else { Some(s("case")) };
-            let report = crate::sync::cloud_pull_all(&session, &root, case_filter.as_deref())?;
-            Ok(serde_json::to_value(report).unwrap())
-        }
-        "cloud_push" => {
-            let session = crate::sync::load_cloud_session().ok_or_else(|| "Not logged in to JustLegal cloud. Run cloud login first.".to_string())?;
-            let dir = std::path::PathBuf::from(s("path"));
-            let report = crate::sync::cloud_push_case(&dir, &session)?;
-            Ok(serde_json::to_value(report).unwrap())
-        }
         "motion_list" => {
-            let p_str = s("path");
-            let profile = case_profile::load_case(std::path::Path::new(&p_str))?;
+            let profile = case_profile::load_case(&case_path(args)?)?;
             Ok(serde_json::to_value(profile.filings).unwrap())
         }
         "motion_create" => {
-            let p_str = s("path");
-            let dir = std::path::Path::new(&p_str);
-            let mut profile = case_profile::load_case(dir)?;
+            let dir = case_path(args)?;
+            let mut profile = case_profile::load_case(&dir)?;
             let now = chrono::Local::now().to_rfc3339();
             let filing = case_profile::CaseFilingItem {
                 id: uuid::Uuid::new_v4().to_string(),
-                title: s("title"),
-                kind: if s("kind").is_empty() { "motion".into() } else { s("kind") },
-                rule: s("rule"),
+                title: arg_str(args, "title"),
+                kind: if arg_str(args, "kind").is_empty() {
+                    "motion".into()
+                } else {
+                    arg_str(args, "kind")
+                },
+                rule: arg_str(args, "rule"),
                 status: "draft".into(),
-                user_text: s("text"),
+                user_text: arg_str(args, "text"),
                 relief_sought: String::new(),
                 created_at: now.clone(),
                 updated_at: now,
             };
             profile.filings.push(filing.clone());
-            case_profile::save_case(dir, &profile)?;
+            case_profile::save_case(&dir, &profile)?;
             Ok(serde_json::to_value(filing).unwrap())
         }
         "motion_export" => {
-            let p_str = s("path");
-            let dir = std::path::Path::new(&p_str);
-            let profile = case_profile::load_case(dir)?;
-            let id = s("id");
-            let filing = profile.filings.iter().find(|f| f.id == id)
+            let dir = case_path(args)?;
+            let profile = case_profile::load_case(&dir)?;
+            let id = arg_str(args, "id");
+            let filing = profile
+                .filings
+                .iter()
+                .find(|f| f.id == id)
                 .ok_or_else(|| format!("Filing ID '{id}' not found in case."))?;
-            let paths = crate::documents::export_custom_filing(dir, &profile, &filing.title, &filing.user_text, None)?;
+            let paths = crate::documents::export_custom_filing(
+                &dir,
+                &profile,
+                &filing.title,
+                &filing.user_text,
+                None,
+            )?;
             Ok(serde_json::to_value(paths).unwrap())
         }
-        "service_cert" => {
-            let p_str = s("path");
-            let dir = std::path::Path::new(&p_str);
-            let profile = case_profile::load_case(dir)?;
-            let recipients: Vec<crate::service::ServiceRecipient> = profile
-                .caption
-                .appellees()
-                .into_iter()
-                .map(|p| crate::service::ServiceRecipient {
-                    name: p.name.clone(),
-                    role: p.role.clone(),
-                    address: p.address.clone(),
-                    email: p.email.clone(),
-                })
-                .collect();
-            let filing_t = if s("filing").is_empty() { "the accompanying papers".into() } else { s("filing") };
-            let method = if s("method").is_empty() { "eCourts / Electronic Filing System".into() } else { s("method") };
-            let params = crate::service::ServiceCertParams {
-                filing_title: filing_t,
-                service_date: s("date"),
-                method,
-                recipients,
-                signature_name: profile.filer.signature_name.clone(),
-            };
-            let result = crate::service::generate_certificate_of_service(dir, &profile, &params)?;
-            Ok(serde_json::to_value(result).unwrap())
-        }
-        "service_order" => {
-            let p_str = s("path");
-            let dir = std::path::Path::new(&p_str);
-            let profile = case_profile::load_case(dir)?;
-            let title = if s("title").is_empty() { "RELIEF REQUESTED".into() } else { s("title") };
-            let result = crate::service::generate_proposed_order(dir, &profile, &title, &s("relief"))?;
-            Ok(serde_json::to_value(result).unwrap())
-        }
         "pdf_merge" => {
-            let files_arr = args.get("files").and_then(|v| v.as_array()).cloned().unwrap_or_default();
-            let paths: Vec<std::path::PathBuf> = files_arr.iter().filter_map(|v| v.as_str()).map(std::path::PathBuf::from).collect();
-            let out = std::path::PathBuf::from(s("out"));
+            let files_arr = args
+                .get("files")
+                .and_then(|v| v.as_array())
+                .cloned()
+                .unwrap_or_default();
+            let mut paths = Vec::new();
+            for v in &files_arr {
+                let raw = v.as_str().unwrap_or("");
+                paths.push(resolve_under_cases_root(raw)?);
+            }
+            let out = resolve_under_cases_root(&arg_str(args, "out"))?;
             let result = crate::pdf_tools::merge_pdfs(&paths, &out)?;
             Ok(serde_json::to_value(result).unwrap())
         }
         "pdf_split" => {
-            let pdf = std::path::PathBuf::from(s("pdf"));
-            let out = std::path::PathBuf::from(s("out"));
-            let pages_str = s("pages");
+            let pdf = resolve_under_cases_root(&arg_str(args, "pdf"))?;
+            let out = resolve_under_cases_root(&arg_str(args, "out"))?;
+            let pages_str = arg_str(args, "pages");
             let mut page_list = Vec::new();
-            for part in pages_str.split(&[',', ' '][..]) {
+            for part in pages_str.split([',', ' ']) {
                 let trimmed = part.trim();
-                if trimmed.is_empty() { continue; }
+                if trimmed.is_empty() {
+                    continue;
+                }
                 if let Some((s_str, e_str)) = trimmed.split_once('-') {
-                    if let (Ok(start), Ok(end)) = (s_str.trim().parse::<u32>(), e_str.trim().parse::<u32>()) {
-                        for p in start..=end { page_list.push(p); }
+                    if let (Ok(start), Ok(end)) =
+                        (s_str.trim().parse::<u32>(), e_str.trim().parse::<u32>())
+                    {
+                        for p in start..=end {
+                            page_list.push(p);
+                        }
                     }
                 } else if let Ok(num) = trimmed.parse::<u32>() {
                     page_list.push(num);
@@ -412,90 +620,72 @@ fn call_tool(name: &str, args: &Value) -> Result<Value, String> {
             Ok(serde_json::to_value(result).unwrap())
         }
         "pdf_rotate" => {
-            let pdf = std::path::PathBuf::from(s("pdf"));
-            let out = std::path::PathBuf::from(s("out"));
+            let pdf = resolve_under_cases_root(&arg_str(args, "pdf"))?;
+            let out = resolve_under_cases_root(&arg_str(args, "out"))?;
             let degrees = args.get("degrees").and_then(|v| v.as_i64()).unwrap_or(90);
             let result = crate::pdf_tools::rotate_pdf(&pdf, degrees, None, &out)?;
             Ok(serde_json::to_value(result).unwrap())
         }
-        "pdf_redact" => {
-            let pdf = std::path::PathBuf::from(s("pdf"));
-            let out = std::path::PathBuf::from(s("out"));
-            let words_arr = args.get("words").and_then(|v| v.as_array()).cloned().unwrap_or_default();
-            let words: Vec<String> = words_arr.iter().filter_map(|v| v.as_str().map(String::from)).collect();
-            let result = crate::pdf_tools::redact_pdf_text(&pdf, &words, &out)?;
-            Ok(serde_json::to_value(result).unwrap())
-        }
-        "sign_pdf" => {
-            let pdf = std::path::PathBuf::from(s("pdf"));
-            let name = s("name");
-            let page = args.get("page").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
-            let x = args.get("x").and_then(|v| v.as_f64()).unwrap_or(72.0) as f32;
-            let y = args.get("y").and_then(|v| v.as_f64()).unwrap_or(100.0) as f32;
-            let out_str = s("out");
-            let out_p = if out_str.is_empty() {
-                pdf.with_file_name(format!("signed-{}", pdf.file_name().unwrap().to_string_lossy()))
-            } else {
-                std::path::PathBuf::from(out_str)
-            };
-            let result = crate::signature::stamp_pdf(&pdf, &name, page, x, y, &out_p)?;
-            Ok(serde_json::to_value(result).unwrap())
-        }
         "case_context" => {
-            let dir = std::path::PathBuf::from(s("path"));
+            let dir = case_path(args)?;
             Ok(serde_json::to_value(crate::intake::case_context(&dir)?).unwrap())
         }
         "case_next_steps" => {
-            let dir = std::path::PathBuf::from(s("path"));
+            let dir = case_path(args)?;
             let profile = case_profile::load_case(&dir)?;
             let report = crate::legal_os::predict_next_steps(&profile, Some(&dir));
             Ok(serde_json::to_value(report).unwrap())
         }
         "case_escalate" => {
-            let dir = std::path::PathBuf::from(s("path"));
-            let report = crate::portfolio::escalate_case(&dir, &s("target"), None)?;
+            let dir = case_path(args)?;
+            let report = crate::portfolio::escalate_case(&dir, &arg_str(args, "target"), None)?;
             Ok(serde_json::to_value(report).unwrap())
         }
         "intake_status" => {
-            let dir = std::path::PathBuf::from(s("path"));
+            let dir = case_path(args)?;
             let report = crate::intake::intake_status(&dir)?;
             Ok(serde_json::to_value(report).unwrap())
         }
         "intake_answer" => {
-            let dir = std::path::PathBuf::from(s("path"));
-            let report = crate::intake::intake_answer(&dir, &s("question_id"), &s("answer"))?;
+            let dir = case_path(args)?;
+            let report =
+                crate::intake::intake_answer(&dir, &arg_str(args, "question_id"), &arg_str(args, "answer"))?;
             Ok(serde_json::to_value(report).unwrap())
         }
         "intake_scan" => {
-            let dir = std::path::PathBuf::from(s("path"));
+            let dir = case_path(args)?;
             Ok(serde_json::to_value(crate::intake::intake_scan(&dir)).unwrap())
         }
         "check_venue" => {
-            let dir = std::path::PathBuf::from(s("path"));
+            let dir = case_path(args)?;
             let profile = case_profile::load_case(&dir)?;
             Ok(serde_json::to_value(crate::legal_os::check_venue_competence(&profile)).unwrap())
         }
         "portfolio_status" => {
-            let root = if s("root").is_empty() {
-                case_profile::default_cases_root()
+            let root = if arg_str(args, "root").is_empty() {
+                cases_root()
             } else {
-                std::path::PathBuf::from(s("root"))
+                resolve_under_cases_root(&arg_str(args, "root"))?
             };
             Ok(serde_json::to_value(crate::portfolio::portfolio_status(&root)?).unwrap())
         }
         "pdf_extract_text" => {
-            let pdf = std::path::PathBuf::from(s("pdf"));
+            let pdf = resolve_under_cases_root(&arg_str(args, "pdf"))?;
             Ok(serde_json::to_value(crate::pdf_tools::extract_pdf_text(&pdf)?).unwrap())
         }
         "agent_manifest" => Ok(crate::help::agent_manifest()),
         "import_folder" => {
-            let dest = s("path");
-            let from = s("from");
-            let title = s("title");
+            let dest = case_path(args)?;
+            let from = arg_str(args, "from");
+            let title = arg_str(args, "title");
             let report = crate::folder_import::import_folder(
-                std::path::Path::new(&dest),
-                std::path::Path::new(&from),
-                if title.is_empty() { None } else { Some(title.as_str()) },
+                &dest,
+                Path::new(&from),
+                if title.is_empty() {
+                    None
+                } else {
+                    Some(title.as_str())
+                },
             )?;
             Ok(serde_json::to_value(report).unwrap())
         }
@@ -526,7 +716,10 @@ fn write_message(out: &mut impl Write, body: &Value, framing: Framing) -> Result
     out.flush().map_err(|e| e.to_string())
 }
 
-fn read_message(reader: &mut impl BufRead, framing: &mut Option<Framing>) -> Result<Option<Value>, String> {
+fn read_message(
+    reader: &mut impl BufRead,
+    framing: &mut Option<Framing>,
+) -> Result<Option<Value>, String> {
     let mut first = String::new();
     let n = reader.read_line(&mut first).map_err(|e| e.to_string())?;
     if n == 0 {
@@ -561,13 +754,20 @@ fn read_message(reader: &mut impl BufRead, framing: &mut Option<Framing>) -> Res
         }
         let mut buf = vec![0u8; len];
         reader.read_exact(&mut buf).map_err(|e| e.to_string())?;
-        return serde_json::from_slice(&buf).map(Some).map_err(|e| e.to_string());
+        return serde_json::from_slice(&buf)
+            .map(Some)
+            .map_err(|e| e.to_string());
     }
     if trimmed.starts_with('{') {
         *framing = Some(Framing::Newline);
-        return serde_json::from_str(trimmed).map(Some).map_err(|e| e.to_string());
+        return serde_json::from_str(trimmed)
+            .map(Some)
+            .map_err(|e| e.to_string());
     }
-    Err(format!("Unrecognized MCP frame: {}", trimmed.chars().take(80).collect::<String>()))
+    Err(format!(
+        "Unrecognized MCP frame: {}",
+        trimmed.chars().take(80).collect::<String>()
+    ))
 }
 
 fn handle(msg: &Value) -> Option<Value> {
@@ -619,28 +819,129 @@ fn handle(msg: &Value) -> Option<Value> {
 mod tests {
     use super::*;
     use std::io::Cursor;
+    use std::sync::{Mutex, MutexGuard};
 
-    fn temp_dir() -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("os-mcp-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    struct CasesRootGuard {
+        _lock: MutexGuard<'static, ()>,
+        root: PathBuf,
     }
 
-    #[test]
-    fn tools_list_names_the_agent_surface() {
+    impl CasesRootGuard {
+        fn new() -> Self {
+            let lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            let root = std::env::temp_dir().join(format!("os-mcp-root-{}", uuid::Uuid::new_v4()));
+            std::fs::create_dir_all(&root).unwrap();
+            std::env::set_var("OPENSEASON_CASES_ROOT", &root);
+            Self { _lock: lock, root }
+        }
+
+        fn case_dir(&self, name: &str) -> PathBuf {
+            self.root.join(name)
+        }
+    }
+
+    impl Drop for CasesRootGuard {
+        fn drop(&mut self) {
+            std::env::remove_var("OPENSEASON_CASES_ROOT");
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
+    fn tool_names() -> Vec<String> {
         let reply = handle(&json!({
             "jsonrpc": "2.0",
             "id": 1,
             "method": "tools/list"
         }))
         .unwrap();
-        let names: Vec<&str> = reply["result"]["tools"]
+        reply["result"]["tools"]
             .as_array()
             .unwrap()
             .iter()
-            .map(|t| t["name"].as_str().unwrap())
-            .collect();
+            .map(|t| t["name"].as_str().unwrap().to_string())
+            .collect()
+    }
+
+    fn folder_fingerprint(dir: &Path) -> Vec<(String, Vec<u8>)> {
+        fn walk(base: &Path, current: &Path, out: &mut Vec<(String, Vec<u8>)>) {
+            if !current.exists() {
+                return;
+            }
+            let mut entries: Vec<_> = std::fs::read_dir(current)
+                .unwrap()
+                .map(|e| e.unwrap())
+                .collect();
+            entries.sort_by_key(|e| e.file_name());
+            for entry in entries {
+                let path = entry.path();
+                let rel = path
+                    .strip_prefix(base)
+                    .unwrap()
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                if path.is_dir() {
+                    walk(base, &path, out);
+                } else {
+                    out.push((rel, std::fs::read(&path).unwrap()));
+                }
+            }
+        }
+        let mut out = Vec::new();
+        walk(dir, dir, &mut out);
+        out
+    }
+
+    fn sample_markdown() -> String {
+        std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("..")
+                .join("fixtures")
+                .join("sample-reconsideration.md"),
+        )
+        .unwrap_or_else(|_| {
+            "---\ncourt: Sample\nplaintiff: Jordan Example\ndefendant: Sample County Clerk\ncase_no: A-01000-24\n---\nRelief is sought under R. 2:11-6.\n".into()
+        })
+    }
+
+    /// JSON-RPC `tools/call` envelope (`ok`, `never_files`, `data`, `issues`).
+    fn mcp_envelope(name: &str, args: &Value) -> Value {
+        let reply = handle(&json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": name, "arguments": args}
+        }))
+        .expect("MCP tools/call should reply");
+        assert_ne!(
+            reply["result"]["isError"], true,
+            "MCP tool {name} returned isError: {reply}"
+        );
+        let text = reply["result"]["content"][0]["text"]
+            .as_str()
+            .expect("MCP content text");
+        serde_json::from_str(text)
+            .unwrap_or_else(|e| panic!("envelope JSON for {name}: {e}; {text}"))
+    }
+
+    #[test]
+    fn initialize_and_tools_list() {
+        let init = handle(&json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize"
+        }))
+        .unwrap();
+        assert_eq!(init["jsonrpc"], "2.0");
+        assert_eq!(init["id"], 1);
+        assert_eq!(init["result"]["protocolVersion"], "2024-11-05");
+        assert_eq!(init["result"]["serverInfo"]["name"], "openseason");
+        assert!(init["result"]["capabilities"]["tools"].is_object());
+
+        let names = tool_names();
         for required in [
+            "case_list",
             "case_create",
             "draft_import",
             "evidence_add",
@@ -655,8 +956,29 @@ mod tests {
             "guide_find",
             "help_links",
         ] {
-            assert!(names.contains(&required), "missing {required} in {names:?}");
+            assert!(
+                names.iter().any(|n| n == required),
+                "missing {required} in {names:?}"
+            );
         }
+        for blocked in BLOCKED_TOOLS {
+            assert!(
+                !names.iter().any(|n| n == blocked),
+                "blocked tool {blocked} must be absent from tools/list, got {names:?}"
+            );
+        }
+        assert!(!names.iter().any(|n| n.contains("cloud")));
+    }
+
+    #[test]
+    fn tools_list_names_the_agent_surface() {
+        let names = tool_names();
+        assert!(names.contains(&"case_list".to_string()));
+        assert!(names.contains(&"case_create".to_string()));
+        assert!(!names.contains(&"cloud_pull".to_string()));
+        assert!(!names.contains(&"cloud_push".to_string()));
+        assert!(!names.contains(&"pdf_redact".to_string()));
+        assert!(!names.contains(&"form_fill".to_string()));
     }
 
     #[test]
@@ -673,7 +995,12 @@ mod tests {
     #[test]
     fn newline_delimited_jsonrpc_roundtrip() {
         let mut buf = Vec::new();
-        write_message(&mut buf, &json!({"jsonrpc": "2.0", "id": 1, "method": "ping"}), Framing::Newline).unwrap();
+        write_message(
+            &mut buf,
+            &json!({"jsonrpc": "2.0", "id": 1, "method": "ping"}),
+            Framing::Newline,
+        )
+        .unwrap();
         let mut reader = BufReader::new(Cursor::new(buf));
         let mut framing = None;
         let msg = read_message(&mut reader, &mut framing).unwrap().unwrap();
@@ -682,8 +1009,44 @@ mod tests {
     }
 
     #[test]
-    fn mcp_tools_create_import_check_export() {
-        let dir = temp_dir();
+    fn case_list_reuses_engine_listing() {
+        let guard = CasesRootGuard::new();
+        let empty = call_tool("case_list", &json!({})).unwrap();
+        assert_eq!(empty["never_files"], true);
+        assert!(empty["cases"].as_array().unwrap().is_empty());
+
+        let dir = guard.case_dir("listed-example");
+        let (_created, profile) = case_profile::create_case_folder(
+            &dir,
+            "Example v. Sample County Clerk",
+            case_profile::CaseMode::Standard,
+            "reconsideration",
+        )
+        .unwrap();
+
+        let listed = call_tool("case_list", &json!({})).unwrap();
+        let cases = listed["cases"].as_array().unwrap();
+        assert_eq!(cases.len(), 1);
+        assert_eq!(cases[0]["id"], profile.id);
+        assert_eq!(cases[0]["title"], "Example v. Sample County Clerk");
+        assert_eq!(cases[0]["document_kind"], "reconsideration");
+        let folder = PathBuf::from(cases[0]["folder"].as_str().unwrap());
+        assert!(folder.join("case.json").is_file());
+    }
+
+    #[test]
+    fn write_tools_dry_run_leaves_folder_byte_identical() {
+        let guard = CasesRootGuard::new();
+        let dir = guard.case_dir("dry-run-example");
+        case_profile::create_case_folder(
+            &dir,
+            "Example v. Sample County Clerk",
+            case_profile::CaseMode::Standard,
+            "reconsideration",
+        )
+        .unwrap();
+        let before = folder_fingerprint(&dir);
+
         let created = call_tool(
             "case_create",
             &json!({
@@ -694,26 +1057,92 @@ mod tests {
             }),
         )
         .unwrap();
-        assert_eq!(created["never_files"], true);
-        let md = std::fs::read_to_string(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("..")
-                .join("fixtures")
-                .join("sample-reconsideration.md"),
+        assert_eq!(created["dry_run"], true);
+        assert_eq!(created["changed"], false);
+        assert!(created["would"].as_str().unwrap().contains("Write nothing"));
+
+        let imported = call_tool(
+            "draft_import",
+            &json!({"path": dir, "markdown": sample_markdown()}),
         )
-        .unwrap_or_else(|_| {
-            "---\ncourt: Sample\nplaintiff: Jordan Example\ndefendant: Sample County Clerk\ncase_no: A-01000-24\n---\nRelief is sought under R. 2:11-6.\n".into()
-        });
+        .unwrap();
+        assert_eq!(imported["dry_run"], true);
+        assert_eq!(imported["changed"], false);
+
+        let exhibit = guard.root.join("order-excerpt.txt");
+        std::fs::write(&exhibit, b"Order granting dismissal (fake exhibit)\n").unwrap();
+        let added = call_tool(
+            "evidence_add",
+            &json!({"path": dir, "file": exhibit, "description": "Dkt. 12"}),
+        )
+        .unwrap();
+        assert_eq!(added["dry_run"], true);
+
+        let exported =
+            call_tool("export_court", &json!({"path": dir, "kind": "court_md"})).unwrap();
+        assert_eq!(exported["dry_run"], true);
+        assert_eq!(exported["changed"], false);
+
+        let after = folder_fingerprint(&dir);
+        assert_eq!(
+            before, after,
+            "dry-run must leave the case folder byte-identical"
+        );
+        assert!(!dir.join("drafts").join("draft.md").is_file());
+    }
+
+    #[test]
+    fn mcp_refuses_writes_outside_cases_root() {
+        let _guard = CasesRootGuard::new();
+        let outside = std::env::temp_dir().join(format!("os-mcp-outside-{}", uuid::Uuid::new_v4()));
+        let err = call_tool(
+            "case_create",
+            &json!({
+                "path": outside,
+                "title": "Example v. Sample County Clerk",
+                "kind": "reconsideration",
+                "dry_run": false
+            }),
+        )
+        .unwrap_err();
+        assert!(
+            err.to_lowercase().contains("outside") || err.to_lowercase().contains("cases root"),
+            "expected sandbox refusal, got {err}"
+        );
+        assert!(!outside.join("case.json").exists());
+        let _ = std::fs::remove_dir_all(outside);
+    }
+
+    #[test]
+    fn mcp_tools_create_import_check_export() {
+        let guard = CasesRootGuard::new();
+        let dir = guard.case_dir("roundtrip-example");
+        let created = call_tool(
+            "case_create",
+            &json!({
+                "path": dir,
+                "title": "Example v. Sample County Clerk",
+                "kind": "reconsideration",
+                "pack": "nj-app-div",
+                "dry_run": false
+            }),
+        )
+        .unwrap();
+        assert_eq!(created["never_files"], true);
+        assert_eq!(created["dry_run"], false);
+        assert!(dir.join("case.json").is_file());
+
+        let md = sample_markdown();
         call_tool(
             "draft_import",
-            &json!({"path": dir, "markdown": md}),
+            &json!({"path": dir, "markdown": md, "dry_run": false}),
         )
         .unwrap();
         let exhibit = dir.join("order-excerpt.txt");
         std::fs::write(&exhibit, b"Order granting dismissal (fake exhibit)\n").unwrap();
         call_tool(
             "evidence_add",
-            &json!({"path": dir, "file": exhibit, "description": "Dkt. 12"}),
+            &json!({"path": dir, "file": exhibit, "description": "Dkt. 12", "dry_run": false}),
         )
         .unwrap();
         let fact = call_tool("check_fact", &json!({"path": dir})).unwrap();
@@ -744,11 +1173,25 @@ mod tests {
         .unwrap();
         assert_eq!(all["never_files"], true);
         assert_eq!(all["never_serves"], true);
-        let exported = call_tool("export_court", &json!({"path": dir, "kind": "court_md"})).unwrap();
+        assert_eq!(
+            all["ok"], false,
+            "check_all stays not ok until a human signs off"
+        );
+        assert_eq!(all["signoff"]["ok"], false);
+        assert!(all["signoff"]["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["checked"] == false));
+        let exported = call_tool(
+            "export_court",
+            &json!({"path": dir, "kind": "court_md", "dry_run": false}),
+        )
+        .unwrap();
         let docx = exported["docx"].as_str().unwrap();
         let pdf = exported["pdf"].as_str().unwrap();
-        assert!(std::path::Path::new(docx).is_file());
-        assert!(std::path::Path::new(pdf).is_file());
+        assert!(Path::new(docx).is_file());
+        assert!(Path::new(pdf).is_file());
         let wrapped = handle(&json!({
             "jsonrpc": "2.0",
             "id": 7,
@@ -768,10 +1211,151 @@ mod tests {
         assert_eq!(guide["never_files"], true);
         assert_eq!(guide["citation"], "R. 2:11-6");
         assert_eq!(guide["deadline"]["due"], "2026-01-20");
-        assert!(guide["help_links"].as_array().unwrap().iter().any(|l| l["id"] == "find-legal-help"));
+        assert!(guide["help_links"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|l| l["id"] == "find-legal-help"));
         let links = call_tool("help_links", &json!({})).unwrap();
         assert_eq!(links["opens_browser"], false);
-        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn check_all_stays_not_ok_until_human_signoff_and_cloud_tools_absent() {
+        let names = tool_names();
+        assert!(
+            !names.contains(&"cloud_pull".to_string()),
+            "cloud_pull must be absent from tools/list, got {names:?}"
+        );
+        assert!(
+            !names.contains(&"cloud_push".to_string()),
+            "cloud_push must be absent from tools/list, got {names:?}"
+        );
+        assert!(
+            !names.iter().any(|n| n.contains("cloud")),
+            "no cloud* tool on the MCP surface, got {names:?}"
+        );
+        assert!(
+            !names
+                .iter()
+                .any(|n| { n.contains("signoff") || n.contains("sign_off") || n == "set_signoff" }),
+            "sign-off is a human gate; MCP must not expose a sign-off tool, got {names:?}"
+        );
+
+        let guard = CasesRootGuard::new();
+        let dir = guard.case_dir("signoff-example");
+        call_tool(
+            "case_create",
+            &json!({
+                "path": dir,
+                "title": "Example v. Sample County Clerk",
+                "kind": "reconsideration",
+                "pack": "nj-app-div",
+                "dry_run": false
+            }),
+        )
+        .unwrap();
+        call_tool(
+            "draft_import",
+            &json!({"path": dir, "markdown": sample_markdown(), "dry_run": false}),
+        )
+        .unwrap();
+        let exhibit = dir.join("order-excerpt.txt");
+        std::fs::write(&exhibit, b"Order granting dismissal (fake exhibit)\n").unwrap();
+        call_tool(
+            "evidence_add",
+            &json!({"path": dir, "file": exhibit, "description": "Dkt. 12", "dry_run": false}),
+        )
+        .unwrap();
+
+        let check_args = json!({
+            "path": dir,
+            "pack": "nj-app-div",
+            "rule": "reconsideration-appellate",
+            "trigger_date": "2026-01-09"
+        });
+        let before = mcp_envelope("check_all", &check_args);
+        assert_eq!(before["never_files"], true);
+        assert_eq!(before["never_serves"], true);
+        assert_eq!(
+            before["ok"], false,
+            "MCP check_all envelope ok=false before human sign-off: {before}"
+        );
+        assert_eq!(before["data"]["ok"], false);
+        assert_eq!(before["data"]["signoff"]["ok"], false);
+
+        // User-supplied fixture cites (not invented by MCP). Isolates the sign-off gate.
+        let fact_rows = before["data"]["fact"]["rows"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        assert!(
+            !fact_rows.is_empty(),
+            "sample draft should produce fact rows: {before}"
+        );
+        for row in &fact_rows {
+            let id = row["id"].as_u64().unwrap() as u32;
+            check::set_fact_cite(
+                &dir,
+                id,
+                "Ex. A (order-excerpt.txt, Dkt. 12)",
+                "order-excerpt.txt",
+                true,
+            )
+            .unwrap();
+        }
+        let authority_rows = before["data"]["authority"]["rows"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        for row in &authority_rows {
+            let id = row["id"].as_u64().unwrap() as u32;
+            check::set_authority_status(
+                &dir,
+                id,
+                check::AuthorityStatus::Verified,
+                "fixture://sample-reconsideration.md",
+                "test fixture: user-supplied verification",
+            )
+            .unwrap();
+        }
+
+        let unsigned = mcp_envelope("check_all", &check_args);
+        assert_eq!(
+            unsigned["ok"], false,
+            "MCP check_all stays ok=false while sign-off boxes are unchecked: {unsigned}"
+        );
+        assert_eq!(unsigned["data"]["ok"], false);
+        assert_eq!(unsigned["data"]["fact"]["ok"], true);
+        assert_eq!(unsigned["data"]["authority"]["ok"], true);
+        assert_eq!(unsigned["data"]["signoff"]["ok"], false);
+        assert!(unsigned["issues"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|i| i["field"] == "signoff"));
+
+        let items = unsigned["data"]["signoff"]["items"]
+            .as_array()
+            .cloned()
+            .unwrap();
+        assert!(!items.is_empty());
+        for item in &items {
+            check::set_signoff(&dir, item["id"].as_str().unwrap(), true).unwrap();
+        }
+
+        let signed = mcp_envelope("check_all", &check_args);
+        assert_eq!(signed["never_files"], true);
+        assert_eq!(signed["never_serves"], true);
+        assert_eq!(
+            signed["data"]["signoff"]["ok"], true,
+            "engine sign-off should check every box: {signed}"
+        );
+        assert_eq!(
+            signed["ok"], true,
+            "MCP check_all ok=true only after the human sign-off gate: {signed}"
+        );
+        assert_eq!(signed["data"]["ok"], true);
     }
 }
 
@@ -780,13 +1364,20 @@ pub fn serve_stdio() -> Result<(), String> {
     let mut reader = BufReader::new(stdin.lock());
     let mut stdout = std::io::stdout();
     let mut framing = None;
-    eprintln!("openseason mcp: offline stdio server. Never files or serves.");
+    eprintln!(
+        "openseason mcp: offline stdio server. Never files or serves. Cases root: {}. Write tools default to dry-run.",
+        cases_root().display()
+    );
     loop {
         match read_message(&mut reader, &mut framing)? {
             None => break,
             Some(msg) => {
                 if let Some(reply) = handle(&msg) {
-                    write_message(&mut stdout, &reply, framing.unwrap_or(Framing::ContentLength))?;
+                    write_message(
+                        &mut stdout,
+                        &reply,
+                        framing.unwrap_or(Framing::ContentLength),
+                    )?;
                 }
             }
         }

@@ -6,6 +6,7 @@
   "command": ["cargo", "run", "--quiet", "--manifest-path", "src-tauri/Cargo.toml", "--bin", "openseason", "--", "mcp"],
   "tools": [
     "playbook",
+    "case_list",
     "case_create",
     "case_seed",
     "draft_import",

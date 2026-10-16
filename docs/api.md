@@ -6,7 +6,7 @@ OpenSeason does not run a web server. The window talks to Rust through Tauri com
 
 ### `get_cases_root`
 
-Returns the standard-case directory (`Documents/JustLegal/Cases`).
+Returns the standard-case directory (`Documents/JustLegal/Cases`, or `OPENSEASON_CASES_ROOT` when set).
 
 ### `list_cases`
 

@@ -20,8 +20,7 @@ pub fn parse_record_id(id: &str) -> Result<Uuid, String> {
     {
         return Err("Invalid case or hunt id. Use a UUID, not a file path.".to_string());
     }
-    Uuid::parse_str(trimmed)
-        .map_err(|_| "Invalid case or hunt id. Expected a UUID.".to_string())
+    Uuid::parse_str(trimmed).map_err(|_| "Invalid case or hunt id. Expected a UUID.".to_string())
 }
 
 pub fn is_reserved_marker_name(name: &str) -> bool {
@@ -42,9 +41,7 @@ fn is_under(root: &Path, path: &Path) -> bool {
 /// Resolve `{root}/{uuid}` and prove the canonical path stays under `root`.
 pub fn resolve_id_under_root(root: &Path, id: &str) -> Result<PathBuf, String> {
     let uuid = parse_record_id(id)?;
-    fs::create_dir_all(root).map_err(|e| {
-        format!("Could not create {}: {}", root.display(), e)
-    })?;
+    fs::create_dir_all(root).map_err(|e| format!("Could not create {}: {}", root.display(), e))?;
     let root_canon = root
         .canonicalize()
         .map_err(|e| format!("Could not resolve {}: {}", root.display(), e))?;
@@ -87,14 +84,29 @@ pub fn canonicalize_existing_prefix(path: &Path) -> PathBuf {
     if path.exists() {
         return path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
     }
-    if let Some(parent) = path.parent() {
-        if parent.exists() {
-            if let Ok(canon_parent) = parent.canonicalize() {
-                if let Some(name) = path.file_name() {
-                    return canon_parent.join(name);
-                }
-            }
+    let mut suffix = Vec::new();
+    let mut cur = path.to_path_buf();
+    loop {
+        match cur.file_name() {
+            Some(name) => suffix.push(name.to_os_string()),
+            None => break,
         }
+        let Some(parent) = cur.parent() else {
+            break;
+        };
+        if parent.as_os_str().is_empty() {
+            break;
+        }
+        if parent.exists() {
+            let mut resolved = parent
+                .canonicalize()
+                .unwrap_or_else(|_| parent.to_path_buf());
+            for part in suffix.iter().rev() {
+                resolved.push(part);
+            }
+            return resolved;
+        }
+        cur = parent.to_path_buf();
     }
     path.to_path_buf()
 }
@@ -107,6 +119,34 @@ fn resolved_is_under_or_equal(root: &Path, target: &Path) -> bool {
         }
     }
     resolved == root || resolved.starts_with(root)
+}
+
+/// Prove `target` stays under `root` (MCP writes must stay in the cases folder).
+pub fn assert_under_root(root: &Path, target: &Path) -> Result<PathBuf, String> {
+    if target.as_os_str().is_empty() {
+        return Err("A path is required.".to_string());
+    }
+    let raw = target.to_string_lossy();
+    if raw.contains('\0') {
+        return Err("Invalid path.".to_string());
+    }
+    if raw.starts_with("\\\\") || raw.starts_with("//") {
+        return Err("UNC paths are not allowed.".to_string());
+    }
+    let name = target_file_name(target);
+    if is_reserved_marker_name(&name) {
+        return Err("Refusing a path named .sealed.".to_string());
+    }
+    let root_resolved = canonicalize_existing_prefix(root);
+    let target_resolved = canonicalize_existing_prefix(target);
+    if target_resolved == root_resolved || target_resolved.starts_with(&root_resolved) {
+        return Ok(target_resolved);
+    }
+    Err(format!(
+        "Refusing path outside the cases root ({}): {}",
+        root.display(),
+        target.display()
+    ))
 }
 
 pub fn is_drive_relative_name(name: &str) -> bool {
@@ -239,7 +279,10 @@ pub fn prepare_export_file(
                     continue;
                 }
                 Err(err) => {
-                    if let Err(io) = OpenOptions::new().write(true).create_new(true).open(&candidate)
+                    if let Err(io) = OpenOptions::new()
+                        .write(true)
+                        .create_new(true)
+                        .open(&candidate)
                     {
                         if io.kind() == ErrorKind::AlreadyExists {
                             continue;
@@ -263,13 +306,15 @@ pub fn require_password_if_sealed(
         return Ok(());
     }
     let password = password.ok_or_else(|| {
-        "This hunt is sealed. Re-enter the vault password before changing or deleting it.".to_string()
+        "This hunt is sealed. Re-enter the vault password before changing or deleting it."
+            .to_string()
     })?;
     let salt = salt.ok_or_else(|| {
         "Cannot verify the vault password (salt missing). Sealed hunt was not changed.".to_string()
     })?;
     let verifier = verifier.ok_or_else(|| {
-        "Cannot verify the vault password (verifier missing). Sealed hunt was not changed.".to_string()
+        "Cannot verify the vault password (verifier missing). Sealed hunt was not changed."
+            .to_string()
     })?;
     crypto::confirm_password_for_seal(password, salt, verifier)?;
     Ok(())
@@ -306,10 +351,12 @@ pub fn delete_hunt_checked(
             "This is a sealed Confidential vault, often the only encrypted copy. Re-enter the vault password to delete it.".to_string()
         })?;
         let salt = salt.ok_or_else(|| {
-            "Cannot verify the vault password (salt missing). Sealed vault was not deleted.".to_string()
+            "Cannot verify the vault password (salt missing). Sealed vault was not deleted."
+                .to_string()
         })?;
         let verifier = verifier.ok_or_else(|| {
-            "Cannot verify the vault password (verifier missing). Sealed vault was not deleted.".to_string()
+            "Cannot verify the vault password (verifier missing). Sealed vault was not deleted."
+                .to_string()
         })?;
         crypto::confirm_password_for_seal(password, salt, verifier)?;
     }
@@ -338,7 +385,8 @@ pub fn purge_vaults_checked(
             "Sealed Confidential vaults are the only encrypted copy. Re-enter the vault password to delete them.".to_string()
         })?;
         let salt = salt.ok_or_else(|| {
-            "Cannot verify the vault password (salt missing). Sealed vaults were not deleted.".to_string()
+            "Cannot verify the vault password (salt missing). Sealed vaults were not deleted."
+                .to_string()
         })?;
         let verifier = verifier.ok_or_else(|| {
             "Cannot verify the vault password (verifier missing). Sealed vaults were not deleted.".to_string()
@@ -392,7 +440,10 @@ mod tests {
     #[test]
     fn traversal_id_rejected() {
         let root = temp_dir();
-        let outside = root.parent().unwrap().join(format!("os-outside-{}", Uuid::new_v4()));
+        let outside = root
+            .parent()
+            .unwrap()
+            .join(format!("os-outside-{}", Uuid::new_v4()));
         fs::create_dir_all(&outside).unwrap();
         fs::write(outside.join("keep.txt"), b"keep").unwrap();
 
@@ -461,13 +512,15 @@ mod tests {
             "export inside cases root must be refused: {inside}"
         );
 
-        let named = assert_export_target_allowed(&tmp.join(".sealed"), &cases, &app_data).unwrap_err();
+        let named =
+            assert_export_target_allowed(&tmp.join(".sealed"), &cases, &app_data).unwrap_err();
         assert!(
             named.to_lowercase().contains(".sealed"),
             "export named .sealed must be refused: {named}"
         );
 
-        let mixed = assert_export_target_allowed(&tmp.join(".SEALED"), &cases, &app_data).unwrap_err();
+        let mixed =
+            assert_export_target_allowed(&tmp.join(".SEALED"), &cases, &app_data).unwrap_err();
         assert!(
             mixed.to_lowercase().contains(".sealed"),
             "export named .SEALED must be refused: {mixed}"
@@ -511,7 +564,11 @@ mod tests {
                 "must refuse writing {}: {err}",
                 target.display()
             );
-            assert!(target.exists(), "target must still exist: {}", target.display());
+            assert!(
+                target.exists(),
+                "target must still exist: {}",
+                target.display()
+            );
         }
         let _ = fs::remove_dir_all(&tmp);
     }
@@ -531,6 +588,32 @@ mod tests {
             "existing file must not be overwritten: {err}"
         );
         assert_eq!(fs::read(&existing).unwrap(), b"keep-me");
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn mcp_write_must_stay_under_root() {
+        let tmp = temp_dir();
+        let root = tmp.join("JustLegal").join("Cases");
+        fs::create_dir_all(&root).unwrap();
+        let inside = root.join("case-one").join("drafts");
+        let allowed = assert_under_root(&root, &inside).unwrap();
+        assert!(allowed.starts_with(root.canonicalize().unwrap()));
+
+        let outside = tmp.join("escape").join("case.json");
+        let err = assert_under_root(&root, &outside).unwrap_err();
+        assert!(
+            err.to_lowercase().contains("outside") || err.to_lowercase().contains("cases root"),
+            "escape path must be refused: {err}"
+        );
+
+        let traversal = root.join("..").join("escape");
+        let trav_err = assert_under_root(&root, &traversal).unwrap_err();
+        assert!(
+            trav_err.to_lowercase().contains("outside")
+                || trav_err.to_lowercase().contains("cases root"),
+            "traversal must be refused: {trav_err}"
+        );
         let _ = fs::remove_dir_all(&tmp);
     }
 
@@ -585,7 +668,10 @@ mod tests {
             Some(&verifier),
         )
         .unwrap();
-        assert!(!hunt.exists(), "correct password must delete the sealed vault");
+        assert!(
+            !hunt.exists(),
+            "correct password must delete the sealed vault"
+        );
         let _ = fs::remove_dir_all(&vaults);
     }
 
@@ -643,11 +729,12 @@ mod tests {
         let app_data = tmp.join("appdata");
         fs::create_dir_all(&cases).unwrap();
         fs::create_dir_all(&app_data).unwrap();
-        let rel = assert_export_target_allowed(Path::new("relative.osb"), &cases, &app_data)
-            .unwrap_err();
+        let rel =
+            assert_export_target_allowed(Path::new("relative.osb"), &cases, &app_data).unwrap_err();
         assert!(rel.to_lowercase().contains("absolute") || rel.to_lowercase().contains("relative"));
-        let unc = assert_export_target_allowed(Path::new("//server/share/x.osb"), &cases, &app_data)
-            .unwrap_err();
+        let unc =
+            assert_export_target_allowed(Path::new("//server/share/x.osb"), &cases, &app_data)
+                .unwrap_err();
         assert!(unc.to_lowercase().contains("unc") || unc.to_lowercase().contains("absolute"));
         assert!(is_drive_relative_name("C:x"));
         assert!(sanitize_download_stem("C:x").is_err());

@@ -1,0 +1,147 @@
+# Headless openseason CLI (no GUI, no sync module).
+# Trigger ONLY from the Actions tab (workflow_dispatch). Does not run on push or tags.
+# Default: upload binaries + SHA256 as artifacts. Optional draft release is off unless
+# you check the box AND type a tag name. This workflow does not publish a release.
+
+name: Headless CLI binaries
+
+on:
+  workflow_dispatch:
+    inputs:
+      create_draft_release:
+        description: "Also attach the binaries to a DRAFT GitHub Release (does not publish). Leave off to upload artifacts only."
+        type: boolean
+        default: false
+      tag:
+        description: "Tag name for the draft release (required only if create_draft_release is true). Example: cli-0.1.0"
+        type: string
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # cargo build --no-default-features --features headless --bin openseason
+  CLI_FEATURES: headless
+
+jobs:
+  build:
+    name: ${{ matrix.artifact }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: openseason-linux-x64
+            exe: ""
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            artifact: openseason-linux-arm64
+            exe: ""
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: openseason-macos-arm64
+            exe: ""
+          - os: macos-13
+            target: x86_64-apple-darwin
+            artifact: openseason-macos-x64
+            exe: ""
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: openseason-windows-x64
+            exe: ".exe"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Linux OpenSSL headers (reqwest; no WebKit/GTK)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y libssl-dev pkg-config
+
+      - name: Build headless CLI
+        working-directory: src-tauri
+        run: |
+          cargo build --release --locked --no-default-features --features ${{ env.CLI_FEATURES }} --bin openseason --target ${{ matrix.target }}
+
+      - name: Stage binary and SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          src="src-tauri/target/${{ matrix.target }}/release/openseason${{ matrix.exe }}"
+          name="${{ matrix.artifact }}${{ matrix.exe }}"
+          cp "$src" "dist/$name"
+          if [ "${{ runner.os }}" != "Windows" ]; then
+            strip "dist/$name" || true
+          fi
+          python - <<PY
+          import hashlib, pathlib
+          p = pathlib.Path("dist") / "$name"
+          digest = hashlib.sha256(p.read_bytes()).hexdigest()
+          pathlib.Path(str(p) + ".sha256").write_text(f"{digest}  {p.name}\n", encoding="ascii")
+          print(f"{digest}  {p.name}")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          if-no-files-found: error
+          path: |
+            dist/${{ matrix.artifact }}${{ matrix.exe }}
+            dist/${{ matrix.artifact }}${{ matrix.exe }}.sha256
+
+  checksums:
+    name: Combined SHA256SUMS
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Write SHA256SUMS
+        run: |
+          set -euo pipefail
+          ls -la dist
+          cat dist/*.sha256 | sort > dist/SHA256SUMS
+          cat dist/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openseason-cli-SHA256SUMS
+          path: dist/SHA256SUMS
+
+  draft-release:
+    name: Optional draft release
+    if: ${{ github.event.inputs.create_draft_release == 'true' && github.event.inputs.tag != '' }}
+    needs: [build, checksums]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create DRAFT GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag }}
+        run: |
+          set -euo pipefail
+          # Draft only. Does not publish. Does not run unless both inputs are set.
+          gh release create "$TAG" dist/* \
+            --draft \
+            --title "Headless CLI $TAG" \
+            --notes "Headless openseason CLI (no GUI, no sync module). SHA256 checksums are attached. Review every exported line before filing. Not legal advice."

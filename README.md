@@ -98,6 +98,35 @@ Platform installers (`npm run tauri build`) need a full desktop toolchain. This 
 
 The CLI is a first-class surface, equal to the window. Read [AGENTS.md](AGENTS.md) and [docs/AGENT-INTERFACE.md](docs/AGENT-INTERFACE.md). `--json` returns `{ ok, never_files, never_serves, issues, data }`. `openseason mcp` is the same engine over stdio.
 
+### MCP stdio server
+
+`openseason mcp` is an offline JSON-RPC server on stdin/stdout. It calls the same Rust engine as the window. It does not file, serve, invent legal text, or talk to JustLegal Cloud.
+
+Cases live under `~/Documents/JustLegal/Cases` unless you set `OPENSEASON_CASES_ROOT`. All MCP writes stay inside that folder. Write tools (`case_create`, `draft_import`, `evidence_add`, exports, and the rest) **default to dry-run**: they report the planned action and change nothing on disk unless you pass `"dry_run": false`.
+
+```bash
+# Default cases root: ~/Documents/JustLegal/Cases
+cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- mcp
+
+# Point the server at a folder you own (tests, a scratch workspace, a USB copy)
+OPENSEASON_CASES_ROOT=/path/to/JustLegal/Cases \
+  cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- mcp
+```
+
+`tools/list` includes `case_list` (same scan as the window). Cloud sync (`cloud_pull` / `cloud_push`), `pdf_redact`, and `form_fill` are not on the MCP surface. Review every exported line before filing. This is not legal advice.
+
+### Headless CLI binaries (GitHub Actions)
+
+Workflow [`.github/workflows/cli-headless.yml`](.github/workflows/cli-headless.yml) builds the `openseason` CLI **without the desktop window and without the sync module** (`--no-default-features --features headless`). It runs **only** when you dispatch it from the Actions tab. It does not run on push or tags.
+
+```bash
+# Local headless CLI (no Tauri/GTK, does not compile src-tauri/src/sync.rs)
+cargo build --release --manifest-path src-tauri/Cargo.toml \
+  --no-default-features --features headless --bin openseason
+```
+
+To run the workflow: GitHub → Actions → **Headless CLI binaries** → **Run workflow**. Leave `create_draft_release` unchecked to upload SHA256-checksummed artifacts only (Linux x64/arm64, macOS x64/arm64, Windows x64). Check the box and type a tag name only if you want a **draft** GitHub Release; that still does not publish. Do not add push or tag triggers to this workflow.
+
 ```bash
 bash examples/agent-e2e.sh
 # or, one command at a time:

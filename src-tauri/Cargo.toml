@@ -16,13 +16,24 @@ default-run = "open-season"
 name = "open_season_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+default = ["gui", "sync"]
+# Desktop window (Tauri). Omit for a headless CLI.
+gui = ["dep:tauri", "dep:tauri-plugin-opener", "dep:tauri-plugin-fs", "dep:tauri-build"]
+# Local/cloud sync module (`src/sync.rs`). Headless CLI builds omit this; the file is untouched.
+sync = []
+# Marker for the agent CLI:
+#   cargo build --release --no-default-features --features headless --bin openseason
+# Cannot be combined with gui or sync.
+headless = []
+
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "2", features = [], optional = true }
 
 [dependencies]
-tauri = { version = "2", features = [] }
-tauri-plugin-opener = "2"
-tauri-plugin-fs = "2"
+tauri = { version = "2", features = [], optional = true }
+tauri-plugin-opener = { version = "2", optional = true }
+tauri-plugin-fs = { version = "2", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
@@ -46,6 +57,11 @@ thiserror = "1.0"
 regex = "1.11"
 flate2 = "1"
 lopdf = "0.34"
+
+[[bin]]
+name = "open-season"
+path = "src/main.rs"
+required-features = ["gui"]
 
 [[bin]]
 name = "openseason"
