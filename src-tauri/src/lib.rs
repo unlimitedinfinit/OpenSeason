@@ -1,44 +1,58 @@
-pub mod crypto;
-pub mod commands;
+#[cfg(all(feature = "headless", feature = "gui"))]
+compile_error!(
+    "feature \"headless\" cannot be combined with \"gui\"; use --no-default-features --features headless"
+);
+#[cfg(all(feature = "headless", feature = "sync"))]
+compile_error!(
+    "feature \"headless\" cannot be combined with \"sync\"; use --no-default-features --features headless"
+);
+
+pub mod agent;
+pub mod bundle;
+pub mod calendar;
+#[cfg(feature = "gui")]
 pub mod case_commands;
 pub mod case_profile;
-pub mod sandbox;
-pub mod court_rules;
-pub mod documents;
-pub mod seal;
-pub mod sync;
-pub mod db;
-pub mod bundle;
-pub mod usaspending;
-pub mod pdf;
-pub mod holidays;
-pub mod rule_pack;
-pub mod deadlines;
 pub mod check;
+#[cfg(feature = "gui")]
+pub mod commands;
 pub mod court_md;
-pub mod agent;
-pub mod mcp;
-pub mod guided;
+pub mod court_rules;
+pub mod crypto;
+pub mod db;
+pub mod deadlines;
+pub mod documents;
 pub mod exhibits;
-pub mod calendar;
-pub mod gaps;
-pub mod help;
-pub mod seed;
-pub mod packet;
-pub mod forms;
-pub mod guide;
-pub mod help_links;
-pub mod service;
-pub mod pdf_tools;
-pub mod signature;
-pub mod legal_os;
-pub mod intake;
-pub mod portfolio;
-pub mod pleading;
 pub mod folder_import;
+pub mod forms;
+pub mod gaps;
+pub mod guide;
+pub mod guided;
+pub mod help;
+pub mod help_links;
+pub mod holidays;
+pub mod intake;
+pub mod legal_os;
+pub mod mcp;
+pub mod packet;
+pub mod pdf;
+pub mod pdf_tools;
+pub mod pleading;
+pub mod portfolio;
+pub mod rule_pack;
+pub mod sandbox;
+pub mod seal;
+pub mod seed;
+pub mod service;
+pub mod signature;
+#[cfg(feature = "sync")]
+pub mod sync;
+pub mod usaspending;
 
+#[cfg(feature = "gui")]
 use crypto::AppState;
 
+#[cfg(feature = "gui")]
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -154,4 +168,26 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod feature_tests {
+    #[cfg(feature = "headless")]
+    #[test]
+    fn headless_omits_gui_and_sync() {
+        assert!(
+            !cfg!(feature = "gui"),
+            "headless CLI must not compile the window"
+        );
+        assert!(
+            !cfg!(feature = "sync"),
+            "headless CLI must not compile crate::sync"
+        );
+    }
+
+    #[cfg(feature = "gui")]
+    #[test]
+    fn desktop_keeps_gui() {
+        assert!(cfg!(feature = "gui"));
+    }
 }

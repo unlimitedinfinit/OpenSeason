@@ -113,7 +113,7 @@ Equivalent without npm: `cargo run --manifest-path src-tauri/Cargo.toml --bin op
 | `intake scan DIR` | Offline PDF text extraction & candidate detection (docket numbers, dates, courts) across `orders/` and `evidence/` |
 | `check venue DIR` | Deterministic Multi-Venue Competence Matrix check (NJ R. 1:4-4(b), CO conferral/declaration as needs_verification, 28 U.S.C. § 1746, SCOTUS Rule 14.1, Will witnesses) |
 | `portfolio status [--root DIR]` | Multi-state, multi-venue Portfolio Deadline Radar & Global Filer Profile |
-| `mcp` | Stdio MCP server (same tools) |
+| `mcp` | Stdio MCP server (same tools). Headless binary: `cargo build --release --manifest-path src-tauri/Cargo.toml --no-default-features --features headless --bin openseason` |
 | `sync DIR --action backup` | Stub. Standard: `not_implemented`. Confidential: refused |
 | `agent manifest` | List CLI/MCP tools, MCP launch config, and a copyable starter prompt |
 | `case import-folder DIR --from FOLDER [--title TEXT]` | Copy drafts/notes/orders into a case. Never moves originals. Proposes parties and dates; does not auto-commit guesses |

@@ -115,6 +115,18 @@ OPENSEASON_CASES_ROOT=/path/to/JustLegal/Cases \
 
 `tools/list` includes `case_list` (same scan as the window). Cloud sync (`cloud_pull` / `cloud_push`), `pdf_redact`, and `form_fill` are not on the MCP surface. Review every exported line before filing. This is not legal advice.
 
+### Headless CLI binaries (GitHub Actions)
+
+Workflow [`.github/workflows/cli-headless.yml`](.github/workflows/cli-headless.yml) builds the `openseason` CLI **without the desktop window and without the sync module** (`--no-default-features --features headless`). It runs **only** when you dispatch it from the Actions tab. It does not run on push or tags.
+
+```bash
+# Local headless CLI (no Tauri/GTK, does not compile src-tauri/src/sync.rs)
+cargo build --release --manifest-path src-tauri/Cargo.toml \
+  --no-default-features --features headless --bin openseason
+```
+
+To run the workflow: GitHub → Actions → **Headless CLI binaries** → **Run workflow**. Leave `create_draft_release` unchecked to upload SHA256-checksummed artifacts only (Linux x64/arm64, macOS x64/arm64, Windows x64). Check the box and type a tag name only if you want a **draft** GitHub Release; that still does not publish. Do not add push or tag triggers to this workflow.
+
 ```bash
 bash examples/agent-e2e.sh
 # or, one command at a time:

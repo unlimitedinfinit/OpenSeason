@@ -250,19 +250,19 @@ pub fn portfolio_status(cases_root: &Path) -> Result<PortfolioStatusReport, Stri
 // Tauri IPC Commands
 // ============================================================================
 
-#[tauri::command]
+#[cfg_attr(feature = "gui", tauri::command)]
 pub fn case_context_cmd(id_or_path: String) -> Result<CaseContextBundle, String> {
     let dir = resolve_case_dir(&id_or_path);
     case_context(&dir)
 }
 
-#[tauri::command]
+#[cfg_attr(feature = "gui", tauri::command)]
 pub fn intake_status_cmd(id_or_path: String) -> Result<IntakeStatusReport, String> {
     let dir = resolve_case_dir(&id_or_path);
     intake_status(&dir)
 }
 
-#[tauri::command]
+#[cfg_attr(feature = "gui", tauri::command)]
 pub fn intake_answer_cmd(
     id_or_path: String,
     question_id: String,
@@ -272,27 +272,27 @@ pub fn intake_answer_cmd(
     intake_answer(&dir, &question_id, &answer)
 }
 
-#[tauri::command]
+#[cfg_attr(feature = "gui", tauri::command)]
 pub fn intake_scan_cmd(id_or_path: String) -> Result<IntakeScanReport, String> {
     let dir = resolve_case_dir(&id_or_path);
     intake_scan(&dir)
 }
 
-#[tauri::command]
+#[cfg_attr(feature = "gui", tauri::command)]
 pub fn case_next_steps_cmd(id_or_path: String) -> Result<NextStepsReport, String> {
     let dir = resolve_case_dir(&id_or_path);
     let profile = load_case(&dir)?;
     Ok(predict_next_steps(&profile, Some(&dir)))
 }
 
-#[tauri::command]
+#[cfg_attr(feature = "gui", tauri::command)]
 pub fn check_venue_competence_cmd(id_or_path: String) -> Result<VenueCompetenceReport, String> {
     let dir = resolve_case_dir(&id_or_path);
     let profile = load_case(&dir)?;
     Ok(check_venue_competence(&profile))
 }
 
-#[tauri::command]
+#[cfg_attr(feature = "gui", tauri::command)]
 pub fn escalate_case_cmd(
     id_or_path: String,
     target_stage: String,
@@ -301,27 +301,27 @@ pub fn escalate_case_cmd(
     escalate_case(&dir, &target_stage, None)
 }
 
-#[tauri::command]
+#[cfg_attr(feature = "gui", tauri::command)]
 pub fn portfolio_status_cmd() -> Result<PortfolioStatusReport, String> {
     portfolio_status(&default_cases_root())
 }
 
-#[tauri::command]
+#[cfg_attr(feature = "gui", tauri::command)]
 pub fn get_global_filer_cmd() -> Result<Filer, String> {
     Ok(load_global_filer())
 }
 
-#[tauri::command]
+#[cfg_attr(feature = "gui", tauri::command)]
 pub fn save_global_filer_cmd(filer: Filer) -> Result<Filer, String> {
     save_global_filer(&filer)
 }
 
-#[tauri::command]
+#[cfg_attr(feature = "gui", tauri::command)]
 pub fn pdf_extract_text_cmd(pdf_path: String) -> Result<PdfTextExtractionResult, String> {
     pdf_tools::extract_pdf_text(Path::new(&pdf_path))
 }
 
-#[tauri::command]
+#[cfg_attr(feature = "gui", tauri::command)]
 pub fn scoped_sections_cmd(
     id_or_path: String,
     filing_id: Option<String>,
@@ -331,7 +331,7 @@ pub fn scoped_sections_cmd(
     guided::load_or_init_scoped(&dir, filing_id.as_deref(), &kind)
 }
 
-#[tauri::command]
+#[cfg_attr(feature = "gui", tauri::command)]
 pub fn scoped_fill_cmd(
     id_or_path: String,
     filing_id: Option<String>,

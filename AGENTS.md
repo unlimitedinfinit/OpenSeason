@@ -62,6 +62,7 @@ cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- --json export
 
 # Optional local MCP stdio server (same engine).
 # Cases root: OPENSEASON_CASES_ROOT or ~/Documents/JustLegal/Cases. Write tools default to dry-run.
+# Headless (no GUI, no sync module): add --no-default-features --features headless
 OPENSEASON_CASES_ROOT="${OPENSEASON_CASES_ROOT:-$HOME/Documents/JustLegal/Cases}" \
   cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- mcp
 

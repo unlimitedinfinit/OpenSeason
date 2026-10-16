@@ -8,6 +8,7 @@ use open_season_lib::check;
 use open_season_lib::court_md;
 use open_season_lib::documents;
 use open_season_lib::rule_pack::RulePack;
+#[cfg(feature = "sync")]
 use open_season_lib::sync::{self, SyncAction};
 
 #[derive(Parser)]
@@ -71,12 +72,14 @@ enum Commands {
         #[command(subcommand)]
         action: AgentCmd,
     },
+    #[cfg(feature = "sync")]
     Sync {
         path: PathBuf,
         #[arg(long, default_value = "backup")]
         action: String,
     },
     /// JustLegal Cloud sync and authentication
+    #[cfg(feature = "sync")]
     Cloud {
         #[command(subcommand)]
         action: CloudCmd,
@@ -356,6 +359,7 @@ enum ExportCmd {
     },
 }
 
+#[cfg(feature = "sync")]
 #[derive(Subcommand)]
 enum CloudCmd {
     Login {
@@ -1414,6 +1418,7 @@ fn run(cli: Cli) -> Result<(), String> {
                 Ok(())
             }
         },
+        #[cfg(feature = "sync")]
         Commands::Sync { path, action } => {
             let action = match action.as_str() {
                 "backup" => SyncAction::Backup,
@@ -1441,6 +1446,7 @@ fn run(cli: Cli) -> Result<(), String> {
             }
             Ok(())
         }
+        #[cfg(feature = "sync")]
         Commands::Cloud { action } => match action {
             CloudCmd::Login { email, password } => {
                 let session = sync::cloud_sign_in_password(&email, &password)?;

@@ -10,7 +10,8 @@
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "tauri": "tauri",
-    "cli": "cargo run --quiet --manifest-path src-tauri/Cargo.toml --bin openseason --"
+    "cli": "cargo run --quiet --manifest-path src-tauri/Cargo.toml --bin openseason --",
+    "cli:headless": "cargo run --quiet --manifest-path src-tauri/Cargo.toml --no-default-features --features headless --bin openseason --"
   },
   "license": "MIT",
   "dependencies": {

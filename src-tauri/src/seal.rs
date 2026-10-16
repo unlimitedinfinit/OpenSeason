@@ -404,6 +404,7 @@ pub fn seal_standard_case_with_verified_key(
 mod tests {
     use super::*;
     use crate::case_profile::{ensure_case_layout, sample_appeal_profile};
+    #[cfg(feature = "sync")]
     use crate::sync::{self, SyncAction};
 
     fn temp_dir() -> PathBuf {
@@ -440,6 +441,7 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    #[cfg(all(feature = "gui", feature = "sync"))]
     #[test]
     fn tauri_save_case_rejects_unseal_payload() {
         let dir = temp_dir();
@@ -460,6 +462,7 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
     }
 
+    #[cfg(feature = "sync")]
     #[test]
     fn edited_case_json_cannot_unseal_sync() {
         let dir = temp_dir();
