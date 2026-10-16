@@ -76,7 +76,7 @@
       <div class="flex items-center justify-between border-b border-zinc-800 p-5 bg-zinc-900/90">
         <div class="space-y-1">
           <div class="flex items-center gap-2">
-            <span class="text-xs font-semibold px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30">
+            <span class="text-xs font-semibold px-2 py-0.5 rounded bg-primary/20 text-primary border border-primary/30">
               Court Records & Rules Engine
             </span>
             <span class="text-xs font-mono text-zinc-400">
@@ -112,7 +112,7 @@
           <!-- Court & Venue Info -->
           <div class="rounded-lg border border-zinc-800 bg-zinc-950/60 p-4 space-y-2">
             <div class="flex items-center justify-between">
-              <h3 class="text-xs font-bold uppercase tracking-wider text-blue-400">Target Court Venue</h3>
+              <h3 class="text-xs font-bold uppercase tracking-wider text-primary">Target Court Venue</h3>
               <span class="text-xs text-zinc-400 font-mono">14-Day Clerk Response Tracking</span>
             </div>
             <p class="font-semibold text-zinc-200">{plan.court_name}</p>
@@ -156,7 +156,7 @@
             <ul class="text-xs space-y-1 text-zinc-300">
               {#each plan.submission_channels as channel}
                 <li class="flex items-center gap-2">
-                  <span class="text-blue-400">✓</span>
+                  <span class="text-primary">✓</span>
                   <span>{channel}</span>
                 </li>
               {/each}
@@ -214,7 +214,7 @@
           <button
             onclick={executeRequest}
             disabled={executing || loading}
-            class="text-xs px-4 py-2 rounded-md font-semibold bg-blue-600 hover:bg-blue-500 text-white shadow-md disabled:opacity-50 transition"
+            class="text-xs px-4 py-2 rounded-md font-semibold bg-primary hover:opacity-90 text-primary-foreground shadow-md disabled:opacity-50 transition"
           >
             {executing ? "Generating prefilled form..." : "Generate Official Records Request"}
           </button>

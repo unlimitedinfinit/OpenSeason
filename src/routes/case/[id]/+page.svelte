@@ -487,48 +487,48 @@
         </button>
         <button
           onclick={() => (showAdaModal = true)}
-          class="text-xs px-3 py-1.5 rounded-md border border-purple-500/40 text-purple-300 hover:bg-purple-950/30 flex items-center gap-1.5 font-medium transition-colors"
+          class="text-xs px-3 py-1.5 rounded-md border border-border bg-secondary/50 hover:bg-secondary text-foreground flex items-center gap-1.5 font-medium transition-colors"
         >
           <span>ADA petition</span>
         </button>
         <button
           onclick={() => (showPdfToolsModal = true)}
-          class="text-xs px-3 py-1.5 rounded-md border border-blue-500/40 text-blue-300 hover:bg-blue-950/30 flex items-center gap-1.5 font-medium transition-colors"
+          class="text-xs px-3 py-1.5 rounded-md border border-border bg-secondary/50 hover:bg-secondary text-foreground flex items-center gap-1.5 font-medium transition-colors"
         >
           <span>PDF tools</span>
         </button>
         <button
           onclick={() => (showSignatureModal = true)}
-          class="text-xs px-3 py-1.5 rounded-md border border-emerald-500/40 text-emerald-300 hover:bg-emerald-950/30 flex items-center gap-1.5 font-medium transition-colors"
+          class="text-xs px-3 py-1.5 rounded-md border border-border bg-secondary/50 hover:bg-secondary text-foreground flex items-center gap-1.5 font-medium transition-colors"
         >
           <span>Signature</span>
         </button>
         <button
           onclick={() => decodeOrderForCase()}
-          class="text-xs px-3 py-1.5 rounded-md border border-cyan-500/40 text-cyan-300 hover:bg-cyan-950/30 flex items-center gap-1.5 font-medium transition-colors"
+          class="text-xs px-3 py-1.5 rounded-md border border-border bg-secondary/50 hover:bg-secondary text-foreground flex items-center gap-1.5 font-medium transition-colors"
         >
           <span>Decode order</span>
         </button>
         <button
           onclick={() => (showRecordRetrievalModal = true)}
-          class="text-xs px-3 py-1.5 rounded-md border border-blue-500/40 text-blue-300 hover:bg-blue-950/30 flex items-center gap-1.5 font-medium transition-colors"
+          class="text-xs px-3 py-1.5 rounded-md border border-border bg-secondary/50 hover:bg-secondary text-foreground flex items-center gap-1.5 font-medium transition-colors"
         >
           <span>Record retrieval</span>
         </button>
         <button
           onclick={() => (showWorkflowModal = true)}
-          class="text-xs px-3 py-1.5 rounded-md border border-indigo-500/40 text-indigo-300 hover:bg-indigo-950/30 flex items-center gap-1.5 font-medium transition-colors"
+          class="text-xs px-3 py-1.5 rounded-md border border-border bg-secondary/50 hover:bg-secondary text-foreground flex items-center gap-1.5 font-medium transition-colors"
         >
           <span>Workflow radar</span>
         </button>
         <button
           onclick={() => (showConsultationModal = true)}
-          class="text-xs px-3 py-1.5 rounded-md border border-violet-500/40 text-violet-300 hover:bg-violet-950/30 flex items-center gap-1.5 font-medium transition-colors"
+          class="text-xs px-3 py-1.5 rounded-md border border-border bg-secondary/50 hover:bg-secondary text-foreground flex items-center gap-1.5 font-medium transition-colors"
         >
           <span>Consultation dossier</span>
         </button>
         {#if profile.cloud_matter_id}
-          <span class="text-xs bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 px-2.5 py-1 rounded-md font-mono">
+          <span class="text-xs bg-primary/10 text-primary border border-primary/30 px-2.5 py-1 rounded-md font-mono">
             ☁ Synced ({profile.cloud_matter_id.slice(0, 8)})
           </span>
         {/if}

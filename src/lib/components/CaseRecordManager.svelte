@@ -181,9 +181,9 @@
 
     <button
       onclick={() => (selectedTier = selectedTier === "hearing_and_evidentiary_record" ? "all" : "hearing_and_evidentiary_record")}
-      class="text-left p-2.5 rounded-lg border transition {selectedTier === 'hearing_and_evidentiary_record' ? 'border-blue-500 bg-blue-50/50 dark:bg-blue-950/20' : 'border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 hover:border-blue-300'}"
+      class="text-left p-2.5 rounded-lg border transition {selectedTier === 'hearing_and_evidentiary_record' ? 'border-primary bg-primary/10' : 'border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 hover:border-primary/50'}"
     >
-      <div class="text-[10px] font-semibold uppercase tracking-wider text-blue-600 dark:text-blue-400">Tier 2: Transcripts</div>
+      <div class="text-[10px] font-semibold uppercase tracking-wider text-primary">Tier 2: Transcripts</div>
       <div class="text-lg font-bold text-stone-900 dark:text-stone-100 mt-0.5">{report?.tier2_hearing_count ?? 0}</div>
       <div class="text-[10px] text-stone-400">Certified Oral Records</div>
     </button>

@@ -185,7 +185,7 @@
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 overflow-y-auto animate-fade-in">
     <div class="w-full max-w-3xl rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl overflow-hidden my-6">
       <!-- Modal Header -->
-      <div class="bg-gradient-to-r from-emerald-950/80 via-teal-950/70 to-blue-950/80 p-5 border-b border-zinc-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div class="bg-card p-5 border-b border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div class="flex items-center gap-3">
           <div class="h-12 w-12 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-2xl shadow-inner">
             ✍️
@@ -433,7 +433,7 @@
                   class="p-3 rounded-xl border text-left transition-all {profile.style === 'script_modern' ? 'border-teal-500 bg-teal-950/20 shadow-md ring-1 ring-teal-500' : 'border-zinc-800 bg-zinc-950/50 hover:bg-zinc-800'}"
                 >
                   <div class="text-xs font-bold text-zinc-200">✨ Modern Script</div>
-                  <div class="text-lg italic text-blue-300 font-mono mt-1">
+                  <div class="text-lg italic text-primary font-mono mt-1">
                     {profile.full_name || 'Signature'}
                   </div>
                 </button>

@@ -215,7 +215,7 @@ export const TIER_LABELS: Record<EvidentiaryTier, { label: string; desc: string;
     label: "Tier 2: Hearing / Transcript Record",
     desc: "Certified hearing transcripts, sound recordings, and admitted trial exhibits.",
     badge: "Certified Record",
-    color: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30",
+    color: "bg-primary/10 text-primary border-primary/30",
   },
   personal_case_archive: {
     label: "Tier 3: Personal Case Archive",

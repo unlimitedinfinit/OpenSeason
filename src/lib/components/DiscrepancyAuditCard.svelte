@@ -60,7 +60,7 @@
       case "unverified_oral_colloquy":
         return {
           label: "Unverified Oral Colloquy (Transcript Required)",
-          badge: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30",
+          badge: "bg-primary/10 text-primary border-primary/30",
         };
       default:
         return {

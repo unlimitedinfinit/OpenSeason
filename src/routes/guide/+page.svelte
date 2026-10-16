@@ -152,7 +152,7 @@
       {/each}
 
       {#if result.stuck || result.unverified.length}
-        <div class="border border-indigo-500/40 bg-indigo-500/10 rounded-lg p-4 space-y-2">
+        <div class="border border-primary/30 bg-primary/10 rounded-lg p-4 space-y-2">
           <h3 class="font-semibold">Need help finding a lawyer or a form?</h3>
           <p class="text-sm text-muted-foreground">These JustLegal pages need a browser and internet. A confirmation appears first. The rest of the app stays offline.</p>
           <div class="flex flex-wrap gap-2">

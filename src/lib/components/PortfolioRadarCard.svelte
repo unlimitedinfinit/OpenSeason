@@ -139,7 +139,7 @@
         </div>
         <div class="space-y-1">
           {#each portfolio.matters as m}
-            <a class="flex flex-wrap justify-between gap-2 border border-border rounded-md px-3 py-2 text-sm hover:border-indigo-500/40" href={`/case/${m.case_id}`}>
+            <a class="flex flex-wrap justify-between gap-2 border border-border rounded-md px-3 py-2 text-sm hover:border-primary/40" href={`/case/${m.case_id}`}>
               <span>
                 <span class="text-[10px] uppercase tracking-wide border border-border px-1.5 py-0.5 rounded mr-1">{m.venue_code}</span>
                 <strong>{m.title}</strong>

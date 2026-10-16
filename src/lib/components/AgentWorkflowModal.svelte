@@ -75,7 +75,7 @@
     <div class="px-6 py-4 border-b border-stone-200 dark:border-stone-800 flex items-center justify-between">
       <div>
         <div class="flex items-center gap-2">
-          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300">
+          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-primary/10 text-primary border border-primary/20">
             Agent Workflow Coordinator
           </span>
           {#if activePlan?.is_complete}
@@ -112,12 +112,12 @@
                 type="text"
                 bind:value={objectiveInput}
                 placeholder="e.g. Prepare and file Notice of Appeal for recent dismissal order"
-                class="flex-1 px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                class="flex-1 px-3 py-2 text-sm rounded-lg border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-primary"
               />
               <button
                 onclick={() => handlePlanWorkflow()}
                 disabled={loading || !objectiveInput.trim()}
-                class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+                class="px-4 py-2 bg-primary hover:opacity-90 disabled:opacity-50 text-primary-foreground text-sm font-medium rounded-lg transition-colors"
               >
                 Formulate Plan
               </button>
@@ -179,8 +179,8 @@
             <h3 class="text-xs font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400">Step Sequence</h3>
             <div class="space-y-2">
               {#each activePlan.steps as step, idx}
-                <div class="p-3 rounded-lg border {idx === activePlan.current_step_index && !activePlan.is_complete ? 'border-indigo-500 bg-indigo-50/30 dark:bg-indigo-950/20' : 'border-stone-200 dark:border-stone-800 bg-stone-50/50 dark:bg-stone-800/30'} flex items-start gap-3">
-                  <div class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 {step.status === 'Completed' ? 'bg-emerald-500 text-white' : idx === activePlan.current_step_index ? 'bg-indigo-600 text-white' : 'bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-400'}">
+                <div class="p-3 rounded-lg border {idx === activePlan.current_step_index && !activePlan.is_complete ? 'border-primary/60 bg-primary/5' : 'border-stone-200 dark:border-stone-800 bg-stone-50/50 dark:bg-stone-800/30'} flex items-start gap-3">
+                  <div class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 {step.status === 'Completed' ? 'bg-emerald-500 text-white' : idx === activePlan.current_step_index ? 'bg-primary text-primary-foreground' : 'bg-stone-200 dark:bg-stone-700 text-stone-600 dark:text-stone-400'}">
                     {step.status === 'Completed' ? '✓' : idx + 1}
                   </div>
                   <div class="flex-1 min-w-0">
@@ -199,7 +199,7 @@
                     </div>
                     <p class="text-xs text-stone-600 dark:text-stone-400 mt-0.5">{step.description}</p>
                     <div class="flex items-center gap-4 text-[11px] text-stone-500 dark:text-stone-400 mt-2">
-                      <span>Tool: <code class="font-mono text-indigo-600 dark:text-indigo-400">{step.tool_command}</code></span>
+                      <span>Tool: <code class="font-mono text-primary">{step.tool_command}</code></span>
                       {#if step.receipt_ref}
                         <span>Receipt: <code class="font-mono">{step.receipt_ref}</code></span>
                       {/if}
@@ -238,7 +238,7 @@
             <button
               onclick={() => handleAdvance(false)}
               disabled={advancing}
-              class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
+              class="px-4 py-2 bg-primary hover:opacity-90 disabled:opacity-50 text-primary-foreground rounded-lg text-sm font-medium transition-colors shadow-sm"
             >
               {advancing ? "Executing..." : "Advance Step"}
             </button>

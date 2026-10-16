@@ -19,7 +19,7 @@
 </script>
 
 {#if !hidden}
-  <section class="border border-indigo-500/40 bg-indigo-500/10 rounded-lg p-5 space-y-3">
+  <section class="border border-primary/30 bg-primary/10 rounded-lg p-5 space-y-3">
     <div class="flex justify-between gap-3">
       <h2 class="font-semibold">Three clicks to a court-shaped PDF</h2>
       <button onclick={dismiss} class="text-xs border border-border px-2 py-1 rounded-md">Got it</button>

@@ -132,7 +132,7 @@
   </div>
   <div class="flex gap-1">
     {#each steps as label, i}
-      <div class="h-1 flex-1 rounded {i <= step ? 'bg-indigo-500' : 'bg-border'}" title={label}></div>
+      <div class="h-1 flex-1 rounded {i <= step ? 'bg-primary' : 'bg-border'}" title={label}></div>
     {/each}
   </div>
   <ReviewNotice />

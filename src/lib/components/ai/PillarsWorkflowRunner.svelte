@@ -67,10 +67,10 @@
     <div class="rounded-2xl border border-border/70 bg-card/60 backdrop-blur-xl p-5 space-y-3.5 shadow-sm">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
-          <span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-primary"></span>
           <h4 class="text-xs font-bold uppercase tracking-wider text-muted-foreground">1. Understand Case</h4>
         </div>
-        <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">Record Audit</span>
+        <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">Record Audit</span>
       </div>
 
       {#if caseContext}
@@ -109,10 +109,10 @@
     <div class="rounded-2xl border border-border/70 bg-card/60 backdrop-blur-xl p-5 space-y-3.5 shadow-sm">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
-          <span class="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
+          <span class="w-2.5 h-2.5 rounded-full bg-stone-400"></span>
           <h4 class="text-xs font-bold uppercase tracking-wider text-muted-foreground">2. Understand Rules</h4>
         </div>
-        <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">Jurisdiction</span>
+        <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-secondary text-foreground border border-border">Jurisdiction</span>
       </div>
 
       {#if caseContext}

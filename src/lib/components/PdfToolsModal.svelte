@@ -241,9 +241,9 @@
   <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 overflow-y-auto animate-fade-in">
     <div class="w-full max-w-4xl rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl overflow-hidden my-6">
       <!-- Modal Header -->
-      <div class="bg-gradient-to-r from-blue-950/80 via-indigo-950/70 to-purple-950/80 p-5 border-b border-zinc-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div class="bg-card p-5 border-b border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div class="flex items-center gap-3">
-          <div class="h-12 w-12 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-2xl shadow-inner">
+          <div class="h-12 w-12 rounded-xl bg-primary/20 border border-primary/30 flex items-center justify-center text-2xl shadow-inner">
             🛠️
           </div>
           <div>
@@ -271,27 +271,27 @@
       <div class="grid grid-cols-2 sm:grid-cols-4 border-b border-zinc-800 bg-zinc-950/50 p-1.5 gap-1.5">
         <button
           onclick={() => { activeMode = 'merge'; errorMessage = ''; successMessage = ''; }}
-          class="py-2.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all {activeMode === 'merge' ? 'bg-blue-600 text-white shadow-md' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'}"
+          class="py-2.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all {activeMode === 'merge' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'}"
         >
           <span>📑</span> Merge Files
         </button>
         <button
           onclick={() => { activeMode = 'split'; errorMessage = ''; successMessage = ''; }}
-          class="py-2.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all {activeMode === 'split' ? 'bg-purple-600 text-white shadow-md' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'}"
+          class="py-2.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all {activeMode === 'split' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'}"
         >
           <span>✂️</span> Split / Extract
         </button>
         <button
           onclick={() => { activeMode = 'rotate'; errorMessage = ''; successMessage = ''; }}
-          class="py-2.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all {activeMode === 'rotate' ? 'bg-amber-600 text-white shadow-md' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'}"
+          class="py-2.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all {activeMode === 'rotate' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'}"
         >
           <span>🔄</span> Rotate Pages
         </button>
         <button
           onclick={() => { activeMode = 'redact'; errorMessage = ''; successMessage = ''; }}
-          class="py-2.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all {activeMode === 'redact' ? 'bg-rose-600 text-white shadow-md' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'}"
+          class="py-2.5 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-all {activeMode === 'redact' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'}"
         >
-          <span>🕵️‍♂️</span> Byte Redact
+          <span>🛡️</span> Redact PII
         </button>
       </div>
 
@@ -330,7 +330,7 @@
                   }}
                   class="text-xs px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700/80 flex items-center gap-1 transition-colors"
                 >
-                  <span class="text-blue-400">📄</span>
+                  <span class="text-primary">📄</span>
                   <span class="font-mono">{a.name}</span>
                 </button>
               {/each}
@@ -356,7 +356,7 @@
                 {#each mergeInputs as item, idx}
                   <div class="flex items-center justify-between gap-3 p-2.5 rounded-xl border border-zinc-800 bg-zinc-950/60 text-xs font-mono">
                     <div class="flex items-center gap-2 overflow-hidden">
-                      <span class="h-5 w-5 rounded bg-blue-600/20 text-blue-300 font-bold flex items-center justify-center text-[10px]">
+                      <span class="h-5 w-5 rounded bg-primary/20 text-primary font-bold flex items-center justify-center text-[10px]">
                         {idx + 1}
                       </span>
                       <span class="text-zinc-200 truncate">{item}</span>
@@ -391,7 +391,7 @@
                 type="text"
                 bind:value={customMergePath}
                 placeholder="Paste full path to a PDF (e.g. C:\Users\...\file.pdf)"
-                class="flex-1 rounded-lg border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-xs text-zinc-100 placeholder-zinc-500 font-mono focus:border-blue-500 focus:outline-none"
+                class="flex-1 rounded-lg border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-xs text-zinc-100 placeholder-zinc-500 font-mono focus:border-primary focus:outline-none"
               />
               <button
                 type="button"
@@ -409,7 +409,7 @@
                 type="text"
                 bind:value={mergeOutput}
                 placeholder="Leave blank to save alongside the first file as '-merged.pdf'"
-                class="w-full rounded-lg border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-xs text-zinc-100 placeholder-zinc-500 font-mono focus:border-blue-500 focus:outline-none"
+                class="w-full rounded-lg border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-xs text-zinc-100 placeholder-zinc-500 font-mono focus:border-primary focus:outline-none"
               />
             </div>
 
@@ -418,7 +418,7 @@
               <button
                 onclick={runMerge}
                 disabled={mergeLoading || mergeInputs.length < 2}
-                class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-2 shadow-lg transition-all active:scale-95"
+                class="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground text-xs font-bold flex items-center gap-2 shadow-sm transition-all active:scale-95"
               >
                 <span>📑</span> {mergeLoading ? 'Merging Pure-Rust...' : 'Merge PDFs Now'}
               </button>
@@ -435,7 +435,7 @@
                 type="text"
                 bind:value={splitInput}
                 placeholder="e.g. C:\Court\Docket-Packet.pdf"
-                class="w-full rounded-lg border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-xs text-zinc-100 font-mono focus:border-purple-500 focus:outline-none"
+                class="w-full rounded-lg border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-xs text-zinc-100 font-mono focus:border-primary focus:outline-none"
               />
             </div>
 
@@ -445,7 +445,7 @@
                 type="text"
                 bind:value={splitPages}
                 placeholder="e.g. 1-3, 5, 8-12"
-                class="w-full rounded-lg border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-xs text-zinc-100 font-mono focus:border-purple-500 focus:outline-none"
+                class="w-full rounded-lg border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-xs text-zinc-100 font-mono focus:border-primary focus:outline-none"
               />
               <p class="text-[11px] text-zinc-400">Specify comma-separated page numbers or ranges (e.g. 1-5, 8).</p>
             </div>
@@ -456,7 +456,7 @@
                 type="text"
                 bind:value={splitOutput}
                 placeholder="Leave blank for automatic '-extracted.pdf' name"
-                class="w-full rounded-lg border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-xs text-zinc-100 font-mono focus:border-purple-500 focus:outline-none"
+                class="w-full rounded-lg border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-xs text-zinc-100 font-mono focus:border-primary focus:outline-none"
               />
             </div>
 
@@ -464,7 +464,7 @@
               <button
                 onclick={runSplit}
                 disabled={splitLoading || !splitInput.trim()}
-                class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-2 shadow-lg transition-all active:scale-95"
+                class="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground text-xs font-bold flex items-center gap-2 shadow-sm transition-all active:scale-95"
               >
                 <span>✂️</span> {splitLoading ? 'Extracting Pages...' : 'Extract Selected Pages'}
               </button>

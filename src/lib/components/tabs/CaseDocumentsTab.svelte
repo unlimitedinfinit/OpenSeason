@@ -63,7 +63,7 @@
         </label>
       {/each}
       <div class="flex flex-wrap gap-2">
-        <button onclick={() => onexportkind(profile?.document_kind || "motion")} disabled={busy} class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm">Export this paper (Word and PDF)</button>
+        <button onclick={() => onexportkind(profile?.document_kind || "motion")} disabled={busy} class="bg-primary hover:opacity-90 text-primary-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity">Export this paper (Word and PDF)</button>
         <button onclick={onexportpacket} disabled={busy} class="border border-border px-4 py-2 rounded-md text-sm">Export filing packet</button>
       </div>
     </section>
@@ -94,7 +94,7 @@
       <span class="text-xs text-muted-foreground">Your notice text</span>
       <textarea bind:value={profile.notice_of_appeal.user_text} class="w-full h-36 rounded-md border border-input bg-background px-3 py-2 text-sm"></textarea>
     </label>
-    <button onclick={() => onexportkind("notice_of_appeal")} disabled={busy} class="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm">Export Notice of Appeal (Word and PDF)</button>
+    <button onclick={() => onexportkind("notice_of_appeal")} disabled={busy} class="bg-primary hover:opacity-90 text-primary-foreground px-4 py-2 rounded-md text-sm font-semibold transition-opacity">Export Notice of Appeal (Word and PDF)</button>
   </section>
 
   <section class="space-y-4 bg-card border rounded-lg p-6">
@@ -185,7 +185,7 @@
                 <button
                   onclick={() => onfillform(form.path)}
                   disabled={fillingForm}
-                  class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md font-medium disabled:opacity-50"
+                  class="text-xs bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1.5 rounded-md font-medium disabled:opacity-50"
                 >
                   {fillingForm && selectedFormPath === form.path ? "Filling..." : "Fill with Case Profile"}
                 </button>
@@ -218,7 +218,7 @@
         <button
           onclick={() => onfillform(selectedFormPath)}
           disabled={!selectedFormPath.trim() || fillingForm}
-          class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md font-medium disabled:opacity-50"
+          class="text-xs bg-primary hover:bg-primary/90 text-primary-foreground px-3 py-1.5 rounded-md font-medium disabled:opacity-50"
         >
           Fill Form
         </button>

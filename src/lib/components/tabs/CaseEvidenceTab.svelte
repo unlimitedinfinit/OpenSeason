@@ -58,7 +58,7 @@
       <button
         onclick={ongeneratepacket}
         disabled={assemblingPacket || artifacts.filter((a) => a.kind === "evidence").length === 0}
-        class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50"
+        class="bg-primary hover:bg-primary/90 text-primary-foreground px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50"
       >
         {assemblingPacket ? "Assembling..." : "Generate Bates Packet"}
       </button>
@@ -85,8 +85,8 @@
     </div>
 
     {#if exhibitPacketReport}
-      <div class="mt-4 p-4 border border-indigo-500/30 bg-indigo-500/10 rounded-md space-y-2">
-        <p class="text-sm font-semibold text-indigo-300">Packet Assembly Complete ({exhibitPacketReport.total_pages} pages)</p>
+      <div class="mt-4 p-4 border border-primary/30 bg-primary/10 rounded-md space-y-2">
+        <p class="text-sm font-semibold text-primary">Packet Assembly Complete ({exhibitPacketReport.total_pages} pages)</p>
         <div class="text-xs font-mono space-y-1">
           <p><span class="text-muted-foreground">Table of Exhibits:</span> {exhibitPacketReport.table_of_exhibits_pdf}</p>
           <p><span class="text-muted-foreground">Bates Stamped Packet:</span> {exhibitPacketReport.exhibit_packet_pdf}</p>
@@ -106,7 +106,7 @@
                 {#each exhibitPacketReport.exhibits as ex}
                   <tr class="border-b border-border/50">
                     <td class="py-1 font-mono">{ex.letter}</td>
-                    <td class="py-1 font-mono text-indigo-400">{ex.bates_start} - {ex.bates_end}</td>
+                    <td class="py-1 font-mono text-primary">{ex.bates_start} - {ex.bates_end}</td>
                     <td class="py-1">{ex.page_count}</td>
                     <td class="py-1">{ex.description}</td>
                   </tr>

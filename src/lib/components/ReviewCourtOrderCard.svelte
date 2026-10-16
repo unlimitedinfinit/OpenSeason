@@ -109,11 +109,11 @@
           onclick={() => onSelectAction("check_record")}
           class="flex items-start gap-3 p-3 rounded-lg border border-zinc-700/60 bg-zinc-800/40 hover:bg-zinc-800 hover:border-amber-500/50 transition text-left group"
         >
-          <span class="p-1.5 rounded bg-blue-500/10 text-blue-400 group-hover:bg-blue-500/20">
+          <span class="p-1.5 rounded bg-primary/10 text-primary group-hover:bg-primary/20">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" /></svg>
           </span>
           <div>
-            <div class="text-xs font-semibold text-zinc-200 group-hover:text-blue-200">Check the existing record</div>
+            <div class="text-xs font-semibold text-zinc-200 group-hover:text-foreground">Check the existing record</div>
             <div class="text-[11px] text-zinc-400">Compare postmark vs. clerk physical receipt timestamps</div>
           </div>
         </button>
@@ -122,11 +122,11 @@
           onclick={() => onSelectAction("explore_options")}
           class="flex items-start gap-3 p-3 rounded-lg border border-zinc-700/60 bg-zinc-800/40 hover:bg-zinc-800 hover:border-amber-500/50 transition text-left group"
         >
-          <span class="p-1.5 rounded bg-purple-500/10 text-purple-400 group-hover:bg-purple-500/20">
+          <span class="p-1.5 rounded bg-primary/10 text-primary group-hover:bg-primary/20">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
           </span>
           <div>
-            <div class="text-xs font-semibold text-zinc-200 group-hover:text-purple-200">Explore response options</div>
+            <div class="text-xs font-semibold text-zinc-200 group-hover:text-foreground">Explore response options</div>
             <div class="text-[11px] text-zinc-400">Compare show-cause defense routes and procedural barriers</div>
           </div>
         </button>

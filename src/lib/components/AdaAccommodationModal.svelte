@@ -152,11 +152,11 @@
       </div>
 
       <!-- Confidentiality Alert -->
-      <div class="px-5 py-3 bg-blue-500/10 border-b border-blue-500/20 text-xs flex items-start gap-2.5">
-        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <div class="px-5 py-3 bg-primary/10 border-b border-primary/20 text-xs flex items-start gap-2.5">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-primary shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
-        <p class="text-[11px] text-blue-800/90 dark:text-blue-300/80 leading-relaxed">
+        <p class="text-[11px] text-foreground/90 leading-relaxed">
           <strong>Confidential Administrative Submission:</strong> ADA accommodation petitions are transmitted directly to the Court ADA Coordinator / Trial Court Administrator and are exempt from public filing on the general docket.
         </p>
       </div>

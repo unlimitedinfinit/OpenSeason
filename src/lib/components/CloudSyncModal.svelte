@@ -129,7 +129,7 @@
       <!-- Header -->
       <div class="flex items-center justify-between border-b border-zinc-800 px-6 py-4 bg-zinc-950/60">
         <div class="flex items-center gap-3">
-          <div class="h-9 w-9 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+          <div class="h-9 w-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
             <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 00-9.78 2.096A4.001 4.001 0 003 15z" />
             </svg>
@@ -201,7 +201,7 @@
                 <button
                   onclick={handlePullAll}
                   disabled={loading}
-                  class="flex-1 py-2 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                  class="flex-1 py-2 px-4 rounded-lg bg-primary hover:opacity-90 text-primary-foreground text-xs font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {#if loading}
                     <span class="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
@@ -253,7 +253,7 @@
                 bind:value={email}
                 required
                 placeholder="you@example.com"
-                class="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                class="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </div>
 
@@ -265,15 +265,16 @@
                 bind:value={password}
                 required
                 placeholder="••••••••"
-                class="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                class="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              class="w-full py-2.5 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+              class="w-full py-2.5 px-4 rounded-lg bg-primary hover:opacity-90 text-primary-foreground text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
             >
+
               {#if loading}
                 <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
                 Connecting...

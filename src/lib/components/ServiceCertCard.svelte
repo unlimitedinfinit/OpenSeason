@@ -187,7 +187,7 @@
       </button>
       <button
         onclick={() => { activeTab = 'order'; errorMessage = ''; }}
-        class="flex-1 sm:flex-initial px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all {activeTab === 'order' ? 'bg-indigo-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'}"
+        class="flex-1 sm:flex-initial px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all {activeTab === 'order' ? 'bg-primary text-primary-foreground shadow-sm' : 'text-zinc-400 hover:text-zinc-200'}"
       >
         <span>⚖️</span> Proposed Order
       </button>
@@ -395,7 +395,7 @@
           type="text"
           bind:value={orderMotionTitle}
           placeholder="e.g. Motion for Reconsideration of Order Dismissing Appeal"
-          class="w-full rounded-lg border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-xs text-zinc-100 placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+          class="w-full rounded-lg border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-xs text-zinc-100 placeholder-zinc-500 focus:border-primary focus:outline-none"
         />
       </div>
 
@@ -408,7 +408,7 @@
           bind:value={orderRelief}
           rows="5"
           placeholder="ORDERED that Appellant's Motion for Reconsideration is hereby GRANTED; and it is further&#10;ORDERED that the dismissal order dated January 16 is VACATED..."
-          class="w-full rounded-xl border border-zinc-700 bg-zinc-950/80 p-3 text-xs text-zinc-100 placeholder-zinc-600 font-mono leading-relaxed focus:border-indigo-500 focus:outline-none"
+          class="w-full rounded-xl border border-zinc-700 bg-zinc-950/80 p-3 text-xs text-zinc-100 placeholder-zinc-600 font-mono leading-relaxed focus:border-primary focus:outline-none"
         ></textarea>
       </div>
 
@@ -420,7 +420,7 @@
         <button
           onclick={generateOrder}
           disabled={generatingOrder}
-          class="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold flex items-center gap-2 shadow-md transition-all active:scale-95 disabled:opacity-50"
+          class="px-4 py-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-bold flex items-center gap-2 shadow-sm transition-all active:scale-95 disabled:opacity-50"
         >
           <span>⚖️</span> {generatingOrder ? 'Assembling Order...' : 'Generate Proposed Order'}
         </button>
@@ -428,16 +428,16 @@
 
       <!-- Result Card -->
       {#if orderResult}
-        <div class="rounded-xl border border-indigo-500/40 bg-indigo-950/20 p-4 space-y-2">
-          <div class="text-xs font-semibold text-indigo-300 flex items-center gap-1.5">
+        <div class="rounded-xl border border-primary/30 bg-primary/10 p-4 space-y-2">
+          <div class="text-xs font-semibold text-primary flex items-center gap-1.5">
             <span>✨</span> Proposed Order Ready:
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
             <div class="rounded-lg bg-zinc-900/80 p-2.5 border border-zinc-700/60 text-zinc-300 break-all">
-              <span class="text-purple-400 font-bold">PDF:</span> {orderResult.order_pdf}
+              <span class="text-primary font-bold">PDF:</span> {orderResult.order_pdf}
             </div>
             <div class="rounded-lg bg-zinc-900/80 p-2.5 border border-zinc-700/60 text-zinc-300 break-all">
-              <span class="text-blue-400 font-bold">Word DOCX:</span> {orderResult.order_docx}
+              <span class="text-primary font-bold">Word DOCX:</span> {orderResult.order_docx}
             </div>
           </div>
         </div>

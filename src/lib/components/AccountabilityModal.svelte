@@ -123,7 +123,7 @@
         </button>
         <button
           onclick={() => (activeTrack = "records")}
-          class="pb-2.5 px-3 border-b-2 transition whitespace-nowrap {activeTrack === 'records' ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold' : 'border-transparent text-stone-500 hover:text-stone-800 dark:hover:text-stone-200'}"
+          class="pb-2.5 px-3 border-b-2 transition whitespace-nowrap {activeTrack === 'records' ? 'border-primary text-primary font-bold' : 'border-transparent text-stone-500 hover:text-stone-800 dark:hover:text-stone-200'}"
         >
           Track 4: Public Records / FOIA (CN 10200)
         </button>

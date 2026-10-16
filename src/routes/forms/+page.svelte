@@ -317,7 +317,7 @@
                 <div class="flex items-start justify-between gap-2">
                   <div class="space-y-1">
                     <div class="flex items-center gap-1.5">
-                      <span class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border {item.source_type === 'official_pdf' ? 'bg-blue-500/10 text-blue-300 border-blue-500/20' : 'bg-teal-500/10 text-teal-300 border-teal-500/20'}">
+                      <span class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded border {item.source_type === 'official_pdf' ? 'bg-primary/10 text-primary border-primary/20' : 'bg-secondary text-muted-foreground border-border'}">
                         {item.source_type === 'official_pdf' ? 'Official Court Form' : 'Document Template'}
                       </span>
                       {#if item.is_offline}
