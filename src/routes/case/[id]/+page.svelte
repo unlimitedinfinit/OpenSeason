@@ -13,6 +13,7 @@
   import SignatureStudioModal from "$lib/components/SignatureStudioModal.svelte";
   import IntakeWizardModal from "$lib/components/IntakeWizardModal.svelte";
   import ProceduralGraphCard from "$lib/components/ProceduralGraphCard.svelte";
+  import ConfirmDialog from "$lib/components/ConfirmDialog.svelte";
   import CaseOverviewTab from "$lib/components/tabs/CaseOverviewTab.svelte";
   import CaseDocumentsTab from "$lib/components/tabs/CaseDocumentsTab.svelte";
   import CaseEvidenceTab from "$lib/components/tabs/CaseEvidenceTab.svelte";
@@ -42,6 +43,7 @@
   let parties = $state<Party[]>([]);
   let addressText = $state("");
   let tab = $state<"overview" | "docket" | "service" | "parties" | "documents" | "evidence" | "timeline" | "files" | "check" | "confidential">("overview");
+  let confirmSeal = $state(false);
   let showCloudModal = $state(false);
   let showPdfToolsModal = $state(false);
   let showSignatureModal = $state(false);
@@ -195,9 +197,11 @@
       error = "Unlock Confidential mode first.";
       return;
     }
-    if (!confirm("Convert this case to a sealed Confidential vault? This cannot be reversed by editing case.json. Sync will be refused.")) {
-      return;
-    }
+    confirmSeal = true;
+  }
+
+  async function doSeal() {
+    confirmSeal = false;
     busy = true;
     try {
       await ipc("convert_case_to_confidential", { caseId, password: sealPassword });
@@ -482,19 +486,19 @@
           onclick={() => (showIntakeWizard = true)}
           class="text-xs px-3 py-1.5 rounded-md border border-amber-500/40 text-amber-300 hover:bg-amber-950/30 flex items-center gap-1.5 font-medium transition-colors"
         >
-          <span>🧙 Guided Wizard</span>
+          <span>Guided intake</span>
         </button>
         <button
           onclick={() => (showPdfToolsModal = true)}
           class="text-xs px-3 py-1.5 rounded-md border border-blue-500/40 text-blue-300 hover:bg-blue-950/30 flex items-center gap-1.5 font-medium transition-colors"
         >
-          <span>🛠️ PDF Tools</span>
+          <span>PDF tools</span>
         </button>
         <button
           onclick={() => (showSignatureModal = true)}
           class="text-xs px-3 py-1.5 rounded-md border border-emerald-500/40 text-emerald-300 hover:bg-emerald-950/30 flex items-center gap-1.5 font-medium transition-colors"
         >
-          <span>✍️ Signature</span>
+          <span>Signature</span>
         </button>
         {#if profile.cloud_matter_id}
           <span class="text-xs bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 px-2.5 py-1 rounded-md font-mono">
@@ -506,7 +510,7 @@
             onclick={() => (showCloudModal = true)}
             class="text-xs px-3 py-1.5 rounded-md bg-primary text-primary-foreground hover:opacity-90 flex items-center gap-1.5 font-medium shadow-sm"
           >
-            <span>☁ JustLegal Cloud</span>
+            <span>Account (optional)</span>
           </button>
         {:else}
           <span class="text-xs text-red-400 border border-red-500/30 px-2 py-1 rounded bg-red-500/10">
@@ -539,8 +543,8 @@
     <nav class="flex flex-wrap gap-2 text-sm">
       {#each [
         ["overview", "Overview"],
-        ["docket", "📑 Motions & Filings"],
-        ["service", "📜 Service & Orders"],
+        ["docket", "Motions & filings"],
+        ["service", "Service & orders"],
         ["parties", "Parties"],
         ["documents", "Documents"],
         ["evidence", "Evidence"],
@@ -717,6 +721,16 @@
       caseId={caseId}
       bind:profile
       onUpdated={load}
+    />
+
+    <ConfirmDialog
+      bind:open={confirmSeal}
+      title="Seal this case?"
+      body="Convert this case to a sealed Confidential vault? This cannot be reversed by editing case.json. Sync will be refused."
+      confirmLabel="Seal"
+      danger={true}
+      onconfirm={doSeal}
+      oncancel={() => (confirmSeal = false)}
     />
   {/if}
 </main>

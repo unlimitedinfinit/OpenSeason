@@ -25,7 +25,7 @@ Use this skill whenever a user asks you to inspect a case folder, onboard onto a
 4. **Predictive Procedural Graph & Venue Competence (`case_next_steps` / `check_venue`):**
    - CLI: `.\openseason-cli.exe --json case next-steps <case-dir>`
    - CLI: `.\openseason-cli.exe --json check venue <case-dir>`
-   - Computes downstream legal branches, holiday-aware deadlines, **NJ Pause/Toll (`pause_remaining` under R. 2:4-3(e))** vs. **CO/Federal Full Reset (`reset_full`)**, and **+3 day mail service offsets**. Verifies venue-specific oaths (e.g., NJ R. 1:4-4(b), CO C.R.C.P. 121 § 1-15(8) conferral, 28 U.S.C. § 1746, SCOTUS Rule 14.1, Will witnesses).
+   - Computes downstream legal branches only from a user-entered order/trigger date with a source. If that date is missing, `computed_deadline` is null and status is `needs_trigger_date`. Never invent a deadline from today. Holiday-aware math, **NJ Pause/Toll (`pause_remaining` under R. 2:4-3(e))** vs. **CO/Federal Full Reset (`reset_full`)**, and **+3 day mail service offsets**. Verifies venue-specific oaths (e.g., NJ R. 1:4-4(b), CO C.R.C.P. 121 § 1-15(8) conferral, 28 U.S.C. § 1746, SCOTUS Rule 14.1, Will witnesses).
 5. **Pre-Flight Check, Packet Assembly & Cross-Venue Escalation:**
    - CLI: `.\openseason-cli.exe --json check preflight <case-dir>`
    - CLI: `.\openseason-cli.exe --json export packet <case-dir>` (or `export pleading <case-dir> --kind <kind>`)

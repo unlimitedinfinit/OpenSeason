@@ -17,6 +17,7 @@ pub fn lucille_profile() -> CaseProfile {
         id: "nj-app-div".into(),
         name: "Superior Court of New Jersey, Appellate Division".into(),
         division: Some("Sample vicinage".into()),
+        address_lines: Vec::new(),
     };
     p.docket_number = "A-01001-24".into();
     p.caption = Caption {

@@ -113,6 +113,17 @@ pub struct PortfolioCaseItem {
     pub urgent_deadline: Option<String>,
     pub days_until_due: Option<i64>,
     pub parent_matter_id: Option<String>,
+    /// "needs_trigger_date" | "active" | "expired" | "paused_tolled" | "action_ready"
+    #[serde(default)]
+    pub urgent_status: Option<String>,
+    #[serde(default)]
+    pub urgent_rule: Option<String>,
+    #[serde(default)]
+    pub urgent_trigger_date: Option<String>,
+    #[serde(default)]
+    pub urgent_math: Option<String>,
+    #[serde(default)]
+    pub unverified: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

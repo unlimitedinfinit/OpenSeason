@@ -1,34 +1,42 @@
 <script lang="ts">
   import { fade, scale } from 'svelte/transition';
   import { invoke } from "@tauri-apps/api/core";
-  
+  import PromptDialog from "$lib/components/PromptDialog.svelte";
+
   let { isOpen = $bindable(false) } = $props();
+  let message = $state("");
+  let purgeStep = $state<"off" | "confirm" | "password">("off");
 
   function close() {
     isOpen = false;
   }
 
-  async function triggerPurge() {
-    const confirmation = prompt(
-      "This deletes unsealed local hunts only. Sealed Confidential vaults are often the only encrypted copy and are skipped unless you also type the vault password.\n\nType PURGE to delete unsealed hunts (sealed cases are kept):"
-    );
-    if (confirmation !== "PURGE") {
-      alert("Purge cancelled.");
+  function triggerPurge() {
+    message = "";
+    purgeStep = "confirm";
+  }
+
+  async function afterPurgePrompt(value: string) {
+    if (purgeStep === "confirm") {
+      if (value !== "PURGE") {
+        message = "Purge cancelled.";
+        purgeStep = "off";
+        return;
+      }
+      purgeStep = "password";
       return;
     }
-    const password = prompt(
-      "To also delete sealed Confidential vaults, enter the vault password. Leave empty to keep sealed cases."
-    );
+    purgeStep = "off";
     try {
       const result = await invoke<string>("purge_vault_cache", {
-        password: password && password.length ? password : null,
-        includeSealed: !!(password && password.length),
+        password: value && value.length ? value : null,
+        includeSealed: !!(value && value.length),
       });
-      alert(result);
+      message = result;
       close();
       window.location.reload();
     } catch (e) {
-      alert("Failed to delete hunts: " + e);
+      message = "Failed to delete hunts: " + e;
     }
   }
 </script>
@@ -37,7 +45,7 @@
   <div class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6" transition:fade={{ duration: 200 }}>
     <!-- Backdrop -->
     <div 
-      class="absolute inset-0 bg-background/80 backdrop-blur-sm" 
+      class="absolute inset-0 bg-background/90" 
       onclick={close}
       aria-hidden="true"
     ></div>
@@ -219,3 +227,18 @@
     </div>
   </div>
 {/if}
+
+{#if message}
+  <p class="fixed bottom-4 right-4 z-[60] text-sm bg-card border border-border rounded-md px-3 py-2">{message}</p>
+{/if}
+
+<PromptDialog
+  open={purgeStep !== "off"}
+  title={purgeStep === "password" ? "Vault password (optional)" : "Type PURGE to confirm"}
+  body={purgeStep === "password"
+    ? "To also delete sealed Confidential vaults, enter the vault password. Leave empty to keep sealed cases."
+    : "This deletes unsealed local hunts only. Sealed vaults are skipped unless you also type the vault password next."}
+  confirmLabel="Continue"
+  onsubmit={afterPurgePrompt}
+  oncancel={() => { purgeStep = "off"; message = "Purge cancelled."; }}
+/>

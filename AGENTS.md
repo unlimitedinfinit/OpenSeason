@@ -41,6 +41,7 @@ cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- --json case c
 
 # Import a Markdown draft (md2court subset)
 cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- --json draft import ./my-case --md fixtures/sample-reconsideration.md
+cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- --json draft preview --md fixtures/sample-reconsideration.md
 
 # Checks (never invent cites; never file)
 cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- --json check all ./my-case \

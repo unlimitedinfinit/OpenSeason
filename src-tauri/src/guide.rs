@@ -130,7 +130,7 @@ pub fn find(
     trigger_date: Option<&str>,
 ) -> Result<GuideResult, String> {
     let links = HelpLinks::load()?;
-    let pack = pick_pack(state, court)?;
+    let pack = pick_pack(state, court, Some(situation))?;
     let mut issues: Vec<String> = Vec::new();
     let sit = pack.find_situation(situation);
     if sit.is_none() {
@@ -239,8 +239,26 @@ pub fn find(
     })
 }
 
-fn pick_pack(state: &str, court: Option<&str>) -> Result<RulePack, String> {
+fn pick_pack(state: &str, court: Option<&str>, situation: Option<&str>) -> Result<RulePack, String> {
     let state_key = state.trim().to_ascii_lowercase();
+    let all = RulePack::list_builtin();
+    if let Some(sit) = situation.map(|s| s.trim()).filter(|s| !s.is_empty()) {
+        for pack in &all {
+            if pack.jurisdiction.eq_ignore_ascii_case(state) && pack.find_situation_exact(sit).is_some() {
+                return RulePack::resolve(&pack.id);
+            }
+        }
+        for pack in &all {
+            if pack.id.contains("generic") && pack.find_situation_exact(sit).is_some() {
+                return RulePack::resolve(&pack.id);
+            }
+        }
+        for pack in &all {
+            if pack.find_situation_exact(sit).is_some() {
+                return RulePack::resolve(&pack.id);
+            }
+        }
+    }
     if let Ok(pack) = RulePack::resolve(state) {
         return Ok(pack);
     }
@@ -249,7 +267,7 @@ fn pick_pack(state: &str, court: Option<&str>) -> Result<RulePack, String> {
             return Ok(pack);
         }
     }
-    for pack in RulePack::list_builtin() {
+    for pack in &all {
         if pack.jurisdiction.eq_ignore_ascii_case(state)
             || pack.id.to_ascii_lowercase().contains(&state_key)
         {
@@ -368,5 +386,14 @@ mod tests {
         assert!(result.forms.is_empty());
         assert!(!result.help_links.is_empty());
         assert_eq!(result.citation_status, "needs_verification");
+    }
+
+    #[test]
+    fn co_appeal_does_not_return_the_mandamus_pack() {
+        let result = find("CO", None, "appeal", None).unwrap();
+        assert_ne!(
+            result.pack_id, "co-mandamus",
+            "an appeal question must not be answered with the C.A.R. 21 mandamus pack"
+        );
     }
 }

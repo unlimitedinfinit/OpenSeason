@@ -116,11 +116,18 @@
             <h3 class="font-semibold">{pack.title}</h3>
             <p class="text-xs text-muted-foreground">{pack.state} · {pack.court}</p>
             <p class="text-xs font-mono">Download size: {pack.size_label}{pack.sha256 ? ` · sha256 ${pack.sha256.slice(0, 12)}…` : ""}</p>
+            {#if pack.installable === false && pack.unavailable_reason}
+              <p class="text-sm text-amber-200 mt-2">Unavailable: {pack.unavailable_reason}</p>
+            {/if}
           </div>
           <div class="flex flex-col gap-2">
-            <button onclick={() => install(pack.state, pack.situations[0])} class="bg-primary text-primary-foreground px-3 py-1.5 rounded-md text-sm">
-              Install {pack.state}
-            </button>
+            {#if pack.installable === false}
+              <span class="text-xs border border-amber-500/40 text-amber-200 px-3 py-1.5 rounded-md">Cannot install</span>
+            {:else}
+              <button onclick={() => install(pack.state, pack.situations[0])} class="bg-primary text-primary-foreground px-3 py-1.5 rounded-md text-sm">
+                Install {pack.state}
+              </button>
+            {/if}
             {#if pack.installed}
               <button onclick={() => remove(pack.state)} class="border border-border px-3 py-1.5 rounded-md text-sm">Remove</button>
               <button onclick={() => verify(pack.state)} class="border border-border px-3 py-1.5 rounded-md text-sm">Verify hashes</button>

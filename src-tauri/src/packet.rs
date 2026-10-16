@@ -85,7 +85,6 @@ fn part_lines(profile: &CaseProfile, id: &str) -> (String, Vec<String>) {
     }
     lines.push(format!("/s/ {}", profile.filer.signature_name));
     lines.push(profile.filer.name.clone());
-    lines.push(REVIEW_NOTICE.to_string());
     (heading.to_string(), lines)
 }
 
@@ -271,20 +270,12 @@ r##"
   /s/ {filer_sig} \
   {filer_name}
 ]
-
-#v(2em)
-#align(center)[
-  #text(size: 8pt, fill: luma(100))[
-    {REVIEW_NOTICE}
-  ]
-]
 "##,
         court_name = court_name,
         docket = docket,
         table_rows = table_rows,
         filer_sig = filer_sig,
         filer_name = filer_name,
-        REVIEW_NOTICE = crate::case_profile::REVIEW_NOTICE
     );
 
     let table_pdf_bytes = crate::pdf::compile_typst(table_typst)?;
@@ -321,10 +312,12 @@ r##"
 ]
 
 #pagebreak()
+#counter(page).update({start})
 "##,
         court_name = court_name,
         docket = docket,
         prefix = prefix,
+        start = starting_number.unwrap_or(1),
         date = chrono::Local::now().format("%B %d, %Y")
     );
 
@@ -407,6 +400,41 @@ mod tests {
         assert_eq!(report.items.len(), 5);
         assert!(report.never_files && report.never_serves);
         assert!(std::path::Path::new(&report.items[0].docx).is_file());
+        for item in &report.items {
+            let xml = std::fs::read_to_string(&item.docx).unwrap_or_default();
+            // Real Word files are zip archives, not plain text.
+            assert!(crate::pleading::is_valid_docx(std::path::Path::new(&item.docx)).unwrap());
+            let _ = xml;
+        }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn exhibit_packet_bates_starts_at_requested_number() {
+        let dir = std::env::temp_dir().join(format!("os-bates-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(dir.join("evidence")).unwrap();
+        ensure_case_layout(&dir).unwrap();
+        let profile = sample_appeal_profile();
+        save_case(&dir, &profile).unwrap();
+        std::fs::write(dir.join("evidence").join("order.txt"), "Order granting dismissal.\n").unwrap();
+        let report = assemble_exhibit_packet(&dir, Some("EX"), Some(1)).unwrap();
+        assert_eq!(report.exhibits[0].bates_start, "EX-000001");
+        assert!(!report.exhibits[0].bates_start.ends_with("000002"));
+        let pdf = std::fs::read(&report.exhibit_packet_pdf).unwrap();
+        assert!(pdf.starts_with(b"%PDF"));
+        let text = std::process::Command::new("pdftotext")
+            .args(["-layout", &report.exhibit_packet_pdf, "-"])
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .unwrap_or_default();
+        if !text.is_empty() {
+            assert!(
+                text.contains("EX-000001") || text.contains("BATES: EX-000001"),
+                "cover must not consume Bates 000001: {text}"
+            );
+            assert!(!text.contains("not legal advice"));
+        }
         let _ = std::fs::remove_dir_all(dir);
     }
 }

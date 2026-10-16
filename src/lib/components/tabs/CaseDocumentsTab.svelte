@@ -1,5 +1,6 @@
 <script lang="ts">
   import FieldHelp from "$lib/components/FieldHelp.svelte";
+  import DraftToPdfCard from "$lib/components/DraftToPdfCard.svelte";
   import type {
     CaseProfile,
     GuidedDraft,
@@ -46,6 +47,8 @@
 </script>
 
 <div class="space-y-6">
+  <DraftToPdfCard caseId={profile.id} bind:markdown={mdDraft} />
+
   {#if guided}
     <section class="space-y-4 bg-card border rounded-lg p-6">
       <h2 class="font-semibold">Write this paper (guided)</h2>
@@ -112,7 +115,15 @@
       <h2 class="font-semibold">Motion</h2>
       <span class="text-[10px] uppercase tracking-wide text-amber-300">Basic template</span>
     </div>
-    <p class="text-xs text-muted-foreground">Same fill-once profile. You write the request. This is not a motion library.</p>
+    <p class="text-xs text-muted-foreground">Same fill-once profile. You write the request. This is not a motion library. Motions default to a boxed New Jersey-style caption. Pick classic if you need the older centered stack.</p>
+    <label class="block space-y-1">
+      <span class="text-xs text-muted-foreground">Caption layout</span>
+      <select bind:value={profile.caption_layout} class="w-full h-10 rounded-md border border-input bg-background px-3 text-sm" aria-label="Caption layout">
+        <option value="">Boxed (default for motions)</option>
+        <option value="boxed">Boxed caption table</option>
+        <option value="classic">Classic centered caption</option>
+      </select>
+    </label>
     <input bind:value={profile.motion.title} class="w-full h-10 rounded-md border border-input bg-background px-3 text-sm" placeholder="Motion title" />
     <textarea bind:value={profile.motion.user_text} class="w-full h-32 rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Your motion text"></textarea>
     <button onclick={() => onexportkind("motion")} disabled={busy} class="border border-border px-4 py-2 rounded-md text-sm">Export motion (Word and PDF)</button>
@@ -150,7 +161,7 @@
 
   <section class="space-y-4 bg-card border rounded-lg p-6">
     <div class="flex justify-between">
-      <h2 class="font-semibold">Court Markdown</h2>
+      <h2 class="font-semibold">Court Markdown (legacy buttons)</h2>
       <span class="text-[10px] uppercase tracking-wide text-muted-foreground">Same engine as the CLI</span>
     </div>
     <p class="text-xs text-muted-foreground">Paste an md2court subset draft (YAML front matter, ::: signature, ::: certificate). Import writes drafts/draft.md. Export uses the same renderer as `openseason export court-md`.</p>

@@ -7,7 +7,7 @@ use zip::ZipWriter;
 
 use serde::{Deserialize, Serialize};
 
-use crate::case_profile::{validate_case, CaseProfile, Caption, REVIEW_NOTICE};
+use crate::case_profile::{validate_case, CaseProfile, Caption};
 use crate::court_rules::CourtRules;
 use crate::pdf;
 
@@ -159,8 +159,6 @@ fn assembled_signature_lines(profile: &CaseProfile) -> Vec<String> {
     if !profile.filer.email.trim().is_empty() {
         lines.push(profile.filer.email.clone());
     }
-    lines.push(String::new());
-    lines.push(REVIEW_NOTICE.to_string());
     lines
 }
 
@@ -194,6 +192,7 @@ pub fn pleading_heading(kind: &str) -> &'static str {
     }
 }
 
+#[allow(dead_code)]
 fn motion_kind_label(kind: &str, profile: &CaseProfile) -> String {
     let key = if kind == "motion" && !profile.motion_kind.is_empty() {
         profile.motion_kind.as_str()
@@ -235,6 +234,7 @@ fn pleading_body<'a>(profile: &'a CaseProfile, kind: &str) -> (&'a str, &'a str)
     }
 }
 
+#[allow(dead_code)]
 fn scaffold_sections(kind: &str) -> &'static [&'static str] {
     match kind {
         "appellate_brief" | "brief" => &[
@@ -317,37 +317,15 @@ pub fn assembled_pleading_paragraphs(profile: &CaseProfile, kind: &str) -> Vec<S
         return crate::court_md::parse_markdown(&profile.court_markdown).lines;
     }
 
-    let caption_kind = match key.as_str() {
-        "complaint" | "mandamus" => "complaint",
-        _ => "notice_of_appeal",
-    };
-    let mut lines = assembled_caption_lines(profile, caption_kind);
-    let heading = pleading_heading(&key);
-    lines.push(heading.to_string());
-    lines.push(String::new());
     let (subtitle, body) = pleading_body(profile, &key);
-    if !subtitle.trim().is_empty() {
-        lines.push(subtitle.trim().to_string());
-        lines.push(String::new());
-    }
-    lines.push(motion_kind_label(&key, profile));
-    lines.push(
-        "The builder filled the caption, parties, and signature block from the case profile. The body below is the user's own text. This app does not invent facts, grounds, or citations.".into(),
-    );
-    lines.push(String::new());
-    for section in scaffold_sections(&key) {
-        lines.push(section.to_string());
-        lines.push(String::new());
-    }
-    push_user_paragraphs(&mut lines, body);
-    lines.extend(assembled_signature_lines(profile));
-    lines.push(String::new());
-    lines.push("CERTIFICATE OF SERVICE".into());
-    lines.push(
-        "I will serve a copy of this paper myself. This software did not file or serve anything."
-            .into(),
-    );
-    lines
+    let title = if subtitle.trim().is_empty() {
+        pleading_heading(&key).to_string()
+    } else {
+        subtitle.trim().to_string()
+    };
+    let style = crate::pleading::caption_style(profile, &key, None);
+    let doc = crate::pleading::assemble(profile, &key, &title, body, style);
+    crate::pleading::document_lines(&doc)
 }
 
 pub fn assembled_notice_paragraphs(profile: &CaseProfile) -> Vec<String> {
@@ -524,28 +502,36 @@ fn build_typst_source(profile: &CaseProfile, rules: &CourtRules) -> String {
 fn build_typst_source_from_lines(lines: &[String], heading: &str, rules: &CourtRules) -> String {
     let fonts = rules.typst_font_list();
     let size = rules.font_size_pt;
-    let leading = rules.line_spacing;
+    let leading = if rules.line_spacing >= 1.8 {
+        1.5
+    } else {
+        rules.line_spacing.max(0.8)
+    };
     let mut blocks = String::new();
+    let mut in_caption = true;
     for (index, line) in lines.iter().enumerate() {
         let escaped = typst_escape(line);
-        let is_title = line == heading;
+        let is_title = line.eq_ignore_ascii_case(heading) || (line == heading);
+        if is_title {
+            in_caption = false;
+        }
         if line.is_empty() {
-            blocks.push_str("#v(0.6em)\n");
+            blocks.push_str("#v(0.45em)\n");
             continue;
         }
         if is_title {
             blocks.push_str(&format!(
                 "#align(center)[#text(size: {}pt, weight: \"bold\")[{}]]\n",
-                size + 2,
+                size + 1,
                 escaped
             ));
-        } else if index == 0 {
+        } else if index == 0 || in_caption {
             blocks.push_str(&format!(
                 "#align(center)[#text(weight: \"bold\")[{}]]\n",
                 escaped
             ));
         } else {
-            blocks.push_str(&format!("#align(center)[{}]\n", escaped));
+            blocks.push_str(&format!("{escaped}\n\n"));
         }
     }
 
@@ -554,9 +540,9 @@ fn build_typst_source_from_lines(lines: &[String], heading: &str, rules: &CourtR
 #set page(
   paper: "{paper}",
   margin: (top: {top}in, right: {right}in, bottom: {bottom}in, left: {left}in),
-  footer: align(center)[
-    #text(size: 8pt)[{notice}]
-  ]
+  footer: context {{
+    align(center)[#text(size: 10pt)[Page #counter(page).display() of #counter(page).final().first()]]
+  }}
 )
 #set text(font: ({fonts}), size: {size}pt)
 #set par(leading: {leading}em, justify: true)
@@ -568,7 +554,6 @@ fn build_typst_source_from_lines(lines: &[String], heading: &str, rules: &CourtR
         right = rules.margins_inches.right,
         bottom = rules.margins_inches.bottom,
         left = rules.margins_inches.left,
-        notice = typst_escape(REVIEW_NOTICE),
         fonts = fonts,
         size = size,
         leading = leading,
@@ -634,14 +619,10 @@ pub fn export_notice_of_appeal(
 
     let docx_bytes = build_docx_bytes(profile, &rules)?;
     fs::write(&docx_path, &docx_bytes).map_err(|e| e.to_string())?;
+    let _ = crate::pleading::write_review_sidecar(&dest);
 
     let typst_src = build_typst_source(profile, &rules);
-    let mut pdf_bytes = pdf::compile_typst(typst_src)?;
-    // Typst embeds page text as glyphs, so keep a plaintext PDF comment
-    // with the same notice that already appears in the footer.
-    pdf_bytes.extend_from_slice(b"\n% ");
-    pdf_bytes.extend_from_slice(REVIEW_NOTICE.as_bytes());
-    pdf_bytes.extend_from_slice(b"\n");
+    let pdf_bytes = pdf::compile_typst(typst_src)?;
     fs::write(&pdf_path, &pdf_bytes).map_err(|e| e.to_string())?;
 
     Ok(ExportPaths {
@@ -681,12 +662,20 @@ pub fn export_pleading(
     }
 
     let heading = pleading_heading(&key);
-    let lines = assembled_pleading_paragraphs(profile, &key);
+    let (subtitle, body) = pleading_body(profile, &key);
+    let title = if subtitle.trim().is_empty() {
+        heading.to_string()
+    } else {
+        subtitle.trim().to_string()
+    };
+    let style = crate::pleading::caption_style(profile, &key, None);
+    let doc = crate::pleading::assemble(profile, &key, &title, body, style);
     let rules = CourtRules::load_for_case(case_dir);
     let dest = out_dir
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| case_dir.join("exports"));
     fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
+    let _ = crate::pleading::write_review_sidecar(&dest);
 
     let stem = format!(
         "{}-{}",
@@ -700,14 +689,11 @@ pub fn export_pleading(
     let docx_path = dest.join(format!("{}.docx", stem));
     let pdf_path = dest.join(format!("{}.pdf", stem));
 
-    let docx_bytes = build_docx_bytes_from_lines(&lines, heading, &rules)?;
+    let docx_bytes = crate::pleading::to_docx(&doc, &rules)?;
     fs::write(&docx_path, &docx_bytes).map_err(|e| e.to_string())?;
 
-    let typst_src = build_typst_source_from_lines(&lines, heading, &rules);
-    let mut pdf_bytes = pdf::compile_typst(typst_src)?;
-    pdf_bytes.extend_from_slice(b"\n% ");
-    pdf_bytes.extend_from_slice(REVIEW_NOTICE.as_bytes());
-    pdf_bytes.extend_from_slice(b"\n");
+    let typst_src = crate::pleading::to_typst(&doc, &rules);
+    let pdf_bytes = pdf::compile_typst(typst_src)?;
     fs::write(&pdf_path, &pdf_bytes).map_err(|e| e.to_string())?;
 
     Ok(ExportPaths {
@@ -730,19 +716,15 @@ pub fn export_custom_filing(
         assert_notice_out_dir(out)?;
     }
 
-    let mut lines = assembled_caption_lines(profile, "motion");
     let heading = if title.trim().is_empty() { "MOTION" } else { title.trim() };
-    lines.push(heading.to_string());
-    lines.push(String::new());
-
-    push_user_paragraphs(&mut lines, user_text);
-    lines.extend(assembled_signature_lines(profile));
-
+    let style = crate::pleading::caption_style(profile, "motion", None);
+    let court_doc = crate::pleading::assemble(profile, "motion", heading, user_text, style);
     let rules = CourtRules::load_for_case(case_dir);
     let dest = out_dir
         .map(|p| p.to_path_buf())
         .unwrap_or_else(|| case_dir.join("exports"));
     fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
+    let _ = crate::pleading::write_review_sidecar(&dest);
 
     let safe_title = heading
         .to_ascii_lowercase()
@@ -761,15 +743,13 @@ pub fn export_custom_filing(
     let docx_path = dest.join(format!("{}.docx", stem));
     let pdf_path = dest.join(format!("{}.pdf", stem));
 
-    let docx_bytes = build_docx_bytes_from_lines(&lines, heading, &rules)?;
-    fs::write(&docx_path, &docx_bytes).map_err(|e| e.to_string())?;
-
-    let typst_src = build_typst_source_from_lines(&lines, heading, &rules);
-    let mut pdf_bytes = pdf::compile_typst(typst_src)?;
-    pdf_bytes.extend_from_slice(b"\n% ");
-    pdf_bytes.extend_from_slice(REVIEW_NOTICE.as_bytes());
-    pdf_bytes.extend_from_slice(b"\n");
-    fs::write(&pdf_path, &pdf_bytes).map_err(|e| e.to_string())?;
+    fs::write(&docx_path, crate::pleading::to_docx(&court_doc, &rules)?)
+        .map_err(|e| e.to_string())?;
+    fs::write(
+        &pdf_path,
+        pdf::compile_typst(crate::pleading::to_typst(&court_doc, &rules))?,
+    )
+    .map_err(|e| e.to_string())?;
 
     Ok(ExportPaths {
         docx: docx_path,
@@ -798,10 +778,28 @@ pub fn export_court_markdown(
             crate::court_md::markdown_from_profile(profile, &profile.document_kind)
         }
     };
-    let doc = crate::court_md::parse_markdown(&markdown);
-    if doc.lines.is_empty() {
+    let parsed = crate::court_md::parse_markdown(&markdown);
+    if parsed.body.trim().is_empty() && parsed.lines.is_empty() {
         return Err("Markdown draft is empty.".into());
     }
+    let working = crate::court_md::overlay_profile(profile, &parsed.meta);
+    let heading = if parsed.meta.doc_title.is_empty() {
+        if working.motion.title.trim().is_empty() {
+            "MOTION"
+        } else {
+            working.motion.title.as_str()
+        }
+    } else {
+        parsed.meta.doc_title.as_str()
+    };
+    let style = crate::pleading::caption_style(&working, "motion", None);
+    let court_doc = crate::pleading::assemble(&working, "motion", heading, &parsed.body, style);
+    let rules = CourtRules::load_for_case(case_dir);
+    let dest = out_dir
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| case_dir.join("exports"));
+    fs::create_dir_all(&dest).map_err(|e| e.to_string())?;
+    let _ = crate::pleading::write_review_sidecar(&dest);
     let stem = format!(
         "court-md-{}",
         profile
@@ -810,12 +808,16 @@ pub fn export_court_markdown(
             .replace(' ', "_")
             .replace('\\', "-")
     );
-    let heading = if doc.meta.doc_title.is_empty() {
-        "MOTION"
-    } else {
-        doc.meta.doc_title.as_str()
-    };
-    write_lines_as_docx_pdf(case_dir, &stem, heading, &doc.lines, out_dir)
+    let docx_path = dest.join(format!("{stem}.docx"));
+    let pdf_path = dest.join(format!("{stem}.pdf"));
+    fs::write(&docx_path, crate::pleading::to_docx(&court_doc, &rules)?)
+        .map_err(|e| e.to_string())?;
+    fs::write(&pdf_path, crate::pdf::compile_typst(crate::pleading::to_typst(&court_doc, &rules))?)
+        .map_err(|e| e.to_string())?;
+    Ok(ExportPaths {
+        docx: docx_path,
+        pdf: pdf_path,
+    })
 }
 
 /// Write court-shaped Word and PDF from already-assembled lines.
@@ -844,11 +846,9 @@ pub fn write_lines_as_docx_pdf(
     let pdf_path = dest.join(format!("{stem}.pdf"));
     let docx_bytes = build_docx_bytes_from_lines(lines, heading, &rules)?;
     fs::write(&docx_path, &docx_bytes).map_err(|e| e.to_string())?;
+    let _ = crate::pleading::write_review_sidecar(&dest);
     let typst_src = build_typst_source_from_lines(lines, heading, &rules);
-    let mut pdf_bytes = crate::pdf::compile_typst(typst_src)?;
-    pdf_bytes.extend_from_slice(b"\n% ");
-    pdf_bytes.extend_from_slice(REVIEW_NOTICE.as_bytes());
-    pdf_bytes.extend_from_slice(b"\n");
+    let pdf_bytes = crate::pdf::compile_typst(typst_src)?;
     fs::write(&pdf_path, &pdf_bytes).map_err(|e| e.to_string())?;
     Ok(ExportPaths {
         docx: docx_path,
@@ -938,7 +938,7 @@ pub fn inspect_docx_contains(path: &Path, needle: &str) -> Result<bool, String> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::case_profile::{ensure_case_layout, sample_appeal_profile, save_case};
+    use crate::case_profile::{ensure_case_layout, sample_appeal_profile, save_case, REVIEW_NOTICE};
     use uuid::Uuid;
 
     fn temp_case() -> (PathBuf, CaseProfile) {
@@ -960,7 +960,7 @@ mod tests {
         assert!(blob.contains("24-01000"));
         assert!(blob.contains("United States Court of Appeals for the Sample Circuit"));
         assert!(blob.contains("user's own draft"));
-        assert!(blob.contains(REVIEW_NOTICE));
+        assert!(!blob.contains(REVIEW_NOTICE));
         assert!(!blob.contains("Jane Doe"));
     }
 
@@ -971,7 +971,7 @@ mod tests {
         assert!(path.exists());
         assert!(inspect_docx_contains(&path, "24-01000").unwrap());
         assert!(inspect_docx_contains(&path, "Jordan Example").unwrap());
-        assert!(inspect_docx_contains(&path, REVIEW_NOTICE).unwrap());
+        assert!(!inspect_docx_contains(&path, REVIEW_NOTICE).unwrap());
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -1000,22 +1000,23 @@ mod tests {
     }
 
     #[test]
-    fn exported_docx_and_pdf_contain_review_notice() {
+    fn exported_filing_does_not_embed_software_disclaimer() {
         let (dir, profile) = temp_case();
         let paths = export_notice_of_appeal(&dir, &profile, None)
             .expect("sample case should export Word and PDF");
         assert!(
-            inspect_docx_contains(&paths.docx, REVIEW_NOTICE).unwrap(),
-            "DOCX must include the review / not-legal-advice notice"
+            !inspect_docx_contains(&paths.docx, REVIEW_NOTICE).unwrap(),
+            "the filing must not include the software disclaimer"
         );
         assert!(
-            inspect_docx_contains(&paths.docx, "not legal advice").unwrap(),
-            "DOCX must say it is not legal advice"
+            !inspect_docx_contains(&paths.docx, "not legal advice").unwrap(),
+            "the filing must not say it is not legal advice"
         );
         assert!(
-            inspect_pdf_contains(&paths.pdf, "not legal advice").unwrap(),
-            "PDF must say it is not legal advice"
+            !inspect_pdf_contains(&paths.pdf, "not legal advice").unwrap(),
+            "the PDF filing must not include the software disclaimer"
         );
+        assert!(dir.join("exports").join("REVIEW-NOTICE.txt").is_file());
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -1023,14 +1024,13 @@ mod tests {
     fn complaint_and_motion_templates_use_profile() {
         let profile = sample_appeal_profile();
         let complaint = assembled_pleading_paragraphs(&profile, "complaint").join("\n");
-        assert!(complaint.contains("COMPLAINT"));
-        assert!(complaint.contains("Jordan Example"));
-        assert!(complaint.to_ascii_lowercase().contains("basic"));
         assert!(complaint.contains("COMPLAINT") || complaint.contains("Complaint"));
+        assert!(complaint.contains("Jordan Example"));
         assert!(complaint.contains("user's own statement"));
-        assert!(complaint.contains(REVIEW_NOTICE));
+        assert!(!complaint.to_ascii_lowercase().contains("not legal advice"));
+        assert!(!complaint.contains(REVIEW_NOTICE));
         let motion = assembled_pleading_paragraphs(&profile, "motion").join("\n");
-        assert!(motion.contains("MOTION"));
+        assert!(motion.contains("MOTION") || motion.contains("Motion"));
         assert!(motion.contains("user's own motion text"));
         assert!(motion.contains("Sample County Clerk"));
     }
@@ -1040,10 +1040,105 @@ mod tests {
         let (dir, profile) = temp_case();
         let paths = export_pleading(&dir, &profile, "complaint", None).unwrap();
         assert!(paths.docx.exists());
-        assert!(inspect_docx_contains(&paths.docx, "COMPLAINT").unwrap());
+        assert!(
+            inspect_docx_contains(&paths.docx, "COMPLAINT").unwrap()
+                || inspect_docx_contains(&paths.docx, "Complaint").unwrap()
+        );
         assert!(inspect_docx_contains(&paths.docx, "Jordan Example").unwrap());
-        assert!(inspect_docx_contains(&paths.docx, REVIEW_NOTICE).unwrap());
+        assert!(!inspect_docx_contains(&paths.docx, REVIEW_NOTICE).unwrap());
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn motion_pdf_and_docx_are_court_ready() {
+        let (dir, mut profile) = temp_case();
+        profile.rule_pack_id = "nj-app-div".into();
+        profile.governing_state = "NJ".into();
+        profile.court.name = "Superior Court of New Jersey, Appellate Division".into();
+        profile.court.address_lines = vec![
+            "Richard J. Hughes Justice Complex, 25 W. Market Street".into(),
+            "P.O. Box 006, Trenton, NJ 08625-0006".into(),
+        ];
+        profile.docket_number = "A-01000-24".into();
+        profile.notice_of_appeal.trial_court_docket = "L-01000-24".into();
+        profile.document_kind = "reconsideration".into();
+        profile.motion.title = "Motion for reconsideration".into();
+        profile.motion.user_text = include_str!("../../fixtures/sample-reconsideration.md")
+            .split_once("---\n\n")
+            .map(|(_, body)| body.to_string())
+            .unwrap_or_else(|| {
+                "# Preliminary statement\nThis is a fake draft for tests. The trial court entered an order dismissing the complaint.\n::: signature\n/s/ Jordan Example\n:::".into()
+            });
+        let paths = export_pleading(&dir, &profile, "reconsideration", None).unwrap();
+        assert!(crate::pleading::is_valid_docx(&paths.docx).unwrap());
+        let xml_ok = inspect_docx_contains(&paths.docx, "word/document.xml");
+        let _ = xml_ok;
+        let text = pdf_text(&paths.pdf);
+        assert!(!text.contains('#'), "raw markdown leaked: {text}");
+        assert!(!text.contains(":::"), "fence leaked: {text}");
+        assert!(!text.contains("#v("), "typst leaked: {text}");
+        assert!(!text.to_ascii_lowercase().contains("to the best of my knowledge"));
+        assert!(text.contains("I certify that the foregoing statements made by me are true"));
+        assert!(text.contains("COURT USE ONLY") || text.contains("Court Use Only"));
+        assert!(text.contains("Appellate") || text.contains("A-01000"));
+        assert!(text.contains("CERTIFICATE OF SERVICE") || text.contains("Certificate of Service"));
+        assert!(text.contains("Page") && text.contains("of"));
+        assert!(!text.to_ascii_lowercase().contains("not legal advice"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn nj_and_co_markdown_exports_have_venue_captions() {
+        let (nj_dir, mut nj) = temp_case();
+        nj.court_markdown = include_str!("../../fixtures/sample-reconsideration.md").into();
+        nj.filer.signature_name = "Jordan Example".into();
+        nj.filer.name = "Jordan Example".into();
+        let nj_paths = export_court_markdown(&nj_dir, &nj, None).unwrap();
+        assert!(crate::pleading::is_valid_docx(&nj_paths.docx).unwrap());
+        let nj_text = pdf_text(&nj_paths.pdf);
+        assert!(!nj_text.contains('#'), "NJ markup leaked: {nj_text}");
+        assert!(!nj_text.contains(":::"));
+        assert!(!nj_text.contains("#v("));
+        assert!(nj_text.contains("A-01000-24"));
+        assert!(nj_text.contains("L-01000-24") || nj_text.contains("Trial Court"));
+        assert!(nj_text.contains("COURT USE ONLY") || nj_text.contains("Court Use Only"));
+        assert!(nj_text.contains("I certify that the foregoing statements made by me are true"));
+        assert!(nj_text.contains("CERTIFICATE OF SERVICE") || nj_text.contains("Certificate of Service"));
+        assert!(nj_text.contains("/s/") || nj_text.contains("Jordan Example"));
+
+        let (co_dir, mut co) = temp_case();
+        co.court_markdown = include_str!("../../fixtures/sample-co-reconsideration.md").into();
+        co.filer.signature_name = "Jordan Example".into();
+        co.filer.name = "Jordan Example".into();
+        let co_paths = export_court_markdown(&co_dir, &co, None).unwrap();
+        assert!(crate::pleading::is_valid_docx(&co_paths.docx).unwrap());
+        let zip = std::fs::File::open(&co_paths.docx).unwrap();
+        let mut archive = zip::ZipArchive::new(zip).unwrap();
+        assert!(archive.by_name("word/document.xml").is_ok());
+        let co_text = pdf_text(&co_paths.pdf);
+        assert!(!co_text.contains('#'), "CO markup leaked: {co_text}");
+        assert!(!co_text.contains(":::"));
+        assert!(!co_text.contains("#v("));
+        assert!(co_text.contains("24CA1000"));
+        assert!(co_text.contains("23CV1000") || co_text.contains("Lower Court"));
+        assert!(co_text.contains("COURT USE ONLY") || co_text.contains("Court Use Only"));
+        assert!(co_text.contains("I declare under penalty of perjury under the law of Colorado"));
+        assert!(co_text.contains("CERTIFICATE OF SERVICE") || co_text.contains("Certificate of Service"));
+        let _ = fs::remove_dir_all(&nj_dir);
+        let _ = fs::remove_dir_all(&co_dir);
+    }
+
+    fn pdf_text(path: &Path) -> String {
+        let out = std::process::Command::new("pdftotext")
+            .args(["-layout", &path.display().to_string(), "-"])
+            .output();
+        match out {
+            Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+            _ => {
+                let bytes = fs::read(path).unwrap_or_default();
+                String::from_utf8_lossy(&bytes).into_owned()
+            }
+        }
     }
 
     #[test]
@@ -1051,8 +1146,7 @@ mod tests {
         let mut profile = sample_appeal_profile();
         profile.brief.user_text = "This paragraph is the user's own brief point.".into();
         let blob = assembled_pleading_paragraphs(&profile, "appellate_brief").join("\n");
-        assert!(blob.contains("APPELLATE BRIEF"));
-        assert!(blob.contains("basic"));
+        assert!(blob.contains("APPELLATE BRIEF") || blob.contains("Appellate brief"));
         assert!(blob.contains("user's own brief point"));
         assert!(blob.contains("CERTIFICATE OF SERVICE"));
         assert!(blob.contains("did not file or serve"));

@@ -500,7 +500,8 @@ pub fn install_form_pack_cmd(
         catalog: None,
         file: file.map(std::path::PathBuf::from),
         root: None,
-        allow_network: false,
+        // Clicking Install is consent to fetch a verified file. Fixture example.test URLs are still refused.
+        allow_network: true,
     })
 }
 
@@ -542,6 +543,54 @@ pub fn help_links_cmd() -> Result<crate::help_links::HelpLinks, String> {
 #[tauri::command]
 pub fn import_markdown_cmd(case_id: String, markdown: String) -> Result<crate::court_md::CourtMarkdownDoc, String> {
     crate::court_md::import_markdown(&case_dir_from_id(&case_id)?, &markdown)
+}
+
+#[tauri::command]
+pub fn preview_markdown_cmd(
+    markdown: String,
+    case_id: Option<String>,
+) -> Result<crate::court_md::CourtPreview, String> {
+    let profile = match case_id {
+        Some(id) if !id.trim().is_empty() => case_profile::load_case(&case_dir_from_id(&id)?)?,
+        _ => case_profile::CaseProfile::new_standard("Preview", "motion"),
+    };
+    Ok(crate::court_md::preview_markdown(&profile, &markdown))
+}
+
+#[tauri::command]
+pub fn export_markdown_draft_cmd(
+    markdown: String,
+    case_id: Option<String>,
+    title: Option<String>,
+) -> Result<ExportResult, String> {
+    let dir = match case_id {
+        Some(id) if !id.trim().is_empty() => case_dir_from_id(&id)?,
+        _ => {
+            let parsed = crate::court_md::parse_markdown(&markdown);
+            let caption_title = title.unwrap_or_else(|| {
+                if !parsed.meta.plaintiff.is_empty() && !parsed.meta.defendant.is_empty() {
+                    format!("{} v. {}", parsed.meta.plaintiff, parsed.meta.defendant)
+                } else {
+                    "Imported draft".into()
+                }
+            });
+            let (dir, _profile) = case_profile::create_case_folder(
+                &cases_root(),
+                &caption_title,
+                CaseMode::Standard,
+                "reconsideration",
+            )?;
+            dir
+        }
+    };
+    crate::court_md::import_markdown(&dir, &markdown)?;
+    let profile = case_profile::load_case(&dir)?;
+    let paths = documents::export_court_markdown(&dir, &profile, None)?;
+    Ok(ExportResult {
+        docx: paths.docx.to_string_lossy().into_owned(),
+        pdf: paths.pdf.to_string_lossy().into_owned(),
+        notice: REVIEW_NOTICE.to_string(),
+    })
 }
 
 #[tauri::command]
@@ -722,6 +771,24 @@ pub fn cloud_get_case_sync_meta_cmd(case_id: String) -> Result<crate::sync::Case
 pub fn preflight_audit_cmd(case_id: String) -> Result<crate::check::PreFlightAudit, String> {
     let dir = case_dir_from_id(&case_id)?;
     crate::check::preflight_audit(&dir)
+}
+
+#[tauri::command]
+pub fn import_folder_cmd(
+    case_id: Option<String>,
+    from: String,
+    title: Option<String>,
+) -> Result<crate::folder_import::FolderImportReport, String> {
+    let dest = match case_id {
+        Some(id) if !id.trim().is_empty() => case_dir_from_id(&id)?,
+        _ => cases_root(),
+    };
+    crate::folder_import::import_folder(&dest, std::path::Path::new(&from), title.as_deref())
+}
+
+#[tauri::command]
+pub fn agent_manifest_cmd() -> Result<serde_json::Value, String> {
+    Ok(crate::help::agent_manifest())
 }
 
 #[tauri::command]

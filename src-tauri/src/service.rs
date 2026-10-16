@@ -166,7 +166,7 @@ I hereby certify that on *{date_str}*, a true and correct copy of *{filing}* was
 
 {recipients_typst}
 
-I certify under penalty of perjury under the laws of this jurisdiction that the foregoing statements made by me are true and correct.
+{oath}
 
 #v(2.5em)
 
@@ -185,13 +185,6 @@ I certify under penalty of perjury under the laws of this jurisdiction that the 
     Email: {filer_email}
   ]
 )
-
-#v(3em)
-#line(length: 100%, stroke: 0.5pt + rgb(180, 180, 180))
-#text(8pt, fill: rgb(120, 120, 120))[
-  {never_file} \
-  {review_notice}
-]
 "##,
         docket_header = typst_escape(if profile.docket_number.is_empty() { "UNFILED" } else { &profile.docket_number }),
         court_name = typst_escape(if profile.court.name.is_empty() { "COURT OF RECORD" } else { &profile.court.name }),
@@ -209,8 +202,11 @@ I certify under penalty of perjury under the laws of this jurisdiction that the 
         filer_address = typst_escape(&profile.filer.address_lines.join(", ")),
         filer_phone = typst_escape(if profile.filer.phone.is_empty() { "N/A" } else { &profile.filer.phone }),
         filer_email = typst_escape(if profile.filer.email.is_empty() { "N/A" } else { &profile.filer.email }),
-        never_file = NEVER_FILE_NOTICE,
-        review_notice = REVIEW_NOTICE,
+        oath = typst_escape(if crate::legal_os::resolve_venue(profile).venue_code == "NJ" {
+            crate::legal_os::NJ_R_1_4_4B_OATH
+        } else {
+            "I declare under penalty of perjury that the foregoing is true and correct."
+        }),
     );
 
     let pdf_bytes = crate::pdf::compile_typst(typst_source)?;
@@ -297,7 +293,7 @@ pub fn generate_proposed_order(
     let mut relief_typst = String::new();
     for line in relief_text.lines() {
         if !line.trim().is_empty() {
-            relief_typst.push_str(&format!("  #v(0.5em)\n  {}\n", line));
+            relief_typst.push_str(&format!("#v(0.5em)\n{}\n", typst_escape(line)));
         }
     }
 
@@ -362,13 +358,6 @@ IT IS on this #line(length: 1.5in) day of #line(length: 1.8in), 20#line(length: 
   #line(length: 3in) \
   #strong[JUDGE OF THE COURT]
 ]
-
-#v(3em)
-#line(length: 100%, stroke: 0.5pt + rgb(180, 180, 180))
-#text(8pt, fill: rgb(120, 120, 120))[
-  {never_file} \
-  {review_notice}
-]
 "##,
         court_name = typst_escape(if profile.court.name.is_empty() { "COURT OF RECORD" } else { &profile.court.name }),
         court_div = typst_escape(profile.court.division.as_deref().unwrap_or("")),
@@ -378,18 +367,28 @@ IT IS on this #line(length: 1.5in) day of #line(length: 1.8in), 20#line(length: 
         title_clean = typst_escape(&title_clean.to_uppercase()),
         filer_name = typst_escape(if profile.filer.name.is_empty() { "Moving Party" } else { &profile.filer.name }),
         filer_role = typst_escape(if profile.filer.role.is_empty() { "pro se" } else { &profile.filer.role }),
-        relief_typst = typst_escape(&relief_typst),
-        never_file = NEVER_FILE_NOTICE,
-        review_notice = REVIEW_NOTICE,
+        relief_typst = relief_typst,
     );
 
     let pdf_bytes = crate::pdf::compile_typst(typst_source)?;
     let out_pdf = exports_dir.join("proposed-order.pdf");
     fs::write(&out_pdf, &pdf_bytes).map_err(|e| e.to_string())?;
 
-    // Also write simple docx template or note
     let out_docx = exports_dir.join("proposed-order.docx");
-    let _ = fs::write(&out_docx, b"Court Proposed Order");
+    let mut order_profile = profile.clone();
+    order_profile.motion.title = format!("ORDER GRANTING {}", title_clean);
+    let style = crate::pleading::caption_style(profile, "motion", None);
+    let order_doc = crate::pleading::assemble(
+        &order_profile,
+        "motion",
+        &format!("ORDER GRANTING {}", title_clean.to_uppercase()),
+        relief_text,
+        style,
+    );
+    let rules = crate::court_rules::CourtRules::load_for_case(case_dir);
+    let docx_bytes = crate::pleading::to_docx(&order_doc, &rules)?;
+    fs::write(&out_docx, docx_bytes).map_err(|e| e.to_string())?;
+    let _ = crate::pleading::write_review_sidecar(&exports_dir);
 
     Ok(ProposedOrderResult {
         ok: true,
@@ -439,6 +438,18 @@ mod tests {
         assert!(result.ok);
         assert!(result.never_files);
         assert!(Path::new(&result.order_pdf).is_file());
+        assert!(crate::pleading::is_valid_docx(Path::new(&result.order_docx)).unwrap());
+        let pdf_text = {
+            let out = std::process::Command::new("pdftotext")
+                .args(["-layout", &result.order_pdf, "-"])
+                .output();
+            match out {
+                Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).into_owned(),
+                _ => String::new(),
+            }
+        };
+        assert!(!pdf_text.contains("#v("), "typst leaked into proposed order: {pdf_text}");
+        assert!(!pdf_text.contains(":::"));
         let _ = fs::remove_dir_all(&temp_dir);
     }
 }

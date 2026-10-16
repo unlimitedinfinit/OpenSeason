@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
-use crate::case_profile::{CaseProfile, REVIEW_NOTICE};
+use crate::case_profile::CaseProfile;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct CourtFrontMatter {
@@ -28,6 +28,16 @@ pub struct CourtFrontMatter {
     pub doc_title: String,
     #[serde(default)]
     pub extra_caption: String,
+    #[serde(default)]
+    pub trial_court: String,
+    #[serde(default)]
+    pub trial_docket: String,
+    #[serde(default)]
+    pub court_address: String,
+    #[serde(default)]
+    pub governing_state: String,
+    #[serde(default)]
+    pub caption_layout: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -65,6 +75,13 @@ pub fn parse_front_matter(text: &str) -> (CourtFrontMatter, String) {
                     "judge" => meta.judge = val,
                     "doc_title" => meta.doc_title = val,
                     "extra_caption" => meta.extra_caption = val,
+                    "trial_court" | "lower_court" => meta.trial_court = val,
+                    "trial_docket" | "lower_court_case" | "trial_court_docket" => {
+                        meta.trial_docket = val
+                    }
+                    "court_address" => meta.court_address = val,
+                    "governing_state" | "state" => meta.governing_state = val,
+                    "caption_layout" => meta.caption_layout = val,
                     _ => {}
                 }
             }
@@ -183,10 +200,6 @@ pub fn assemble_lines(meta: &CourtFrontMatter, body: &str) -> Vec<String> {
             lines.push(apply_inline_markers(s));
         }
     }
-    if !lines.iter().any(|l| l.contains("not legal advice")) {
-        lines.push(String::new());
-        lines.push(REVIEW_NOTICE.to_string());
-    }
     lines
 }
 
@@ -254,6 +267,148 @@ fn apply_front_matter(profile: &mut CaseProfile, meta: &CourtFrontMatter) {
         if profile.filer.signature_name.trim().is_empty() {
             profile.filer.signature_name = meta.plaintiff.clone();
         }
+    }
+    if profile.notice_of_appeal.trial_court_name.trim().is_empty() && !meta.trial_court.is_empty() {
+        profile.notice_of_appeal.trial_court_name = meta.trial_court.clone();
+    }
+    if profile.notice_of_appeal.trial_court_docket.trim().is_empty() && !meta.trial_docket.is_empty()
+    {
+        profile.notice_of_appeal.trial_court_docket = meta.trial_docket.clone();
+    }
+    if profile.court.address_lines.is_empty() && !meta.court_address.is_empty() {
+        profile.court.address_lines = split_address(&meta.court_address);
+    }
+    if profile.governing_state.trim().is_empty() && !meta.governing_state.is_empty() {
+        profile.governing_state = meta.governing_state.clone();
+    }
+    if profile.caption_layout.trim().is_empty() && !meta.caption_layout.is_empty() {
+        profile.caption_layout = meta.caption_layout.clone();
+    }
+}
+
+fn split_address(raw: &str) -> Vec<String> {
+    raw.split(" | ")
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+/// Overlay markdown front matter onto a working copy of the profile for preview/export.
+/// Does not write case.json. The user's draft is the source for this paper's caption.
+pub fn overlay_profile(profile: &CaseProfile, meta: &CourtFrontMatter) -> CaseProfile {
+    let mut p = profile.clone();
+    if !meta.court.is_empty() {
+        p.court.name = meta.court.clone();
+    }
+    if !meta.county_or_district.is_empty() {
+        p.court.division = Some(meta.county_or_district.clone());
+    }
+    if !meta.case_no.is_empty() {
+        p.docket_number = meta.case_no.clone();
+    }
+    if !meta.doc_title.is_empty() {
+        p.motion.title = meta.doc_title.clone();
+    }
+    if !meta.plaintiff.is_empty() {
+        let party = crate::case_profile::Party {
+            name: meta.plaintiff.clone(),
+            role: if meta.plaintiff_label.is_empty() {
+                "Appellant".into()
+            } else {
+                meta.plaintiff_label.clone()
+            },
+            ..Default::default()
+        };
+        p.caption.plaintiffs = vec![party.clone()];
+        p.caption.appellants = vec![party];
+    }
+    if !meta.defendant.is_empty() {
+        let party = crate::case_profile::Party {
+            name: meta.defendant.clone(),
+            role: if meta.defendant_label.is_empty() {
+                "Respondent".into()
+            } else {
+                meta.defendant_label.clone()
+            },
+            ..Default::default()
+        };
+        p.caption.defendants = vec![party.clone()];
+        p.caption.appellees = vec![party];
+    }
+    if !meta.trial_court.is_empty() {
+        p.notice_of_appeal.trial_court_name = meta.trial_court.clone();
+    }
+    if !meta.trial_docket.is_empty() {
+        p.notice_of_appeal.trial_court_docket = meta.trial_docket.clone();
+    }
+    if !meta.court_address.is_empty() {
+        p.court.address_lines = split_address(&meta.court_address);
+    }
+    if !meta.governing_state.is_empty() {
+        p.governing_state = meta.governing_state.clone();
+    }
+    if !meta.caption_layout.is_empty() {
+        p.caption_layout = meta.caption_layout.clone();
+    }
+    if p.filer.name.trim().is_empty() && !meta.plaintiff.is_empty() {
+        p.filer.name = meta.plaintiff.clone();
+        if p.filer.signature_name.trim().is_empty() {
+            p.filer.signature_name = meta.plaintiff.clone();
+        }
+    }
+    p
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CourtPreview {
+    pub ok: bool,
+    pub never_files: bool,
+    pub never_serves: bool,
+    pub title: String,
+    pub caption_kind: String,
+    pub court_name: String,
+    pub docket_number: String,
+    pub trial_court: String,
+    pub trial_docket: String,
+    pub lines: Vec<String>,
+    pub has_signature: bool,
+    pub has_certificate: bool,
+    pub markup_stripped: bool,
+    pub notice: String,
+}
+
+pub fn preview_markdown(profile: &CaseProfile, markdown: &str) -> CourtPreview {
+    let parsed = parse_markdown(markdown);
+    let working = overlay_profile(profile, &parsed.meta);
+    let heading = if parsed.meta.doc_title.is_empty() {
+        if working.motion.title.trim().is_empty() {
+            "MOTION"
+        } else {
+            working.motion.title.as_str()
+        }
+    } else {
+        parsed.meta.doc_title.as_str()
+    };
+    let style = crate::pleading::caption_style(&working, "motion", None);
+    let doc = crate::pleading::assemble(&working, "motion", heading, &parsed.body, style);
+    let lines = crate::pleading::document_lines(&doc);
+    let blob = lines.join("\n");
+    CourtPreview {
+        ok: !parsed.body.trim().is_empty() || !working.motion.user_text.trim().is_empty(),
+        never_files: true,
+        never_serves: true,
+        title: heading.to_string(),
+        caption_kind: doc.venue.as_str().to_string(),
+        court_name: working.court.name.clone(),
+        docket_number: working.docket_number.clone(),
+        trial_court: working.notice_of_appeal.trial_court_name.clone(),
+        trial_docket: working.notice_of_appeal.trial_court_docket.clone(),
+        has_signature: blob.contains("/s/"),
+        has_certificate: blob.contains("CERTIFICATE OF SERVICE"),
+        markup_stripped: !crate::pleading::contains_forbidden_markup(&blob),
+        notice: "Preview only. Nothing was filed or served. Review every line before you export."
+            .into(),
+        lines,
     }
 }
 
@@ -334,7 +489,9 @@ Served by the user, not by this app.
         assert!(blob.contains("JORDAN EXAMPLE") || blob.contains("Jordan Example"));
         assert!(blob.contains("CERTIFICATE OF SERVICE"));
         assert!(blob.contains("MOTION FOR ENLARGEMENT OF TIME"));
-        assert!(blob.contains("not legal advice"));
+        assert!(!blob.contains(":::"));
+        assert!(!blob.contains("# Preliminary"));
+        assert!(!blob.contains("not legal advice"));
     }
 
     #[test]
@@ -366,5 +523,32 @@ The trial court entered the order on March 1.
         assert_eq!(loaded.caption.appellees[0].name, "Sample County Clerk");
         assert!(dir.join("drafts").join("draft.md").is_file());
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn preview_nj_and_co_markdown_uses_venue_captions() {
+        let empty = crate::case_profile::CaseProfile::new_standard("Preview", "motion");
+        let nj = preview_markdown(&empty, include_str!("../../fixtures/sample-reconsideration.md"));
+        assert_eq!(nj.caption_kind, "nj-boxed");
+        assert!(nj.docket_number.contains("A-01000-24"));
+        assert!(nj.trial_docket.contains("L-01000-24"));
+        let blob = nj.lines.join("\n");
+        assert!(blob.contains("COURT USE ONLY"));
+        assert!(blob.contains("Appellate"));
+        assert!(blob.contains("CERTIFICATE OF SERVICE"));
+        assert!(blob.contains("/s/ Jordan Example"));
+        assert!(nj.markup_stripped);
+        assert!(!blob.contains(":::"));
+        assert!(!blob.contains("# Preliminary"));
+
+        let co = preview_markdown(&empty, include_str!("../../fixtures/sample-co-reconsideration.md"));
+        assert_eq!(co.caption_kind, "co-boxed");
+        assert_eq!(co.docket_number, "24CA1000");
+        let cob = co.lines.join("\n");
+        assert!(cob.contains("Lower Court"));
+        assert!(cob.contains("24CA1000"));
+        assert!(cob.contains("I declare under penalty of perjury under the law of Colorado"));
+        assert!(co.has_certificate);
+        assert!(co.has_signature);
     }
 }

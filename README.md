@@ -21,7 +21,7 @@ Agents drive the same engine through `openseason --json` or `openseason mcp`. Se
 - **What do I need to file?**: plain-language finder in the window and `openseason --json guide`. Teaching lives in packs. Legal information, not advice.
 - **Get legal help**: Help menu links to JustLegal after a confirmation. CLI/MCP return the URLs only.
 
-- **JustLegal Cloud Sync Hub**: In-app Firebase Auth and non-destructive additive sync with `justlegal.me`. Downloads route automatically to `orders/`, `filings/`, and `evidence/`. Confidential cases remain strictly airgapped.
+- **JustLegal Cloud (not implemented in this build)**: `openseason sync` for standard cases returns `not_implemented`. Confidential and sealed cases are refused. In-app login widgets exist; do not treat them as a working backup. Use local Word/PDF or `.osb` export.
 - **Court Readiness Pre-Flight Audit**: Real-time validation checklist banner reviewing caption, docket number, filer signature, statutory deadline math, and fact-citation grounding before export.
 - **Bates-Stamped Exhibit Packet Assembler**: One-click generation of unified Bates-stamped PDFs with custom prefixes (e.g. `ABRAMS-000001`) and automated Typst Table of Exhibits with SHA-256 integrity hashes.
 - **Official Court Form (AcroForm) Filler**: Inspects PDF form fields and auto-maps `case.json` values into official court forms (e.g. Colorado JDF 205 fee waiver and JDF 1911 direct appeal), exporting filled PDFs and audit JSON.
@@ -103,6 +103,7 @@ bash examples/agent-e2e.sh
 # or, one command at a time:
 npm run cli -- --json case create --path ./my-case --title "Example v. Sample County Clerk" --kind reconsideration --pack nj-app-div
 npm run cli -- --json draft import ./my-case --md fixtures/sample-reconsideration.md
+npm run cli -- --json draft preview --md fixtures/sample-reconsideration.md
 npm run cli -- --json check all ./my-case --pack nj-app-div --rule reconsideration-appellate --trigger-date 2026-01-09
 npm run cli -- --json export court-md ./my-case
 ```

@@ -1,7 +1,7 @@
 //! Cross-Venue Case Escalation, Multi-State Portfolio Deadline Radar,
 //! and Tauri IPC command endpoints for the Legal Operating System.
 
-use chrono::Utc;
+use chrono::Local;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -112,7 +112,7 @@ pub fn escalate_case(
     new_profile.timeline.push(TimelineEvent {
         id: uuid::Uuid::new_v4().to_string(),
         title: format!("Escalated from '{}' ({})", parent.title, parent.docket_number),
-        date: Utc::now().date_naive().format("%Y-%m-%d").to_string(),
+        date: Local::now().date_naive().format("%Y-%m-%d").to_string(),
         notes: format!("Parent Matter ID: {}", parent.id),
     });
 
@@ -193,8 +193,13 @@ pub fn portfolio_status(cases_root: &Path) -> Result<PortfolioStatusReport, Stri
             .branches
             .iter()
             .filter(|b| b.computed_deadline.is_some())
-            .min_by_key(|b| b.days_until_due.unwrap_or(9999))
-            .or_else(|| next_steps.branches.first());
+            .min_by_key(|b| b.days_until_due.unwrap_or(i64::MAX))
+            .or_else(|| {
+                next_steps
+                    .branches
+                    .iter()
+                    .find(|b| b.status == "needs_trigger_date")
+            });
 
         matters.push(PortfolioCaseItem {
             case_id: p.id.clone(),
@@ -209,6 +214,23 @@ pub fn portfolio_status(cases_root: &Path) -> Result<PortfolioStatusReport, Stri
             urgent_deadline: urgent.and_then(|b| b.computed_deadline.clone()),
             days_until_due: urgent.and_then(|b| b.days_until_due),
             parent_matter_id: p.parent_matter_id.clone(),
+            urgent_status: urgent.map(|b| b.status.clone()),
+            urgent_rule: urgent.map(|b| b.rule_citation.clone()),
+            urgent_trigger_date: urgent.and_then(|b| {
+                if b.trigger_date.is_empty() {
+                    None
+                } else {
+                    Some(b.trigger_date.clone())
+                }
+            }),
+            urgent_math: urgent.and_then(|b| {
+                if b.math.is_empty() {
+                    None
+                } else {
+                    Some(b.math.clone())
+                }
+            }),
+            unverified: urgent.map(|b| b.unverified).unwrap_or(true),
         });
     }
 

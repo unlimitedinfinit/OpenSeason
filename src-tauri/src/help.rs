@@ -1,6 +1,7 @@
 //! Plain-language field help and the agent playbook. Offline. Never files.
 
 use serde::Serialize;
+use serde_json::{json, Value};
 
 use crate::check::NEVER_FILE_NOTICE;
 
@@ -68,6 +69,36 @@ pub fn playbook() -> String {
     format!("{NEVER_FILE_NOTICE}\n\n{PLAYBOOK}")
 }
 
+/// One-page contract for a local AI: tools, case folder, MCP launch, starter prompt.
+pub fn agent_manifest() -> Value {
+    let tools = vec![
+        json!({"name": "playbook", "cli": "docs playbook", "mcp": "playbook", "summary": "Read the offline motion playbook first. Never invent cites. Never file."}),
+        json!({"name": "case_create", "cli": "case create", "mcp": "case_create", "summary": "Create a local case folder from a title and kind."}),
+        json!({"name": "import_folder", "cli": "case import-folder", "mcp": "import_folder", "summary": "Copy drafts, notes, and orders into a case. Proposes names and dates. Does not auto-commit guesses."}),
+        json!({"name": "draft_import", "cli": "draft import", "mcp": "draft_import", "summary": "Import the user's Markdown draft. Does not invent body text."}),
+        json!({"name": "draft_preview", "cli": "draft preview --md FILE", "mcp": "draft_preview", "summary": "Preview caption and body from Markdown. Does not write files."}),
+        json!({"name": "check_deadline", "cli": "check deadline", "mcp": "check_deadline", "summary": "Compute a deadline only from a user-entered trigger date. Weekend/holiday roll."}),
+        json!({"name": "check_preflight", "cli": "check preflight", "mcp": "check_preflight", "summary": "Court-readiness audit. Outer JSON ok is false when the case is not ready."}),
+        json!({"name": "export_court", "cli": "export court-md / export pleading", "mcp": "export_court", "summary": "Render Word and PDF. Never files or serves."}),
+        json!({"name": "guide_find", "cli": "guide find", "mcp": "guide_find", "summary": "Recommend only forms the pack lists. Do not invent a deadline."}),
+        json!({"name": "mcp", "cli": "mcp", "mcp": "(server)", "summary": "Stdio JSON-RPC. Accepts Content-Length framing or newline-delimited JSON."}),
+    ];
+    json!({
+        "ok": true,
+        "never_files": true,
+        "never_serves": true,
+        "notice": NEVER_FILE_NOTICE,
+        "case_folder": "Documents/JustLegal/Cases/{caseId}/",
+        "mcp_launch": {
+            "command": "openseason",
+            "args": ["mcp"],
+            "cwd": "(repository root or the folder that contains openseason-cli)"
+        },
+        "tools": tools,
+        "starter_prompt": "You are helping with OpenSeason, an offline formatting engine. Read AGENTS.md. Never invent facts, citations, or deadlines. Never file or serve. Call `openseason --json docs playbook` (or MCP playbook) first. If a tool returns ok:false, stop and ask the user. Use only values from the case folder the user points you at."
+    })
+}
+
 pub fn how_to_fix(field: &str) -> String {
     let f = field.to_ascii_lowercase();
     if f.starts_with("fact.") {
@@ -100,5 +131,14 @@ mod tests {
         assert!(PLAYBOOK.contains("Never invent"));
         assert!(PLAYBOOK.contains("export_packet"));
         assert!(how_to_fix("fact.1").contains("Do not invent"));
+    }
+
+    #[test]
+    fn manifest_lists_tools_and_forbids_filing() {
+        let m = agent_manifest();
+        assert_eq!(m["never_files"], true);
+        assert!(m["tools"].as_array().unwrap().len() >= 5);
+        assert!(m["starter_prompt"].as_str().unwrap().contains("Never invent"));
+        assert!(m["mcp_launch"]["args"][0] == "mcp");
     }
 }
