@@ -476,7 +476,7 @@ pub fn markdown_from_profile(profile: &CaseProfile, kind: &str) -> String {
         format!("county_or_district: {distinct_div}\n")
     };
     format!(
-        "---\ncourt: {court}\n{div_line}plaintiff: {plaintiff}\nplaintiff_label: {plabel}\ndefendant: {defendant}\ndefendant_label: {dlabel}\ncase_no: {docket}\ncase_no_label: Docket No.\ndoc_title: {doc_title}\nfiler_email: {email}\nfiler_phone: {phone}\nfiler_address: {filer_addr}\n---\n\n{body}\n\n::: signature\n/s/ {sig}\n{name}\n{role}\n{addr}\n{phone}\n{email}\n:::\n\n::: certificate\nI certify that on this date I served a copy of this paper on the parties listed below by the method I will use when I file. This app did not serve anyone.\n:::\n",
+        "---\ncourt: {court}\n{div_line}plaintiff: {plaintiff}\nplaintiff_label: {plabel}\ndefendant: {defendant}\ndefendant_label: {dlabel}\ncase_no: {docket}\ncase_no_label: Docket No.\ndoc_title: {doc_title}\nfiler_email: {email}\nfiler_phone: {phone}\nfiler_address: {filer_addr}\n---\n\n{body}\n\n::: signature\n/s/ {sig}\n{name}\n{role}\n{addr}\n{phone}\n{email}\n:::\n\n::: certificate\nI will serve a copy of this paper myself. This software did not serve anyone.\nRecipient: ____________\nMethod: ____________\nDate: ____________\n:::\n",
         court = profile.court.name,
         div_line = div_line,
         plabel = left.first().map(|p| p.role.as_str()).unwrap_or("Plaintiff"),
@@ -577,6 +577,8 @@ The trial court entered the order on March 1.
         assert!(blob.contains("jordan.example@example.test"));
         assert!(!blob.contains("Division / Courtroom"));
         assert_eq!(blob.matches("Appellate Division").count(), 1);
+        assert!(blob.contains("Case Number:"));
+        assert!(!blob.to_ascii_lowercase().contains("needs_verification"));
         assert!(nj.markup_stripped);
         assert!(!blob.contains(":::"));
         assert!(!blob.contains("# Preliminary"));
@@ -592,7 +594,47 @@ The trial court entered the order on March 1.
         assert!(cob.contains("jordan.example@example.test"));
         assert!(!cob.contains("DECLARATION UNDER C.R.S."));
         assert!(!cob.contains("Certificate of Conferral (C.R.C.P. 121"));
+        assert!(!cob.to_ascii_lowercase().contains("needs_verification"));
+        assert!(cob.contains("Recipient: Sample County Clerk"));
         assert!(co.has_certificate);
         assert!(co.has_signature);
+    }
+
+    #[test]
+    fn preview_fills_blank_certificate_and_export_refuses_incomplete() {
+        let empty = crate::case_profile::CaseProfile::new_standard("Preview", "motion");
+        let md = r#"---
+court: Superior Court of New Jersey, Appellate Division
+plaintiff: Jordan Example
+defendant: Sample County Clerk
+case_no: A-01000-24
+governing_state: NJ
+---
+# Body
+Hello.
+::: signature
+/s/ Jordan Example
+:::
+::: certificate
+I will serve a copy of this paper myself. This software did not serve anyone.
+:::
+"#;
+        let preview = preview_markdown(&empty, md);
+        let blob = preview.lines.join("\n");
+        assert!(blob.contains("Recipient: ____________"));
+        assert!(blob.contains("Method: ____________"));
+        assert!(blob.contains(crate::pleading::DATE_BLANK));
+        assert!(!blob.contains("parties listed below"));
+
+        let dir = std::env::temp_dir().join(format!("os-cos-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        crate::case_profile::ensure_case_layout(&dir).unwrap();
+        let profile = crate::case_profile::CaseProfile::new_standard("Example v. Sample County Clerk", "motion");
+        crate::case_profile::save_case(&dir, &profile).unwrap();
+        import_markdown(&dir, md).unwrap();
+        let loaded = crate::case_profile::load_case(&dir).unwrap();
+        let err = crate::documents::export_court_markdown(&dir, &loaded, None).unwrap_err();
+        assert!(err.contains("recipient") || err.contains("certificate of service"));
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

@@ -181,7 +181,7 @@ pub fn sanitize_draft(text: &str) -> (Vec<BodyBlock>, Vec<String>, Vec<String>, 
             }
             continue;
         }
-        let cleaned = s.replace("**", "").replace("__", "");
+        let cleaned = strip_verification_flags(&s.replace("**", "").replace("__", ""));
         match mode {
             "signature" => {
                 if !cleaned.is_empty() {
@@ -243,22 +243,171 @@ fn party_names(profile: &CaseProfile, left: bool) -> (String, String) {
     (names, role)
 }
 
-fn default_certificate_lines(profile: &CaseProfile) -> Vec<String> {
-    vec![
-        "I will serve a copy of this paper myself. This software did not file or serve anyone.".into(),
-        format!(
-            "Date of this draft: {}.",
-            chrono::Local::now().format("%B %d, %Y")
-        ),
-        if profile.filer.name.trim().is_empty() {
-            String::new()
+pub const DATE_BLANK: &str = "Date: ____________";
+pub const CERTIFICATE_EXPORT_BLOCKED: &str = "Cannot export: the certificate of service is missing a recipient, a method, or a service date. Add them in the ::: certificate block (Recipient, Method, Date). Preview may show a blank fill-in form; export will not invent those facts. This software did not serve anyone.";
+
+fn strip_verification_flags(s: &str) -> String {
+    let mut t = s.to_string();
+    loop {
+        let lower = t.to_ascii_lowercase();
+        let pat = if lower.contains("(needs_verification)") {
+            "(needs_verification)"
+        } else if lower.contains("needs_verification") {
+            "needs_verification"
         } else {
-            format!("Filer: {}.", profile.filer.name)
-        },
+            break;
+        };
+        if let Some(idx) = lower.find(pat) {
+            t.replace_range(idx..idx + pat.len(), "");
+        } else {
+            break;
+        }
+    }
+    while t.contains("  ") {
+        t = t.replace("  ", " ");
+    }
+    t.replace(" .", ".").replace(" ,", ",").trim().to_string()
+}
+
+fn is_fill_in_blank(value: &str) -> bool {
+    let t = value.trim();
+    t.is_empty() || t.chars().all(|c| c == '_' || c == '—' || c == '-' || c == ' ')
+}
+
+fn labeled_value<'a>(line: &'a str, labels: &[&str]) -> Option<&'a str> {
+    let trimmed = line.trim();
+    let lower = trimmed.to_ascii_lowercase();
+    for label in labels {
+        let needle = label.to_ascii_lowercase();
+        if lower.starts_with(&needle) {
+            let rest = trimmed[label.len()..].trim();
+            let rest = rest.strip_prefix(':').unwrap_or(rest).trim();
+            if is_fill_in_blank(rest) {
+                return None;
+            }
+            return Some(rest);
+        }
+    }
+    None
+}
+
+fn is_date_label_line(line: &str) -> bool {
+    let t = line.trim().to_ascii_lowercase();
+    t.starts_with("date:") || t.starts_with("date ") || t.starts_with("service date")
+}
+
+fn date_line_has_value(line: &str) -> bool {
+    labeled_value(line, &["Date", "Service date", "Date of service"]).is_some()
+        && line.chars().any(|c| c.is_ascii_digit())
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct CertificateGaps {
+    pub recipient: bool,
+    pub method: bool,
+    pub date: bool,
+}
+
+impl CertificateGaps {
+    pub fn is_empty(&self) -> bool {
+        !self.recipient && !self.method && !self.date
+    }
+
+    pub fn missing_labels(&self) -> Vec<&'static str> {
+        let mut v = Vec::new();
+        if self.recipient {
+            v.push("recipient");
+        }
+        if self.method {
+            v.push("method");
+        }
+        if self.date {
+            v.push("service date");
+        }
+        v
+    }
+}
+
+fn line_has_service_method(line: &str) -> bool {
+    let t = line.to_ascii_lowercase();
+    [
+        "electronic mail",
+        "e-mail",
+        "email",
+        "certified mail",
+        "first-class mail",
+        "u.s. mail",
+        "us mail",
+        "personal service",
+        "hand delivery",
+        "hand-delivery",
+        "e-file",
+        "efile",
+        "electronic filing",
+        "overnight",
+        "facsimile",
+        "fax",
+        "regular mail",
     ]
-    .into_iter()
-    .filter(|s| !s.is_empty())
-    .collect()
+    .iter()
+    .any(|m| t.contains(m))
+}
+
+pub fn certificate_gaps(lines: &[String]) -> CertificateGaps {
+    let has_recipient = lines.iter().any(|l| {
+        labeled_value(l, &["Recipient", "Served on", "Party served", "To"]).is_some()
+    });
+    let has_method = lines.iter().any(|l| {
+        labeled_value(l, &["Method", "Manner", "By"]).is_some() || line_has_service_method(l)
+    });
+    let has_date = lines.iter().any(|l| date_line_has_value(l));
+    CertificateGaps {
+        recipient: !has_recipient,
+        method: !has_method,
+        date: !has_date,
+    }
+}
+
+pub fn require_complete_certificate(doc: &CourtDocument) -> Result<(), String> {
+    let gaps = certificate_gaps(&doc.certificate_lines);
+    if gaps.is_empty() {
+        Ok(())
+    } else if gaps.missing_labels().len() == 3 {
+        Err(CERTIFICATE_EXPORT_BLOCKED.into())
+    } else {
+        Err(format!(
+            "Cannot export: the certificate of service is missing {}. Add them in the ::: certificate block (Recipient, Method, Date). Preview may show a blank fill-in form; export will not invent those facts. This software did not serve anyone.",
+            gaps.missing_labels().join(", ")
+        ))
+    }
+}
+
+fn default_certificate_lines() -> Vec<String> {
+    vec!["I will serve a copy of this paper myself. This software did not file or serve anyone.".into()]
+}
+
+fn polish_certificate(profile: &CaseProfile, mut lines: Vec<String>) -> Vec<String> {
+    let gaps = certificate_gaps(&lines);
+    if gaps.recipient && !lines.iter().any(|l| l.to_ascii_lowercase().starts_with("recipient")) {
+        lines.push("Recipient: ____________".into());
+    }
+    if gaps.method && !lines.iter().any(|l| l.to_ascii_lowercase().starts_with("method")) {
+        lines.push("Method: ____________".into());
+    }
+    if gaps.date && !lines.iter().any(|l| is_date_label_line(l)) {
+        lines.push(DATE_BLANK.into());
+    }
+    if !lines.iter().any(|l| l.contains("/s/")) {
+        let sig = if profile.filer.signature_name.trim().is_empty() {
+            profile.filer.name.trim()
+        } else {
+            profile.filer.signature_name.trim()
+        };
+        if !sig.is_empty() {
+            lines.push(format!("/s/ {sig}"));
+        }
+    }
+    lines
 }
 
 /// NJ R. 1:4-4(b) is pack_source and is inserted by the engine.
@@ -320,43 +469,32 @@ fn merge_filer_contact(profile: &CaseProfile, sig: &[String]) -> (Vec<String>, S
     )
 }
 
-fn ensure_certificate_signature(profile: &CaseProfile, mut lines: Vec<String>) -> Vec<String> {
-    let joined = lines.join("\n").to_ascii_lowercase();
-    if !joined.contains("date:") && !joined.contains("date of this draft") {
-        lines.push(format!(
-            "Date: {}",
-            chrono::Local::now().format("%B %d, %Y")
-        ));
-    }
-    if !lines.iter().any(|l| l.contains("/s/")) {
-        let sig = if profile.filer.signature_name.trim().is_empty() {
-            profile.filer.name.trim()
-        } else {
-            profile.filer.signature_name.trim()
-        };
-        if !sig.is_empty() {
-            lines.push(format!("/s/ {sig}"));
-            if !profile.filer.name.trim().is_empty() && profile.filer.name.trim() != sig {
-                lines.push(profile.filer.name.clone());
-            }
-        }
-    }
-    lines
-}
-
 fn signature_block(profile: &CaseProfile, extra: &[String]) -> Vec<String> {
     let mut lines = Vec::new();
-    lines.push(format!("Date: {}", chrono::Local::now().format("%B %d, %Y")));
+    if let Some(date) = extra.iter().find(|l| is_date_label_line(l)) {
+        if date_line_has_value(date) {
+            lines.push(date.clone());
+        } else {
+            lines.push(DATE_BLANK.into());
+        }
+    } else {
+        lines.push(DATE_BLANK.into());
+    }
     lines.push("Respectfully submitted,".into());
+    let extra: Vec<String> = extra
+        .iter()
+        .filter(|l| !is_date_label_line(l))
+        .cloned()
+        .collect();
     if extra.iter().any(|l| l.contains("/s/")) {
-        lines.extend(extra.iter().cloned());
+        lines.extend(extra);
     } else {
         lines.push(format!("/s/ {}", profile.filer.signature_name));
         lines.push(profile.filer.name.clone());
         if !profile.filer.role.trim().is_empty() {
             lines.push(profile.filer.role.clone());
         }
-        lines.extend(extra.iter().cloned());
+        lines.extend(extra);
         for line in &profile.filer.address_lines {
             if !line.trim().is_empty() {
                 lines.push(line.clone());
@@ -408,10 +546,10 @@ pub fn assemble(
         ),
         _ => (None, None),
     };
-    let certificate_lines = ensure_certificate_signature(
+    let certificate_lines = polish_certificate(
         profile,
         if cert_extra.is_empty() {
-            default_certificate_lines(profile)
+            default_certificate_lines()
         } else {
             cert_extra
                 .into_iter()
@@ -503,7 +641,7 @@ pub fn document_lines(doc: &CourtDocument) -> Vec<String> {
         CaptionVenue::NewJersey | CaptionVenue::Generic => {
             lines.push("COURT USE ONLY".into());
             if !doc.appellate_no.is_empty() {
-                lines.push(format!("Appellate: {}", doc.appellate_no));
+                lines.push(format!("Case Number: {}", doc.appellate_no));
             }
             if !doc.trial_no.is_empty() {
                 lines.push(format!("Trial Court: {}", doc.trial_no));
@@ -562,7 +700,15 @@ pub fn contains_forbidden_markup(text: &str) -> bool {
 pub fn to_typst(doc: &CourtDocument, rules: &CourtRules) -> String {
     let fonts = rules.typst_font_list();
     let size = rules.font_size_pt;
-    let leading = if rules.line_spacing >= 1.8 { 1.5 } else { rules.line_spacing.max(0.8) };
+    // Typst `leading` is the gap between line boxes. Map Word multipliers onto a
+    // consistent gap so wrapped lines match other lines in the same paragraph.
+    let leading = if rules.line_spacing >= 1.8 {
+        0.85
+    } else if rules.line_spacing >= 1.4 {
+        0.55
+    } else {
+        0.35
+    };
     let caption = match doc.style {
         CaptionStyle::Boxed => boxed_caption_typst(doc),
         CaptionStyle::Classic => classic_caption_typst(doc),
@@ -613,7 +759,7 @@ pub fn to_typst(doc: &CourtDocument, rules: &CourtRules) -> String {
   }}
 )
 #set text(font: ({fonts}), size: {size}pt)
-#set par(leading: {leading}em, justify: true, first-line-indent: 0em)
+#set par(leading: {leading}em, spacing: {leading}em, justify: true, first-line-indent: 0em)
 
 {caption}
 
@@ -716,13 +862,13 @@ fn blank_or(value: &str) -> String {
 }
 
 fn boxed_right_typst(doc: &CourtDocument) -> String {
+    let case_no = typst_escape(&blank_or(&doc.appellate_no));
     match doc.venue {
         CaptionVenue::Colorado => {
-            let case_no = typst_escape(&blank_or(&doc.appellate_no));
             let lower = typst_escape(&blank_or(&doc.lower_court_name));
             let trial = typst_escape(&blank_or(&doc.trial_no));
             format!(
-                r##"#align(center)[#text(weight: "bold", size: 8pt)[▲ COURT USE ONLY ▲]]
+                r##"#align(center)[#text(weight: "bold", size: 8pt)[COURT USE ONLY]]
     #v(0.25em)
     #box(stroke: 0.5pt, width: 100%, inset: 6pt)[
       *Case Number:* {case_no} \
@@ -735,13 +881,7 @@ fn boxed_right_typst(doc: &CourtDocument) -> String {
             )
         }
         CaptionVenue::NewJersey | CaptionVenue::Generic => {
-            let appellate = typst_escape(&blank_or(&doc.appellate_no));
             let trial = typst_escape(&blank_or(&doc.trial_no));
-            let heading = if doc.venue == CaptionVenue::NewJersey {
-                "COURT USE ONLY▲"
-            } else {
-                "COURT USE ONLY"
-            };
             let division_line = if doc.division_courtroom.trim().is_empty() {
                 String::new()
             } else {
@@ -751,15 +891,13 @@ fn boxed_right_typst(doc: &CourtDocument) -> String {
                 )
             };
             format!(
-                r##"#align(center)[#text(weight: "bold", size: 8pt)[{heading}]]
+                r##"#align(center)[#text(weight: "bold", size: 8pt)[COURT USE ONLY]]
     #v(0.25em)
     #box(stroke: 0.5pt, width: 100%, inset: 6pt)[
-      *Case Number* \
-      Appellate: {appellate} \
+      *Case Number:* {case_no} \
       Trial Court: {trial}{division_line}
     ]"##,
-                heading = heading,
-                appellate = appellate,
+                case_no = case_no,
                 trial = trial,
                 division_line = division_line,
             )
@@ -879,13 +1017,10 @@ fn boxed_caption_docx(doc: &CourtDocument, font: &str) -> String {
     };
     let right_text = match doc.venue {
         CaptionVenue::Colorado => format!(
-            "▲ COURT USE ONLY ▲\n\nCase Number: {appellate}\nLower Court: {lower}\nLower Court Case: {trial}"
+            "COURT USE ONLY\n\nCase Number: {appellate}\nLower Court: {lower}\nLower Court Case: {trial}"
         ),
-        CaptionVenue::NewJersey => format!(
-            "COURT USE ONLY▲\n\nCase Number\nAppellate: {appellate}\nTrial Court: {trial}{division_line}"
-        ),
-        CaptionVenue::Generic => format!(
-            "COURT USE ONLY\n\nCase Number\nAppellate: {appellate}\nTrial Court: {trial}{division_line}"
+        CaptionVenue::NewJersey | CaptionVenue::Generic => format!(
+            "COURT USE ONLY\n\nCase Number: {appellate}\nTrial Court: {trial}{division_line}"
         ),
     };
 
@@ -1179,7 +1314,12 @@ mod tests {
         assert!(!typst.contains("#pagebreak(weak"));
         assert!(typst.contains("breakable: false"));
         assert!(typst.contains("below: 0.85em"));
+        assert!(typst.contains("leading: 0.85em"));
+        assert!(typst.contains("spacing: 0.85em"));
         assert!(typst.contains("leading: 0.35em"));
+        assert!(lines.contains("Case Number:"));
+        assert!(lines.contains(DATE_BLANK));
+        assert!(!lines.to_ascii_lowercase().contains("needs_verification"));
     }
 
     #[test]
@@ -1253,7 +1393,7 @@ mod tests {
         assert!(lines.contains("Lower Court"));
         assert!(lines.contains("COURT USE ONLY"));
         assert!(lines.contains("I declare under penalty of perjury under the law of Colorado"));
-        assert!(lines.contains("needs_verification"));
+        assert!(!lines.to_ascii_lowercase().contains("needs_verification"));
         assert!(!lines.contains("DECLARATION UNDER C.R.S."));
         assert!(!lines.contains("Certificate of Conferral (C.R.C.P. 121"));
         assert!(lines.contains("CERTIFICATE OF SERVICE"));
@@ -1272,6 +1412,118 @@ mod tests {
         let typst = to_typst(&doc, &crate::court_rules::CourtRules::generic());
         assert!(typst.contains("#pagebreak()"));
         assert!(!typst.contains("#pagebreak(weak"));
+        assert!(typst.contains("leading: 0.85em"));
+        assert!(lines.contains("Case Number:"));
+        assert!(lines.contains("Recipient: Sample County Clerk"));
+        assert!(lines.contains("Method: electronic mail"));
+        assert!(lines.contains("Date: October 1, 2026"));
+        assert!(doc.signature_lines.iter().any(|l| l == DATE_BLANK));
+    }
+
+    #[test]
+    fn rendered_paper_omits_needs_verification() {
+        for (state, court, md) in [
+            (
+                "NJ",
+                "Superior Court of New Jersey, Appellate Division",
+                include_str!("../../fixtures/sample-reconsideration.md"),
+            ),
+            (
+                "CO",
+                "Colorado Court of Appeals",
+                include_str!("../../fixtures/sample-co-reconsideration.md"),
+            ),
+        ] {
+            let mut p = sample_appeal_profile();
+            p.governing_state = state.into();
+            p.court.name = court.into();
+            p.motion.user_text = md.split("\n---\n").last().unwrap_or(md).to_string();
+            let doc = assemble(
+                &p,
+                "motion",
+                "Motion for reconsideration",
+                &p.motion.user_text,
+                CaptionStyle::Boxed,
+            );
+            let lines = document_lines(&doc).join("\n").to_ascii_lowercase();
+            assert!(
+                !lines.contains("needs_verification"),
+                "{state} document_lines leaked needs_verification"
+            );
+            let typst = to_typst(&doc, &crate::court_rules::CourtRules::generic()).to_ascii_lowercase();
+            assert!(
+                !typst.contains("needs_verification"),
+                "{state} typst leaked needs_verification"
+            );
+        }
+    }
+
+    #[test]
+    fn signature_date_is_blank_unless_user_entered_one() {
+        let mut p = sample_appeal_profile();
+        p.governing_state = "NJ".into();
+        p.motion.user_text = "# Body\nHello.\n::: signature\n/s/ Jordan Example\n:::".into();
+        let doc = assemble(&p, "motion", "Motion", &p.motion.user_text, CaptionStyle::Boxed);
+        assert!(doc.signature_lines.iter().any(|l| l == DATE_BLANK));
+        let today = chrono::Local::now().format("%B %d, %Y").to_string();
+        assert!(
+            !doc.signature_lines.iter().any(|l| l.contains(&today)),
+            "export date must not be used as the signing date"
+        );
+
+        p.motion.user_text =
+            "# Body\nHello.\n::: signature\nDate: January 2, 2026\n/s/ Jordan Example\n:::".into();
+        let doc = assemble(&p, "motion", "Motion", &p.motion.user_text, CaptionStyle::Boxed);
+        assert!(doc.signature_lines.iter().any(|l| l.contains("January 2, 2026")));
+        assert!(!doc.signature_lines.iter().any(|l| l == DATE_BLANK));
+    }
+
+    #[test]
+    fn nj_and_co_share_court_use_only_and_case_number_label() {
+        let mut nj = sample_appeal_profile();
+        nj.governing_state = "NJ".into();
+        nj.court.name = "Superior Court of New Jersey, Appellate Division".into();
+        nj.docket_number = "A-01000-24".into();
+        let nj_doc = assemble(&nj, "motion", "Motion", "Body.\n::: signature\n/s/ Jordan Example\n:::", CaptionStyle::Boxed);
+        let nj_typst = to_typst(&nj_doc, &crate::court_rules::CourtRules::generic());
+        assert!(nj_typst.contains("[COURT USE ONLY]"));
+        assert!(!nj_typst.contains("COURT USE ONLY▲"));
+        assert!(!nj_typst.contains("▲ COURT USE ONLY"));
+        assert!(nj_typst.contains("Case Number:"));
+
+        let mut co = sample_appeal_profile();
+        co.governing_state = "CO".into();
+        co.court.name = "Colorado Court of Appeals".into();
+        co.docket_number = "24CA1000".into();
+        let co_doc = assemble(&co, "motion", "Motion", "Body.\n::: signature\n/s/ Jordan Example\n:::", CaptionStyle::Boxed);
+        let co_typst = to_typst(&co_doc, &crate::court_rules::CourtRules::generic());
+        assert!(co_typst.contains("[COURT USE ONLY]"));
+        assert!(!co_typst.contains("▲ COURT USE ONLY"));
+        assert!(co_typst.contains("Case Number:"));
+    }
+
+    #[test]
+    fn incomplete_certificate_is_fill_in_for_preview_and_blocks_export() {
+        let mut p = sample_appeal_profile();
+        p.governing_state = "NJ".into();
+        p.motion.user_text = "# Body\nHello.\n::: signature\n/s/ Jordan Example\n:::\n::: certificate\nI will serve this myself.\n:::".into();
+        let doc = assemble(&p, "motion", "Motion", &p.motion.user_text, CaptionStyle::Boxed);
+        let lines = document_lines(&doc).join("\n");
+        assert!(lines.contains("Recipient: ____________"));
+        assert!(lines.contains("Method: ____________"));
+        assert!(lines.contains(DATE_BLANK));
+        let err = require_complete_certificate(&doc).unwrap_err();
+        assert!(err.contains("recipient"));
+        assert!(err.contains("method"));
+        assert!(err.contains("service date"));
+
+        p.motion.user_text = include_str!("../../fixtures/sample-reconsideration.md")
+            .split("\n---\n")
+            .last()
+            .unwrap()
+            .to_string();
+        let complete = assemble(&p, "motion", "Motion", &p.motion.user_text, CaptionStyle::Boxed);
+        require_complete_certificate(&complete).unwrap();
     }
 
     #[test]

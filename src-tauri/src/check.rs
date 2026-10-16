@@ -850,6 +850,13 @@ The trial court entered the order on March 1. Relief is sought under R. 2:11-6.
 ::: signature
 /s/ Jordan Example
 :::
+
+::: certificate
+I will serve a copy of this paper myself. This software did not serve anyone.
+Recipient: Sample County Clerk
+Method: electronic mail
+Date: October 1, 2026
+:::
 "#;
         crate::court_md::import_markdown(&dir, md).unwrap();
         let exhibit = add_exhibit(&dir, "order.txt", b"Order granting dismissal", "Dkt. 12").unwrap();

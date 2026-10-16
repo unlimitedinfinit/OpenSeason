@@ -136,10 +136,7 @@ fn assembled_caption_lines(profile: &CaseProfile, kind: &str) -> Vec<String> {
 
 fn assembled_signature_lines(profile: &CaseProfile) -> Vec<String> {
     let mut lines = Vec::new();
-    lines.push(format!(
-        "Date: {}",
-        chrono::Local::now().format("%B %d, %Y")
-    ));
+    lines.push(crate::pleading::DATE_BLANK.to_string());
     lines.push(String::new());
     lines.push("Respectfully submitted,".to_string());
     lines.push(String::new());
@@ -670,6 +667,7 @@ pub fn export_pleading(
     };
     let style = crate::pleading::caption_style(profile, &key, None);
     let doc = crate::pleading::assemble(profile, &key, &title, body, style);
+    crate::pleading::require_complete_certificate(&doc)?;
     let rules = CourtRules::load_for_case(case_dir);
     let dest = out_dir
         .map(|p| p.to_path_buf())
@@ -719,6 +717,7 @@ pub fn export_custom_filing(
     let heading = if title.trim().is_empty() { "MOTION" } else { title.trim() };
     let style = crate::pleading::caption_style(profile, "motion", None);
     let court_doc = crate::pleading::assemble(profile, "motion", heading, user_text, style);
+    crate::pleading::require_complete_certificate(&court_doc)?;
     let rules = CourtRules::load_for_case(case_dir);
     let dest = out_dir
         .map(|p| p.to_path_buf())
@@ -794,6 +793,7 @@ pub fn export_court_markdown(
     };
     let style = crate::pleading::caption_style(&working, "motion", None);
     let court_doc = crate::pleading::assemble(&working, "motion", heading, &parsed.body, style);
+    crate::pleading::require_complete_certificate(&court_doc)?;
     let rules = CourtRules::load_for_case(case_dir);
     let dest = out_dir
         .map(|p| p.to_path_buf())
@@ -1037,7 +1037,10 @@ mod tests {
 
     #[test]
     fn complaint_docx_export_embeds_profile_fields() {
-        let (dir, profile) = temp_case();
+        let (dir, mut profile) = temp_case();
+        profile.complaint.user_text.push_str(
+            "\n::: certificate\nRecipient: Sample County Clerk\nMethod: electronic mail\nDate: October 1, 2026\n:::\n",
+        );
         let paths = export_pleading(&dir, &profile, "complaint", None).unwrap();
         assert!(paths.docx.exists());
         assert!(
@@ -1124,6 +1127,12 @@ mod tests {
         assert!(co_text.contains("COURT USE ONLY") || co_text.contains("Court Use Only"));
         assert!(co_text.contains("I declare under penalty of perjury under the law of Colorado"));
         assert!(co_text.contains("CERTIFICATE OF SERVICE") || co_text.contains("Certificate of Service"));
+        assert!(!nj_text.to_ascii_lowercase().contains("needs_verification"));
+        assert!(!co_text.to_ascii_lowercase().contains("needs_verification"));
+        assert!(nj_text.contains("Case Number"));
+        assert!(co_text.contains("Case Number"));
+        assert!(nj_text.contains("Recipient: Sample County Clerk"));
+        assert!(co_text.contains("Recipient: Sample County Clerk"));
         let _ = fs::remove_dir_all(&nj_dir);
         let _ = fs::remove_dir_all(&co_dir);
     }

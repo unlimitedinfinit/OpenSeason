@@ -54,6 +54,9 @@ jordan.example@example.test
 
 ::: certificate
 I will serve a copy of this paper myself. This software did not serve anyone.
+Recipient: Sample County Clerk
+Method: electronic mail
+Date: October 1, 2026
 :::
 `;
 
@@ -81,14 +84,14 @@ declaration_status: needs_verification
 
 # Conferral
 
-I conferred with the opposing party on October 1, 2026. The opposing party takes no position. Confirm whether C.R.C.P. 121 § 1-15(8) or the Colorado Appellate Rules govern this paper before filing. This paragraph is the user's own draft (needs_verification).
+I conferred with the opposing party on October 1, 2026. The opposing party takes no position.
 
 # Preliminary statement
 
 This is a fake Colorado draft for tests. The Denver District Court entered an order dismissing the complaint. Relief is sought under C.A.R. 40. The user, not the software, must pin each fact to a record exhibit before sign-off.
 
 ::: declaration
-I declare under penalty of perjury under the law of Colorado that the foregoing is true and correct. I signed this on October 16, 2026, at Example City, ST. This declaration is the user's own draft (needs_verification).
+I declare under penalty of perjury under the law of Colorado that the foregoing is true and correct. I signed this on October 2, 2026, at Example City, ST.
 :::
 
 ::: signature
@@ -103,6 +106,9 @@ jordan.example@example.test
 
 ::: certificate
 I will serve a copy of this paper myself. This software did not serve anyone.
+Recipient: Sample County Clerk
+Method: electronic mail
+Date: October 1, 2026
 :::
 `;
 
