@@ -1,0 +1,68 @@
+{
+  "name": "JustLegal Fraud & Whistleblower Navigator",
+  "slug": "justlegal-fraud-navigator",
+  "version": "1.0.0",
+  "author": "Just Liberty Incorporated (501(c)(3) Nonprofit)",
+  "tagline": "Triage government program fraud, verify suspect clinics, audit Rule 9(b) viability, and prepare attorney-ready qui tam disclosures under EO 14395.",
+  "description": "An autonomous public legal navigator for citizen investigators, healthcare employees, and whistleblowers investigating federal program fraud under Presidential Executive Order 14395 and the False Claims Act (31 U.S.C. § 3729). Built to automate the first 40 hours of a federal OIG preliminary inquiry before filing.",
+  "categories": [
+    "Legal Self-Help",
+    "Public Integrity",
+    "Government Transparency",
+    "Civil Rights"
+  ],
+  "statutory_framework": {
+    "primary_statutes": [
+      "False Claims Act (31 U.S.C. § 3729 - § 3733)",
+      "Presidential Executive Order 14395 (Preserving the Integrity of Federal Programs and Protecting Public Funds)",
+      "Federal Rule of Civil Procedure 9(b) (Heightened Pleading Standard)",
+      "45 C.F.R. § 164.502(j) (HIPAA Whistleblower Safe Harbor)"
+    ],
+    "mandatory_seal_rule": "31 U.S.C. § 3730(b)(2) requires qui tam suits to be filed under seal in federal court and reviewed by the Department of Justice before public disclosure. Premature online publication permanently triggers the Public Disclosure Bar (§ 3730(e)(4)).",
+    "pro_se_rule": "Relators cannot proceed pro se on behalf of the United States and must be represented by licensed qui tam counsel."
+  },
+  "three_priority_targets": [
+    {
+      "category": "Provider Enrollments & Ghost Clinics",
+      "focus": "Facilities registered for Medicaid/Medicare/SNAP that are closed, shuttered, or operating as residential mail drops."
+    },
+    {
+      "category": "Eligibility Self-Attestations",
+      "focus": "Entities falsely certifying compliance, staffing ratios, or participant counts under penalty of perjury to obtain federal drawdowns."
+    },
+    {
+      "category": "Third-Party Intermediaries & Billing Brokers",
+      "focus": "Diversion of public funds, kickbacks, or shell management companies across HHS, USDA, SBA, HUD, DOT, and Education."
+    }
+  ],
+  "standalone_browser_tools": [
+    {
+      "name": "Entity & Grant Cross-Checker",
+      "url": "https://justlegal.me/fraud-triage",
+      "description": "Free, instant lookup against CMS NPPES v2.1 and USAspending.gov to verify 10-digit NPIs, taxonomy codes, physical addresses, and grant drawdowns."
+    },
+    {
+      "name": "Pre-Flight Case Screener",
+      "description": "Interactive 4-question wizard vetting public disclosure bars (§ 3730(e)(4)) and threshold loss scales."
+    },
+    {
+      "name": "State Recording & HIPAA Safe Harbor Guide",
+      "description": "50-state guide covering one-party vs. two-party audio recording consent and lawful observation rights from public property."
+    },
+    {
+      "name": "Qui Tam Attorney Directory",
+      "description": "Direct referral to The Anti-Fraud Coalition (TAF), State Medicaid Fraud Control Units (MFCUs), and Agency OIG hotlines."
+    }
+  ],
+  "desktop_offline_capabilities": {
+    "application": "JustLegal Desktop / OpenSeason Local OS",
+    "airgap_guarantee": "Local vault only; zero telemetry; sealed dossiers strictly isolated from external networks.",
+    "cli_tools": [
+      "openseason-cli.exe qui-tam verify-entity --name \"<target>\"",
+      "openseason-cli.exe qui-tam audit-9b <case-folder>",
+      "openseason-cli.exe qui-tam ingest-observation <case-folder> --file <photo>",
+      "openseason-cli.exe qui-tam records-pack <case-folder> --state <STATE>",
+      "openseason-cli.exe qui-tam export-disclosure <case-folder>"
+    ]
+  }
+}

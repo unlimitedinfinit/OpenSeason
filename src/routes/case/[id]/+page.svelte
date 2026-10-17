@@ -19,6 +19,9 @@
   import CaseRecordTab from "$lib/components/tabs/CaseRecordTab.svelte";
   import ReviewCourtOrderCard from "$lib/components/ReviewCourtOrderCard.svelte";
   import CaseModals from "$lib/components/CaseModals.svelte";
+  import QuiTamModeBanner from "$lib/components/fraud/QuiTamModeBanner.svelte";
+  import GhostFacilityWizardModal from "$lib/components/fraud/GhostFacilityWizardModal.svelte";
+  import PostExportNextStepsModal from "$lib/components/PostExportNextStepsModal.svelte";
   import { decodeOrderForCaseHelper } from "$lib/utils/orderOperations";
   import { promptAndUploadEvidence } from "$lib/utils/evidenceOperations";
   import { ipc } from "$lib/ipc";
@@ -55,6 +58,10 @@
   let showRecordRetrievalModal = $state(false);
   let showWorkflowModal = $state(false);
   let showConsultationModal = $state(false);
+  let showGhostWizard = $state(false);
+  let showPostExportModal = $state(false);
+  let postExportFilePath = $state("");
+  let postExportTitle = $state("");
   let preselectedIssueId = $state<string | null>(null);
   let activeFilingTitle = $state("");
   let exhibitPacketReport = $state<ExhibitPacketReport | null>(null);
@@ -184,6 +191,9 @@
       exportPaths = await ipc<ExportResult>("export_pleading_cmd", { caseId, kind });
       status = `Wrote Word and PDF:\n${exportPaths.docx}\n${exportPaths.pdf}`;
       artifacts = await ipc<CaseArtifact[]>("list_case_artifacts", { caseId }).catch(() => artifacts);
+      postExportFilePath = exportPaths.pdf || exportPaths.docx || "";
+      postExportTitle = profile?.title || kind;
+      showPostExportModal = true;
     } catch (e) {
       error = String(e);
     } finally {
@@ -393,6 +403,9 @@
       });
       status = `Exhibit packet assembled!\nTable: ${exhibitPacketReport.table_of_exhibits_pdf}\nPacket: ${exhibitPacketReport.exhibit_packet_pdf}\nTotal pages: ${exhibitPacketReport.total_pages}`;
       artifacts = await ipc<CaseArtifact[]>("list_case_artifacts", { caseId }).catch(() => artifacts);
+      postExportFilePath = exhibitPacketReport.exhibit_packet_pdf || "";
+      postExportTitle = "Assembled Exhibit Packet";
+      showPostExportModal = true;
     } catch (e) {
       error = String(e);
     } finally {
@@ -423,6 +436,9 @@
       });
       status = `Filled form generated!\nPDF: ${formFillResult.output_pdf_path}\nJSON: ${formFillResult.output_json_path}\nMapped fields: ${formFillResult.mapped_fields}`;
       artifacts = await ipc<CaseArtifact[]>("list_case_artifacts", { caseId }).catch(() => artifacts);
+      postExportFilePath = formFillResult.output_pdf_path || "";
+      postExportTitle = "Filled Court Form";
+      showPostExportModal = true;
     } catch (e) {
       error = String(e);
     } finally {
@@ -556,6 +572,12 @@
 
     <ReviewNotice />
 
+    <QuiTamModeBanner
+      {profile}
+      onOpenGhostWizard={() => (showGhostWizard = true)}
+      onOpenDisclosureExport={disclosure}
+    />
+
     {#if activeOrderAlert}
       <ReviewCourtOrderCard
         order={activeOrderAlert}
@@ -618,7 +640,13 @@
         <MotionDocket
           caseId={caseId}
           onselectmotion={(m) => { activeFilingTitle = m.title; }}
-          onexport={(paths) => { exportPaths = { docx: paths.docx, pdf: paths.pdf, notice: "Review every line before filing." }; status = `Exported ${paths.pdf}`; }}
+          onexport={(paths) => {
+            exportPaths = { docx: paths.docx, pdf: paths.pdf, notice: "Review every line before filing." };
+            status = `Exported ${paths.pdf}`;
+            postExportFilePath = paths.pdf || paths.docx;
+            postExportTitle = activeFilingTitle || profile?.title || "Court Motion";
+            showPostExportModal = true;
+          }}
         />
       </section>
     {:else if tab === "record"}
@@ -727,7 +755,19 @@
     {/if}
     {#if exportPaths}
       <div class="text-sm border border-emerald-500/30 bg-emerald-500/10 rounded-md p-3 space-y-1">
-        <p class="font-medium">Export finished</p>
+        <div class="flex items-center justify-between">
+          <p class="font-medium text-emerald-300">Export finished</p>
+          <button
+            onclick={() => {
+              postExportFilePath = exportPaths?.pdf || exportPaths?.docx || "";
+              postExportTitle = activeFilingTitle || profile?.title || "Exported Filing";
+              showPostExportModal = true;
+            }}
+            class="text-xs px-2.5 py-1 bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 border border-emerald-500/40 rounded transition-colors"
+          >
+            Next Steps & Unbundled Review
+          </button>
+        </div>
         <p class="font-mono text-xs">{exportPaths.docx}</p>
         <p class="font-mono text-xs">{exportPaths.pdf}</p>
       </div>
@@ -775,6 +815,19 @@
       onCloseWorkflow={() => (showWorkflowModal = false)}
       onCloseConsultation={() => (showConsultationModal = false)}
       onCancelSeal={() => (confirmSeal = false)}
+    />
+
+    <GhostFacilityWizardModal
+      {caseId}
+      bind:isOpen={showGhostWizard}
+      onClose={() => (showGhostWizard = false)}
+    />
+
+    <PostExportNextStepsModal
+      bind:isOpen={showPostExportModal}
+      filePath={postExportFilePath}
+      documentTitle={postExportTitle}
+      onClose={() => (showPostExportModal = false)}
     />
   {/if}
 </main>

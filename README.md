@@ -6,6 +6,34 @@ The older Open Season whistleblower vault is still here. It is **one Confidentia
 
 Agents drive the same engine through `openseason --json` or `openseason mcp`. See [docs/AGENT-INTERFACE.md](docs/AGENT-INTERFACE.md).
 
+---
+
+## 3-Tier Legal Operating System Architecture
+
+OpenSeason operates across three seamless tiers:
+
+- **Level 1 — JustLegal GrokBot (x.ai Marketplace Blueprint)**: Public conversational legal navigator (Civil + Fraud/Whistleblower personas) with heavy standalone capabilities, zero local installation required.
+- **Level 2 — JustLegal.me Resource Hub**: Public cloud education center, verified AcroForm directory, and `/fraud-triage` hub for whistleblower orientation.
+- **Level 3 — JustLegal Desktop (`.exe` / `.msi`) & Pure-Rust CLI (`openseason-cli.exe`)**: Local, offline legal OS with an encrypted, airgapped vault for Qui Tam/False Claims Act dossiers, CMS NPI/USAspending cross-checking, Rule 9(b) viability audits, and cryptographic evidence hashing.
+
+---
+
+## Executive Order 14395 & Qui Tam Triage Engine
+
+Built specifically to support **Executive Order 14395** (*Preserving the Integrity of Federal Programs and Protecting Public Funds*) and **False Claims Act** (*31 U.S.C. §§ 3729–3733*) triage:
+
+- **60-Day Statutory Seal Clock Compliance (31 U.S.C. § 3730(b)(2))**: Automates the first 40 hours of a federal investigation before the dossier hits DOJ Fraud Section or OIG desks, eliminating the need for repeated 6-month seal extensions.
+- **Targets the 3 Primary Vulnerabilities in EO 14395**:
+  1. *Provider Enrollments & Ghost Clinics*: Keyless CMS NPPES v2.1 API cross-checking against commercial mail drops, strip malls, and deactivated NPI records.
+  2. *Eligibility Self-Attestations*: Auto-generated state licensing FOIA packs (MGDPA, OPRA, CORA, CPRA).
+  3. *Third-Party Intermediaries*: USAspending award linkage tracing federal funds to shell management LLCs.
+- **Deterministic 6-Element Rule 9(b) Viability Engine (`qui-tam audit-9b`)**: Deterministic 0–100 scoring across Who, What, When, Where, How, and Scienter/Materiality.
+- **Cryptographic Observation Sealing (`qui-tam ingest-observation`)**: Physical site photo/video ingestion with EXIF GPS coordinates, timestamp extraction, dual SHA-256 and SHA-512 hashes, read-only disk lock, and `provenance.json` log.
+- **Turnkey DOJ Disclosure Statement (`qui-tam export-disclosure`)**: 1-click compiles `openseason-disclosure-v1.json` and a court-ready Typst PDF (`DOJ_Relator_Disclosure_Packet.pdf`).
+- **Strict Legal Guardrails**: Enforces non-pro-se relator warnings (*U.S. ex rel. Mergent Services v. Flaherty*), mandatory in camera seal preservation, and HIPAA Whistleblower Safe Harbor rules (45 C.F.R. § 164.502(j)(1)).
+
+---
+
 ## What it is
 
 - **Standard cases**: a portable folder under `Documents/JustLegal/Cases/{caseId}/` with a fill-once `case.json` profile.
@@ -38,10 +66,11 @@ Agents drive the same engine through `openseason --json` or `openseason mcp`. Se
 - **Court Record Reconstruction & Evidentiary Tiers (`record inventory`, `record reconcile`, `record missing`)**: 4-tier evidentiary separation (Tier 1: Official Clerk-stamped record, Tier 2: Certified hearing transcripts, Tier 3: Personal case archive, Tier 4: Potential unsubmitted evidence), automated text-docket reconciliation, and 1-click Court Records Request Form (NJ Form CN 10200 @ 5¢/7¢ per page and PACER fee waiver notices).
 - **Multi-Track Records & Accountability Engine (`review record`, `accountability routes`, `accountability packet`)**: Detects judicial findings unsupported by or contradicted by the verified docket record. Distinguishes court merits remedies (Interlocutory *Lawson v. Dewar* R. 4:42-2 review vs. Final R. 4:49-2) from judicial conduct (NJ ACJC Form CN 11166, CO CJD) and attorney ethics (OAE), enforcing strict non-tolling warnings. Assembles objective, hash-grounded factual discrepancy packets without emotional rhetoric.
 - **Title II ADA Equal Access & Accommodation Petition Generator (`ada petition`)**: Generates formal, confidential administrative petitions under 42 U.S.C. § 12132, 28 C.F.R. Part 35, NJ Directive #01-19, and CO CJD 06-01 for remote appearances, hearing breaks, assistive listening (CART), mobility access, and support persons, routed directly to the Trial Court Administrator.
-- **Ready-to-Run Standalone Binaries**: Pre-compiled `OpenSeason.exe` (desktop GUI) and `openseason-cli.exe` (CLI/MCP server) located directly in the root repository.
+- **Ready-to-Run Standalone Binaries & Installers**: Pre-compiled `OpenSeason.exe` (desktop GUI) and `openseason-cli.exe` (CLI/MCP server) in the root repository, plus production Windows installers in `installers/` (`OpenSeason_0.1.0_x64-setup.exe` and `OpenSeason_0.1.0_x64_en-US.msi`).
 - **One-Click Launch Scripts**: `launch.ps1` (PowerShell) and `launch.bat` (batch file) for immediate menu or direct launching.
 
 ## Documentation
+- [EO 14395 Qui Tam Whitepaper](docs/QUI-TAM-EO14395.md): DOJ 60-day triage, Rule 9(b) scoring, and ghost clinic detection.
 - [Executive Summary](docs/EXECUTIVE-SUMMARY.md): Comprehensive system overview and upgrade breakdown.
 - [Cloud Sync & Airgap Architecture](docs/SYNC-AND-CLOUD.md): Full technical spec for Firebase integration and confidentiality protection.
 - [Agent Interface](docs/AGENT-INTERFACE.md): CLI `--json` contract and MCP stdio tools.
@@ -95,7 +124,7 @@ npm run check
 npm run build
 ```
 
-Platform installers (`npm run tauri build`) need a full desktop toolchain. This repository does not ship those binaries.
+Pre-built Windows installers are provided in `installers/` (`OpenSeason_0.1.0_x64-setup.exe` and `OpenSeason_0.1.0_x64_en-US.msi`) alongside the pre-compiled `OpenSeason.exe` and `openseason-cli.exe` binaries in the root directory. To rebuild platform installers from source, run `npm run tauri build`.
 
 ### Command line (for a local AI agent)
 

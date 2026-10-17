@@ -158,6 +158,13 @@ pub enum Commands {
         #[command(subcommand)]
         action: WorkflowCmd,
     },
+    /// Qui Tam & False Claims Act (31 U.S.C. § 3729) fraud triage under EO 14395
+    QuiTam {
+        #[command(subcommand)]
+        action: QuiTamCmd,
+    },
+    /// System health, local workspace, packs, and airgap verification diagnostic
+    Doctor,
 }
 
 
@@ -767,5 +774,47 @@ pub enum WorkflowCmd {
         path: PathBuf,
         #[arg(long)]
         approve: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum QuiTamCmd {
+    /// Verify target entity across CMS NPPES Registry and USAspending federal awards
+    VerifyEntity {
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        npi: Option<String>,
+        #[arg(long)]
+        state: Option<String>,
+    },
+    /// Evaluate case against 31 U.S.C. § 3729 & FRCP Rule 9(b) 6-element viability standard
+    #[command(name = "audit-9b")]
+    Audit9b {
+        path: PathBuf,
+    },
+    /// Ingest observational photos/videos/records with EXIF metadata and SHA-256 chain of custody
+    IngestObservation {
+        path: PathBuf,
+        #[arg(long)]
+        file: PathBuf,
+        #[arg(long, default_value = "")]
+        notes: String,
+        #[arg(long)]
+        observer: Option<String>,
+    },
+    /// Generate jurisdiction-specific licensing, fire inspection, or Medicaid records request (MGDPA/OPRA/CORA/CPRA/FOIA)
+    RecordsPack {
+        path: PathBuf,
+        #[arg(long)]
+        state: Option<String>,
+    },
+    /// Compile the DOJ 60-Day Triage & Relator Disclosure Packet (JSON manifest + Typst PDF)
+    ExportDisclosure {
+        path: PathBuf,
+        #[arg(long)]
+        category: Option<String>,
+        #[arg(long)]
+        attestation: Option<String>,
     },
 }

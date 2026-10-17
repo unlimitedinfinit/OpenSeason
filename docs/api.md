@@ -87,6 +87,33 @@ Arguments: `{ "caseId", "pack", "rule", "triggerDate" }`
 
 `kind` may be `notice_of_appeal`, `complaint`, `motion`, `reconsideration`, `appellate_brief`, `appellate_motion`, `mandamus`, or `court_md`.
 
+## Qui Tam & Fraud Investigation Commands (EO 14395)
+
+### `quitam_verify_entity_cmd`
+Arguments: `{ "name": "...", "npi"?: "...", "state"?: "..." }`  
+Directly cross-checks entity against CMS NPPES v2.1 public registry and USAspending.gov prime award records. Detects deactivated NPIs, commercial mail drop practice locations, and multi-million dollar federal grant totals.
+
+### `quitam_audit_9b_cmd`
+Arguments: `{ "caseId": "..." }`  
+Performs deterministic FRCP Rule 9(b) 6-element viability scoring (Who, What, When, Where, How, Scienter). Returns an objective 0–100 score and pinpoint checklist of missing statutory elements.
+
+### `quitam_ingest_observation_cmd`
+Arguments: `{ "caseId": "...", "filePath": "...", "notes": "...", "observer"?: "..." }`  
+Ingests field photo/video observations. Extracts EXIF GPS coordinates and timestamp, computes dual SHA-256 and SHA-512 hashes, marks file read-only on disk, and appends to an immutable `provenance.json` Merkle-style log.
+
+### `quitam_records_pack_cmd`
+Arguments: `{ "caseId": "...", "state": "MN"|"NJ"|"CO"|"CA"|"FED", "agency"?: "..." }`  
+Generates jurisdiction-specific licensing and public records request letters (MGDPA, OPRA, CORA, CPRA, FOIA).
+
+### `quitam_export_disclosure_cmd`
+Arguments: `{ "caseId": "..." }`  
+Compiles the complete DOJ 60-Day Relator Written Disclosure Packet required under 31 U.S.C. § 3730(b)(2), generating `openseason-disclosure-v1.json` and `DOJ_Relator_Disclosure_Packet.pdf` in `exports/`.
+
+## Diagnostic & Health Commands
+
+### `doctor_diagnostic_cmd`
+Runs an end-to-end environment and integrity check, verifying CLI versions, cases root, rule packs root, offline crypto readiness, airgap status, and EO 14395 qui tam engine availability.
+
 ## CLI and MCP (agent interface)
 
 Binary name: `openseason`. `--json` prints the stable envelope documented in [AGENT-INTERFACE.md](AGENT-INTERFACE.md). `openseason mcp` is a local stdio MCP server with the same tools. Both are offline.

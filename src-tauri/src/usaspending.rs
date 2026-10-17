@@ -2,7 +2,7 @@ use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct AwardSummary {
     pub generated_internal_id: String,
     pub date_signed: String,
@@ -94,9 +94,7 @@ pub fn check_target(target_name: &str) -> Result<Vec<AwardSummary>, String> {
             awarding_agency: r.awarding_agency,
             recipient_name: r.recipient_name,
         }
-    }).collect::<Vec<_>>(); // Collect to vec to allow printing
-
-    println!("Final merged results for '{}': {:?}", target_name, summaries);
+    }).collect::<Vec<_>>();
 
     Ok(summaries)
 }

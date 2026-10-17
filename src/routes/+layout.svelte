@@ -1,6 +1,7 @@
 <script lang="ts">
   import "../app.css";
   import HelpMenu from "$lib/components/HelpMenu.svelte";
+  import LegalTermsModal from "$lib/components/LegalTermsModal.svelte";
   import { goto } from "$app/navigation";
   let { children } = $props();
 </script>
@@ -24,4 +25,5 @@
     <HelpMenu />
   </header>
   {@render children()}
+  <LegalTermsModal />
 </div>

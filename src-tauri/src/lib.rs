@@ -44,6 +44,7 @@ pub mod order;
 pub mod court_access;
 pub mod workflow;
 pub mod consultation;
+pub mod qui_tam;
 
 use crypto::AppState;
 
@@ -187,7 +188,13 @@ pub fn run() {
             case_commands::stress_test_issue_cmd,
             case_commands::consultation_dossier_cmd,
             case_commands::extension_evaluate_cmd,
-            case_commands::extension_suggest_cmd
+            case_commands::extension_suggest_cmd,
+            case_commands::quitam_verify_entity_cmd,
+            case_commands::quitam_audit_9b_cmd,
+            case_commands::quitam_ingest_observation_cmd,
+            case_commands::quitam_records_pack_cmd,
+            case_commands::quitam_export_disclosure_cmd,
+            case_commands::doctor_diagnostic_cmd
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

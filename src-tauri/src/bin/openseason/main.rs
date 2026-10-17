@@ -9,6 +9,7 @@ mod handlers_tools;
 mod handlers_accountability;
 mod handlers_workflow;
 mod handlers_motion;
+mod handlers_quitam;
 
 use args::{Cli, Commands};
 
@@ -62,6 +63,8 @@ fn run(cli: Cli) -> Result<(), String> {
         Commands::Timeline { action } => handlers_accountability::handle_timeline(action, json).map_err(|e| e.to_string()),
         Commands::Court { action } => handlers_accountability::handle_court(action, json).map_err(|e| e.to_string()),
         Commands::Workflow { action } => handlers_workflow::handle_workflow(action, json).map_err(|e| e.to_string()),
+        Commands::QuiTam { action } => handlers_quitam::handle_quitam(action, json),
+        Commands::Doctor => handlers_core::handle_doctor(json),
     }
 }
 

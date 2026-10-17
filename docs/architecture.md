@@ -16,14 +16,19 @@ To prevent unmaintainable monoliths as OpenSeason scales across 50 states and hu
 | File | Lines | Responsibility |
 |---|---|---|
 | `src/routes/+page.svelte` | ~340 | Home screen, case list, quick actions, and `PortfolioRadarCard` host |
-| `src/routes/case/[id]/+page.svelte` | ~715 | Case dashboard shell, top toolbar, `ProceduralGraphCard` host, tab router, and modals |
+| `src/routes/case/[id]/+page.svelte` | ~815 | Case dashboard shell, top toolbar, `ProceduralGraphCard` host, tab router, and modals |
 | `src/lib/components/PortfolioRadarCard.svelte` | ~355 | **3-Tier Launchpad** (Wills/Leases, Pre-Suit Notices, Court Pleadings), **Global Filer Profile** (`filer.json`), and **Multi-State Deadline Radar** |
 | `src/lib/components/ProceduralGraphCard.svelte` | ~350 | **Predictive Procedural State Graph** ("If This Happens, What Are My Next Moves?"), NJ Pause vs CO/Fed Reset badges, Mail Service (+3d) toggle, and 1-Click Case Escalation |
 | `src/lib/components/IntakeWizardModal.svelte` | ~430 | **1-Question-at-a-Time Guided Intake Wizard**, Offline PDF Auto-Discovery chips, and **Multi-Venue Competence Matrix** |
-| `src/lib/components/MotionDocket.svelte` | ~330 | Multi-Motion & Multi-Filing Docket manager (`profile.filings[]`) |
+| `src/lib/components/MotionDocket.svelte` | ~490 | Multi-Motion & Multi-Filing Docket manager (`profile.filings[]`) |
 | `src/lib/components/ServiceCertCard.svelte` | ~435 | Certificate of Service & Proposed Form of Order generator |
 | `src/lib/components/PdfToolsModal.svelte` | ~390 | Offline Zero-Leakage PDF Power Station (Merge, Split, Rotate, Byte-Level PII Redact) |
 | `src/lib/components/SignatureStudioModal.svelte` | ~385 | Electronic `/s/`, cursive script, and HTML5 canvas signature stamp studio |
+| `src/lib/components/fraud/GhostFacilityWizardModal.svelte` | ~460 | **EO 14395 Ghost Facility & Fraud Investigation Wizard** (NPPES lookup, FOIA licensing pack, EXIF evidence ingestion, Rule 9(b) viability audit) |
+| `src/lib/components/fraud/QuiTamModeBanner.svelte` | ~75 | Strict airgap alert banner with 31 U.S.C. § 3730(b)(2) seal protection & relator legal warnings |
+| `src/lib/components/PostExportNextStepsModal.svelte` | ~135 | Post-export filing checklist, unbundled review guidance, and state bar referral navigator |
+| `src/lib/components/LegalTermsModal.svelte` | ~90 | Mandatory first-run legal disclaimer & non-attorney terms acknowledgment with persistent preference |
+| `src/lib/components/ai/McpDeveloperTab.svelte` | ~270 | Consumer-facing "Work with an AI Assistant" hub with live diagnostic doctor status and collapsible MCP server config |
 | `src/lib/components/tabs/CaseOverviewTab.svelte` | ~95 | Court, caption, and filer profile editor |
 | `src/lib/components/tabs/CaseDocumentsTab.svelte` | ~220 | Guided sections editor, Markdown import, and AcroForm inspector/filler |
 | `src/lib/components/tabs/CaseEvidenceTab.svelte` | ~155 | Evidence upload and Bates-stamped Exhibit Packet assembler |
@@ -45,7 +50,15 @@ To prevent unmaintainable monoliths as OpenSeason scales across 50 states and hu
 | `signature.rs` | ~210 | Signature profile persistence and PDF signature stamping |
 | `sync.rs` | ~590 | JustLegal Cloud (`justlegal.me`) Firebase Auth, additive merge, subfolder routing (`orders/`, `filings/`, `evidence/`), and `.sealed` airgap |
 | `mcp.rs` | ~730 | Offline JSON-RPC 2.0 stdio MCP server exposing all engine tools to AI agents |
-| `bin/openseason.rs` | ~740 | Headless CLI (`openseason --json ...`) |
+| `doctor.rs` | ~85 | Environment & engine diagnostic verification (`openseason doctor`) |
+| `qui_tam/types.rs` | ~195 | Data models for NPPES entities, Rule 9(b) audits, observations, FOIA packs, and disclosure packets |
+| `qui_tam/nppes.rs` | ~210 | CMS NPPES v2.1 API and USAspending recipient lookup client |
+| `qui_tam/rule9b.rs` | ~220 | Deterministic 6-element FRCP Rule 9(b) 0–100 viability evaluation engine |
+| `qui_tam/observation.rs` | ~240 | EXIF GPS/timestamp extraction, SHA-256/SHA-512 dual hashing, read-only disk lock, and `provenance.json` log |
+| `qui_tam/records_pack.rs` | ~235 | Multi-state licensing and public records request generator (MGDPA, OPRA, CORA, CPRA, FOIA) |
+| `qui_tam/disclosure.rs` | ~230 | DOJ 60-day triage & relator disclosure packet compiler (`openseason-disclosure-v1.json` + Typst PDF) |
+| `case_commands/quitam_ops.rs`| ~80 | Tauri IPC bridge for qui tam / fraud operations |
+| `bin/openseason/` | ~1200 | Modular CLI (`args.rs`, `handlers_core.rs`, `handlers_quitam.rs`, `handlers_pdf.rs`, etc.) |
 
 ---
 

@@ -122,6 +122,12 @@ Equivalent without npm: `cargo run --manifest-path src-tauri/Cargo.toml --bin op
 | `accountability resources [--state STATE] [--category CAT]` | Query authoritative registry for ACJC (CN 11166), OAE ethics, CO CJD, 28 U.S.C. § 351 |
 | `accountability packet DIR --issue ID` | Assemble objective factual discrepancy packet grounded in SHA-256 hashes and docket timestamps |
 | `ada petition DIR --name TEXT --accommodations "remote,reading_time..." [--phone P] [--email E]` | Generate Title II ADA accommodation petition (42 U.S.C. § 12132; 28 C.F.R. Part 35; NJ Directive #01-19) |
+| `doctor` | System diagnostic & integrity verification (CLI version, cases/packs roots, offline crypto, airgap status, qui tam engine) |
+| `qui-tam verify-entity [--name TEXT] [--npi NPI] [--state STATE]` | Cross-reference entity across CMS NPPES v2.1 and USAspending.gov to detect ghost clinics and shell entities |
+| `qui-tam audit-9b DIR` | Evaluate case against FRCP Rule 9(b) particularity standards (Who, What, When, Where, How, Scienter; 0–100 score) |
+| `qui-tam ingest-observation DIR --file FILE --notes TEXT [--observer NAME]` | Ingest site observation photo/video, extract EXIF GPS/timestamps, dual-hash (SHA-256/512), mark read-only, and log to `provenance.json` |
+| `qui-tam records-pack DIR --state STATE [--agency AGENCY]` | Generate statutory FOIA/public records request for facility licensing (MGDPA, OPRA, CORA, CPRA, FOIA) |
+| `qui-tam export-disclosure DIR` | Compile turnkey DOJ 60-Day Relator Written Disclosure Packet (`openseason-disclosure-v1.json` + `DOJ_Relator_Disclosure_Packet.pdf`) |
 | `mcp` | Stdio MCP server (same tools) |
 | `sync DIR --action backup` | Stub. Standard: `not_implemented`. Confidential: refused |
 | `agent manifest` | List CLI/MCP tools, MCP launch config, and a copyable starter prompt |
@@ -141,6 +147,8 @@ Equivalent without npm: `cargo run --manifest-path src-tauri/Cargo.toml --bin op
 - `record_inventory`, `record_reconcile`, `record_missing`, `record_request_form`: 4-tier evidentiary record reconstruction, docket matching, and CN 10200 records requests.
 - `accountability_audit`, `accountability_routes`, `accountability_resources`, `accountability_packet`: Multi-track judicial discrepancy audit, *Lawson v. Dewar* routing, ACJC/OAE registry, and objective factual packets.
 - `ada_petition`: Title II ADA reasonable accommodation petition generator with federal confidentiality protections.
+- `doctor_diagnostic`: Real-time system health and airgap integrity diagnostics.
+- `quitam_verify_entity`, `quitam_audit_9b`, `quitam_ingest_observation`, `quitam_records_pack`, `quitam_export_disclosure`: EO 14395 Qui Tam / False Claims Act fraud triage engine.
 - `pdf_extract_text`: Page-by-page offline PDF text extraction.
 - `motion_list`, `motion_create`, `motion_export`: Autonomous multi-motion docket drafting & compilation.
 - `service_cert` & `service_order`: Court-mandated proof of service and judge-ready proposed order generation.

@@ -138,21 +138,35 @@
   <ReviewNotice />
 
   {#if step === 0}
-    <section class="space-y-3">
-      <p class="text-sm text-muted-foreground">Standard cases stay in Documents. Confidential cases also create a vault hunt and need the Airlock plus password.</p>
-      <label class="flex gap-3 items-start border rounded-md p-4">
-        <input type="radio" bind:group={mode} value="standard" />
-        <span>
-          <strong class="block">Standard</strong>
-          <span class="text-sm text-muted-foreground">Portable folder. You can copy it to a USB drive.</span>
-        </span>
+    <section class="space-y-4">
+      <p class="text-sm text-muted-foreground">Choose the security posture and operational framework for this matter:</p>
+
+      <label class="flex gap-4 items-start border rounded-2xl p-5 cursor-pointer transition-all hover:border-primary/50 {mode === 'standard' ? 'border-primary/60 bg-primary/5' : 'border-border/80 bg-card/60'}">
+        <input type="radio" bind:group={mode} value="standard" class="mt-1" />
+        <div class="space-y-1">
+          <div class="flex items-center gap-2">
+            <span class="text-base font-bold text-foreground">⚖️ Standard Civil Matter</span>
+            <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-secondary text-muted-foreground">General Court Pleading</span>
+          </div>
+          <p class="text-xs text-muted-foreground">
+            For pro se motions, appeals, notices of appeal, everyday wills/leases, and pre-suit demand letters. Stored in your local Documents folder. Optional cloud sync available.
+          </p>
+        </div>
       </label>
-      <label class="flex gap-3 items-start border rounded-md p-4">
-        <input type="radio" bind:group={mode} value="confidential" />
-        <span>
-          <strong class="block">Confidential</strong>
-          <span class="text-sm text-muted-foreground">Vault encryption for exhibits. Sync is refused. Unlock first if you choose this.</span>
-        </span>
+
+      <label class="flex gap-4 items-start border rounded-2xl p-5 cursor-pointer transition-all hover:border-amber-500/50 {mode === 'confidential' ? 'border-amber-500/60 bg-amber-500/5' : 'border-border/80 bg-card/60'}">
+        <input type="radio" bind:group={mode} value="confidential" class="mt-1" />
+        <div class="space-y-1">
+          <div class="flex items-center gap-2">
+            <span class="text-base font-bold text-foreground">🛡️ Qui Tam / Fraud Investigation (EO 14395)</span>
+            <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold uppercase">
+              Strictly Airgapped Vault
+            </span>
+          </div>
+          <p class="text-xs text-muted-foreground">
+            For citizen investigators and whistleblowers investigating government program fraud (Medicaid/Medicare ghost clinics, SNAP, SBA, contracts). Encrypted locally with Argon2id + XChaCha20Poly1305. Cloud sync and remote AI uploads are permanently blocked under 31 U.S.C. § 3730(b)(2).
+          </p>
+        </div>
       </label>
     </section>
   {:else if step === 1}
