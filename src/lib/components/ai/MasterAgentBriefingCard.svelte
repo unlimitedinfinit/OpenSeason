@@ -115,6 +115,16 @@ You can execute and recommend the following deterministic commands via powershel
     openseason --json pdf rotate --input <source.pdf> --degrees 90
     openseason --json pdf redact --input <source.pdf> --patterns "SSN,DOB"
 
+12. QUI TAM / FALSE CLAIMS ACT & EO 14395 TRIAGE (CALLING CARD & DUAL-TRACK ROUTING):
+    openseason --json qui-tam verify-entity --name "<Entity Name>" --state <State>
+    openseason --json qui-tam audit-9b <path-to-case-folder>
+    openseason --json qui-tam ingest-observation <path-to-case-folder> --file <photo.jpg> --notes "<Observed details>"
+    openseason --json qui-tam records-pack <path-to-case-folder> --state <State>
+    openseason --json qui-tam export-disclosure <path-to-case-folder>
+    openseason --json qui-tam format-portal <path-to-case-folder> --agency <HHS|DOJ|STATE>
+    openseason --json qui-tam format-inquiry <path-to-case-folder>
+    (Automates preliminary federal OIG fraud triage: CMS NPPES checks, Rule 9(b) A-F readiness grade, SHA-256 evidence hashing, and dual-track routing between Track A Qui Tam Counsel on 100% contingency under statutory seal vs Track B <2,000 char portal auto-fills carrying the standardized [OPEN-SEASON v1.0 | EO-14395] Calling Card).
+
 =============================================================================
 CASE FOLDER ARCHITECTURE & REPOSITORY LAYOUT:
 Standard Case Path: Documents/JustLegal/Cases/{caseId}/

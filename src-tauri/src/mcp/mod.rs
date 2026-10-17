@@ -73,6 +73,13 @@ mod tests {
             "ada_petition",
             "court_access_directory",
             "record_retrieval_plan",
+            "qui_tam_verify_entity",
+            "qui_tam_audit_9b",
+            "qui_tam_ingest_observation",
+            "qui_tam_records_pack",
+            "qui_tam_export_disclosure",
+            "qui_tam_format_portal",
+            "qui_tam_format_inquiry",
         ] {
             assert!(names.contains(&required), "missing {required} in {names:?}");
         }

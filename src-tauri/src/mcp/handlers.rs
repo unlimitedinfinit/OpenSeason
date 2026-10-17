@@ -665,6 +665,63 @@ pub fn call_tool(name: &str, args: &Value) -> Result<Value, String> {
             let assessment = crate::consultation::assess_baseline_extension(&profile, Some(dir));
             Ok(serde_json::to_value(assessment).unwrap())
         }
+        "qui_tam_verify_entity" => {
+            let query = s("query");
+            let state = if s("state").is_empty() { None } else { Some(s("state")) };
+            let report = crate::qui_tam::verify_entity(&query, state.as_deref())?;
+            Ok(serde_json::to_value(report).unwrap())
+        }
+        "qui_tam_audit_9b" => {
+            let p_str = s("path");
+            let dir = std::path::Path::new(&p_str);
+            let profile = case_profile::load_case(dir)?;
+            let audit = crate::qui_tam::audit_case_rule9b(dir, &profile)?;
+            Ok(serde_json::to_value(audit).unwrap())
+        }
+        "qui_tam_ingest_observation" => {
+            let p_str = s("path");
+            let dir = std::path::Path::new(&p_str);
+            let file_str = s("file");
+            let file = std::path::Path::new(&file_str);
+            let notes = s("notes");
+            let observer = if s("observer").is_empty() { None } else { Some(s("observer")) };
+            let entry = crate::qui_tam::ingest_observation(dir, file, &notes, observer.as_deref())?;
+            Ok(serde_json::to_value(entry).unwrap())
+        }
+        "qui_tam_records_pack" => {
+            let p_str = s("path");
+            let dir = std::path::Path::new(&p_str);
+            let profile = case_profile::load_case(dir)?;
+            let state = if s("state").is_empty() { None } else { Some(s("state")) };
+            let pack = crate::qui_tam::generate_records_pack(dir, &profile, state.as_deref())?;
+            Ok(serde_json::to_value(pack).unwrap())
+        }
+        "qui_tam_export_disclosure" => {
+            let p_str = s("path");
+            let dir = std::path::Path::new(&p_str);
+            let profile = case_profile::load_case(dir)?;
+            let category = if s("category").is_empty() { None } else { Some(s("category")) };
+            let attestation = if s("attestation").is_empty() { None } else { Some(s("attestation")) };
+            let pkg = crate::qui_tam::export_doj_disclosure(dir, &profile, category.as_deref(), attestation.as_deref())?;
+            Ok(serde_json::to_value(pkg).unwrap())
+        }
+        "qui_tam_format_portal" => {
+            let p_str = s("path");
+            let dir = std::path::Path::new(&p_str);
+            let profile = case_profile::load_case(dir)?;
+            let agency = if s("agency").is_empty() { "HHS".into() } else { s("agency") };
+            let packet = crate::qui_tam::export_doj_disclosure(dir, &profile, None, None)?;
+            let block = crate::qui_tam::generate_portal_submission_block(&packet, &agency);
+            Ok(serde_json::to_value(block).unwrap())
+        }
+        "qui_tam_format_inquiry" => {
+            let p_str = s("path");
+            let dir = std::path::Path::new(&p_str);
+            let profile = case_profile::load_case(dir)?;
+            let packet = crate::qui_tam::export_doj_disclosure(dir, &profile, None, None)?;
+            let pkg = crate::qui_tam::generate_attorney_inquiry_package(&packet, &profile);
+            Ok(serde_json::to_value(pkg).unwrap())
+        }
         other => Err(format!(
             "Unknown tool '{other}'. Call playbook or packs_list. Known tools are listed by tools/list."
         )),
