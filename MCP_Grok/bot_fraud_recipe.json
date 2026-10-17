@@ -1,39 +1,50 @@
 {
   "name": "JustLegal Fraud & Whistleblower Navigator",
   "slug": "justlegal-fraud-navigator",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Just Liberty Incorporated (501(c)(3) Nonprofit)",
-  "tagline": "Triage government program fraud, verify suspect clinics, audit Rule 9(b) viability, and prepare attorney-ready qui tam disclosures under EO 14395.",
-  "description": "An autonomous public legal navigator for citizen investigators, healthcare employees, and whistleblowers investigating federal program fraud under Presidential Executive Order 14395 and the False Claims Act (31 U.S.C. § 3729). Built to automate the first 40 hours of a federal OIG preliminary inquiry before filing.",
+  "tagline": "Triage government program fraud, verify suspect clinics, audit Rule 9(b) viability, and generate standardized EO 14395 calling cards for Qui Tam counsel or direct OIG submission.",
+  "description": "An autonomous public legal navigator for citizen investigators, healthcare employees, and whistleblowers investigating federal program fraud under Presidential Executive Order 14395 and the False Claims Act (31 U.S.C. § 3729). Employs the OpenSeason Standard v1.0 diagnostic header and a Dual-Track submission engine separating private Qui Tam counsel from direct agency portals.",
   "categories": [
     "Legal Self-Help",
     "Public Integrity",
     "Government Transparency",
     "Civil Rights"
   ],
+  "calling_card_standard": {
+    "schema": "OpenSeason Standard v1.0 | EO-14395 Compliant",
+    "verification_url": "https://justlegal.me/openseason-standard",
+    "purpose": "A standardized machine-readable diagnostic header recognized by federal OIG analysts and qui tam law firms to accelerate intake triage."
+  },
+  "dual_track_engine": {
+    "track_a": {
+      "name": "Relator Reward Track (Qui Tam Counsel First)",
+      "target": "Private False Claims Act contingency attorneys ($0 upfront; 15-30% statutory relator bounty under 31 U.S.C. § 3730(d))",
+      "seal_rule": "Mandatory in-camera filing under seal (31 U.S.C. § 3730(b)(2)). Prohibits public portal tips before filing.",
+      "privilege": "ABA Model Rule 1.18 prospective-client privilege protections apply to attorney inquiries."
+    },
+    "track_b": {
+      "name": "Citizen Watchdog / Direct Agency Track",
+      "target": "Direct agency submission portals (HHS-OIG, DOJ Civil Fraud, State AG MFCU, SBA-OIG, USDA-OIG)",
+      "purpose": "Immediate administrative audit, license revocation, or program exclusion for sub-$1M or regulatory violations."
+    }
+  },
   "statutory_framework": {
     "primary_statutes": [
       "False Claims Act (31 U.S.C. § 3729 - § 3733)",
       "Presidential Executive Order 14395 (Preserving the Integrity of Federal Programs and Protecting Public Funds)",
       "Federal Rule of Civil Procedure 9(b) (Heightened Pleading Standard)",
-      "45 C.F.R. § 164.502(j) (HIPAA Whistleblower Safe Harbor)"
+      "45 C.F.R. § 164.502(j) (HIPAA Whistleblower Safe Harbor)",
+      "ABA Model Rules 1.18 (Duties to Prospective Client) and 5.4 (Professional Independence of a Lawyer)"
     ],
     "mandatory_seal_rule": "31 U.S.C. § 3730(b)(2) requires qui tam suits to be filed under seal in federal court and reviewed by the Department of Justice before public disclosure. Premature online publication permanently triggers the Public Disclosure Bar (§ 3730(e)(4)).",
     "pro_se_rule": "Relators cannot proceed pro se on behalf of the United States and must be represented by licensed qui tam counsel."
   },
-  "three_priority_targets": [
-    {
-      "category": "Provider Enrollments & Ghost Clinics",
-      "focus": "Facilities registered for Medicaid/Medicare/SNAP that are closed, shuttered, or operating as residential mail drops."
-    },
-    {
-      "category": "Eligibility Self-Attestations",
-      "focus": "Entities falsely certifying compliance, staffing ratios, or participant counts under penalty of perjury to obtain federal drawdowns."
-    },
-    {
-      "category": "Third-Party Intermediaries & Billing Brokers",
-      "focus": "Diversion of public funds, kickbacks, or shell management companies across HHS, USDA, SBA, HUD, DOT, and Education."
-    }
+  "conversation_starters": [
+    "I found a healthcare provider billing millions from an empty storefront or residential address.",
+    "Grade my evidence for an EO 14395 False Claims Act dossier (FRCP Rule 9(b) score).",
+    "I need an OpenSeason Standard Calling Card header for a suspect Medicaid provider.",
+    "Help me choose between filing with a Qui Tam attorney ($0 contingency) or submitting directly to HHS-OIG."
   ],
   "standalone_browser_tools": [
     {
@@ -42,8 +53,13 @@
       "description": "Free, instant lookup against CMS NPPES v2.1 and USAspending.gov to verify 10-digit NPIs, taxonomy codes, physical addresses, and grant drawdowns."
     },
     {
+      "name": "Standardized Calling Card Inspector",
+      "url": "https://justlegal.me/openseason-standard",
+      "description": "Public specification and verification methodology for federal investigators, state AGs, and qui tam counsel."
+    },
+    {
       "name": "Pre-Flight Case Screener",
-      "description": "Interactive 4-question wizard vetting public disclosure bars (§ 3730(e)(4)) and threshold loss scales."
+      "description": "Interactive wizard vetting public disclosure bars (§ 3730(e)(4)) and threshold loss scales."
     },
     {
       "name": "State Recording & HIPAA Safe Harbor Guide",
@@ -62,6 +78,8 @@
       "openseason-cli.exe qui-tam audit-9b <case-folder>",
       "openseason-cli.exe qui-tam ingest-observation <case-folder> --file <photo>",
       "openseason-cli.exe qui-tam records-pack <case-folder> --state <STATE>",
+      "openseason-cli.exe qui-tam format-portal <case-folder> --agency HHS",
+      "openseason-cli.exe qui-tam format-inquiry <case-folder>",
       "openseason-cli.exe qui-tam export-disclosure <case-folder>"
     ]
   }

@@ -50,6 +50,27 @@ pub fn quitam_export_disclosure_cmd(
     export_doj_disclosure(&dir, &profile, category.as_deref(), attestation.as_deref())
 }
 
+#[tauri::command]
+pub fn quitam_format_portal_cmd(
+    case_id: String,
+    agency: Option<String>,
+) -> Result<PortalSubmissionBlock, String> {
+    let dir = case_dir_from_id(&case_id)?;
+    let profile = load_case(&dir)?;
+    let packet = export_doj_disclosure(&dir, &profile, None, None)?;
+    Ok(generate_portal_submission_block(&packet, agency.as_deref().unwrap_or("HHS")))
+}
+
+#[tauri::command]
+pub fn quitam_format_inquiry_cmd(
+    case_id: String,
+) -> Result<AttorneyInquiryPackage, String> {
+    let dir = case_dir_from_id(&case_id)?;
+    let profile = load_case(&dir)?;
+    let packet = export_doj_disclosure(&dir, &profile, None, None)?;
+    Ok(generate_attorney_inquiry_package(&packet, &profile))
+}
+
 #[derive(serde::Serialize)]
 pub struct SystemDoctorReport {
     pub cli_version: String,

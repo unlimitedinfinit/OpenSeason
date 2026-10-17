@@ -75,6 +75,15 @@ cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- --json export
 # ADA Title II Reasonable Accommodation Petition Generator
 .\openseason-cli.exe --json ada petition ./my-case --name "Jordan Example" --accommodations "remote,reading_time"
 
+# Qui Tam / False Claims Act Triage Engine (EO 14395) & Dual-Track Routing
+.\openseason-cli.exe --json qui-tam verify-entity --name "Jordan Health LLC" --state MN
+.\openseason-cli.exe --json qui-tam audit-9b ./my-case
+.\openseason-cli.exe --json qui-tam ingest-observation ./my-case --file "photo.jpg" --notes "Clinic dark during posted hours"
+.\openseason-cli.exe --json qui-tam records-pack ./my-case --state MN
+.\openseason-cli.exe --json qui-tam export-disclosure ./my-case
+.\openseason-cli.exe --json qui-tam format-portal ./my-case --agency HHS
+.\openseason-cli.exe --json qui-tam format-inquiry ./my-case
+
 # Optional local MCP stdio server (same engine)
 cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- mcp
 

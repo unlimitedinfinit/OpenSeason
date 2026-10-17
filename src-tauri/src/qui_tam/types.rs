@@ -116,6 +116,91 @@ pub struct RecordsPackRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct StandardizedCallingCard {
+    pub schema_version: String,
+    pub matter_classification: String,
+    pub target_entity: String,
+    pub npi: String,
+    pub uei: String,
+    pub registered_taxonomy: String,
+    pub verified_federal_nexus: String,
+    pub rule9b_grade: String,
+    pub public_disclosure_status: String,
+    pub evidence_manifest_hash: String,
+    pub verification_url: String,
+    pub formatted_header: String,
+}
+
+impl StandardizedCallingCard {
+    pub fn build_header(
+        classification: &str,
+        target: &str,
+        npi: &str,
+        uei: &str,
+        taxonomy: &str,
+        nexus: &str,
+        grade: &str,
+        pub_status: &str,
+        hash: &str,
+    ) -> Self {
+        let verification_url = "https://justlegal.me/openseason-standard".to_string();
+        let formatted = format!(
+"======================================================================\n\
+OPEN-SEASON STANDARDIZED FRAUD DISCLOSURE [SCHEMA v1.0 | EO-14395]\n\
+Generated via JustLegal.me / Just Liberty Inc. (501c3) Verification Engine\n\
+======================================================================\n\
+• MATTER CLASSIFICATION: {}\n\
+• TARGET ENTITY: {} | NPI: {} | UEI: {}\n\
+• REGISTERED TAXONOMY: {}\n\
+• VERIFIED FEDERAL NEXUS: {}\n\
+• RULE 9(b) READINESS GRADE: {}\n\
+• PUBLIC DISCLOSURE STATUS: {}\n\
+• EVIDENCE MANIFEST HASH (SHA-256): {}\n\
+• VERIFY SCHEMA / SOURCE TOOLS: {}\n\
+======================================================================",
+            classification, target, npi, uei, taxonomy, nexus, grade, pub_status, hash, verification_url
+        );
+
+        Self {
+            schema_version: "v1.0".to_string(),
+            matter_classification: classification.to_string(),
+            target_entity: target.to_string(),
+            npi: npi.to_string(),
+            uei: uei.to_string(),
+            registered_taxonomy: taxonomy.to_string(),
+            verified_federal_nexus: nexus.to_string(),
+            rule9b_grade: grade.to_string(),
+            public_disclosure_status: pub_status.to_string(),
+            evidence_manifest_hash: hash.to_string(),
+            verification_url,
+            formatted_header: formatted,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct PortalSubmissionBlock {
+    pub agency: String,
+    pub portal_url: String,
+    pub field_suspect_entity: String,
+    pub field_program_classification: String,
+    pub field_narrative_summary: String,
+    pub character_count: usize,
+    pub calling_card_included: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct AttorneyInquiryPackage {
+    pub subject: String,
+    pub privilege_notice: String,
+    pub calling_card: String,
+    pub executive_summary: String,
+    pub rule9b_breakdown: String,
+    pub transmission_checklist: Vec<String>,
+    pub complete_email_body: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct DojDisclosurePacket {
     pub case_id: String,
     pub case_title: String,
@@ -127,6 +212,7 @@ pub struct DojDisclosurePacket {
     pub rule9b_audit: Option<Rule9bAudit>,
     pub observation_entries: Vec<ObservationEntry>,
     pub original_source_statement: String,
+    pub calling_card: Option<StandardizedCallingCard>,
     pub compiled_at: String,
     pub json_manifest_path: Option<String>,
     pub pdf_export_path: Option<String>,

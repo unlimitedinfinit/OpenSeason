@@ -817,4 +817,16 @@ pub enum QuiTamCmd {
         #[arg(long)]
         attestation: Option<String>,
     },
+    /// Format agency web portal auto-fill blocks (character-limited copy-paste blocks for HHS-OIG, DOJ, etc.)
+    #[command(name = "format-portal")]
+    FormatPortal {
+        path: PathBuf,
+        #[arg(long, default_value = "HHS")]
+        agency: String,
+    },
+    /// Format ABA Rule 1.18 privileged Qui Tam Attorney Inquiry Package with Calling Card header
+    #[command(name = "format-inquiry")]
+    FormatInquiry {
+        path: PathBuf,
+    },
 }

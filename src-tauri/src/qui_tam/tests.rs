@@ -100,3 +100,40 @@ fn test_observation_ingestion_and_chain() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn test_standardized_calling_card_and_dual_track_formatting() {
+    let dir = make_test_dir();
+    let mut profile = CaseProfile::new_standard("Metro Hospice LLC", "qui_tam");
+    profile.caption.defendants.push(crate::case_profile::Party {
+        name: "Metro Hospice LLC".into(),
+        role: "Defendant".into(),
+        address: "700 Broadway, Denver, CO".into(),
+        ..Default::default()
+    });
+    profile.filer.name = "Jordan Example".into();
+    profile.complaint.user_text = "Target knowingly billed Medicaid for hospice care to patients not terminally ill. False certifications under penalty of perjury. Estimated federal loss exceeds $2,500,000.".into();
+
+    let packet = export_doj_disclosure(&dir, &profile, Some("Provider Enrollments & Ghost Clinics"), None).unwrap();
+    assert!(packet.calling_card.is_some());
+    let card = packet.calling_card.as_ref().unwrap();
+    assert!(card.formatted_header.contains("OPEN-SEASON STANDARDIZED FRAUD DISCLOSURE"));
+    assert!(card.formatted_header.contains("https://justlegal.me/openseason-standard"));
+    assert!(card.formatted_header.contains("RULE 9(b) READINESS GRADE"));
+
+    // Track A: Attorney Inquiry Package
+    let inquiry = generate_attorney_inquiry_package(&packet, &profile);
+    assert!(inquiry.subject.contains("Metro Hospice LLC"));
+    assert!(inquiry.privilege_notice.contains("ABA MODEL RULE 1.18"));
+    assert!(inquiry.complete_email_body.contains("OPEN-SEASON STANDARDIZED FRAUD DISCLOSURE"));
+    assert!(inquiry.transmission_checklist.len() >= 4);
+
+    // Track B: Portal Submission Block
+    let portal = generate_portal_submission_block(&packet, "HHS");
+    assert_eq!(portal.agency, "HHS");
+    assert!(portal.portal_url.contains("oig.hhs.gov"));
+    assert!(portal.field_narrative_summary.contains("OPEN-SEASON STANDARDIZED FRAUD DISCLOSURE"));
+    assert!(portal.field_suspect_entity.contains("Metro Hospice LLC"));
+
+    let _ = fs::remove_dir_all(&dir);
+}

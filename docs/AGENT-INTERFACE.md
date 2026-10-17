@@ -128,6 +128,8 @@ Equivalent without npm: `cargo run --manifest-path src-tauri/Cargo.toml --bin op
 | `qui-tam ingest-observation DIR --file FILE --notes TEXT [--observer NAME]` | Ingest site observation photo/video, extract EXIF GPS/timestamps, dual-hash (SHA-256/512), mark read-only, and log to `provenance.json` |
 | `qui-tam records-pack DIR --state STATE [--agency AGENCY]` | Generate statutory FOIA/public records request for facility licensing (MGDPA, OPRA, CORA, CPRA, FOIA) |
 | `qui-tam export-disclosure DIR` | Compile turnkey DOJ 60-Day Relator Written Disclosure Packet (`openseason-disclosure-v1.json` + `DOJ_Relator_Disclosure_Packet.pdf`) |
+| `qui-tam format-portal DIR [--agency HHS\|DOJ\|STATE\|USDA\|SBA]` | Pre-trimmed character-limited (<2,000 chars) payload for government web forms with OpenSeason Calling Card |
+| `qui-tam format-inquiry DIR` | ABA Model Rule 1.18 privileged attorney inquiry package for private qui tam counsel on 100% contingency |
 | `mcp` | Stdio MCP server (same tools) |
 | `sync DIR --action backup` | Stub. Standard: `not_implemented`. Confidential: refused |
 | `agent manifest` | List CLI/MCP tools, MCP launch config, and a copyable starter prompt |

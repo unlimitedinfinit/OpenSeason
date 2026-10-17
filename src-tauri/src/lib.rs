@@ -194,6 +194,8 @@ pub fn run() {
             case_commands::quitam_ingest_observation_cmd,
             case_commands::quitam_records_pack_cmd,
             case_commands::quitam_export_disclosure_cmd,
+            case_commands::quitam_format_portal_cmd,
+            case_commands::quitam_format_inquiry_cmd,
             case_commands::doctor_diagnostic_cmd
         ])
         .run(tauri::generate_context!())

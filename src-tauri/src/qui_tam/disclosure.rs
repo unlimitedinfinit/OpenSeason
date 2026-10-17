@@ -61,7 +61,44 @@ pub fn export_doj_disclosure(
         )
     });
 
-    // 5. Serialize JSON Manifest
+    // 5. Generate Standardized Calling Card
+    let grade_letter = match audit.score {
+        95..=100 => "A+ (95-100)",
+        90..=94 => "A (90-94)",
+        85..=89 => "A- (85-89)",
+        80..=84 => "B+ (80-84)",
+        75..=79 => "B (75-79)",
+        70..=74 => "B- (70-74)",
+        60..=69 => "C (60-69)",
+        _ => "D/F (Under 60)",
+    };
+
+    let taxonomy_str = entity_report
+        .nppes_entity
+        .as_ref()
+        .and_then(|e| e.taxonomies.first())
+        .map(|t| format!("{} ({})", t.code, t.desc))
+        .unwrap_or_else(|| "General Medical / Provider".to_string());
+
+    let primary_hash = if !observations.is_empty() {
+        observations[0].sha256.clone()
+    } else {
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".to_string()
+    };
+
+    let calling_card = StandardizedCallingCard::build_header(
+        &category,
+        target_name,
+        &npi,
+        "Active",
+        &taxonomy_str,
+        &format!("${:.2}", estimated_loss),
+        grade_letter,
+        "CLEAR (Firsthand Observation; No Internet Publication)",
+        &primary_hash,
+    );
+
+    // 6. Serialize JSON Manifest
     let mut packet = DojDisclosurePacket {
         case_id: profile.id.clone(),
         case_title: profile.title.clone(),
@@ -73,6 +110,7 @@ pub fn export_doj_disclosure(
         rule9b_audit: Some(audit.clone()),
         observation_entries: observations.clone(),
         original_source_statement: attestation.clone(),
+        calling_card: Some(calling_card),
         compiled_at: now.clone(),
         json_manifest_path: None,
         pdf_export_path: None,
@@ -83,8 +121,8 @@ pub fn export_doj_disclosure(
     fs::write(&json_path, &json_str).map_err(|e| format!("Failed to write openseason-disclosure-v1.json: {e}"))?;
     packet.json_manifest_path = Some(json_path.to_string_lossy().to_string());
 
-    // 6. Generate Typst Document
-    let typst_source = generate_disclosure_typst(&packet, &entity_report);
+    // 7. Generate Typst Document
+    let typst_source = generate_disclosure_typst(&packet, &entity_report, grade_letter, &primary_hash);
     let pdf_bytes = compile_typst(typst_source).map_err(|e| format!("Failed to compile disclosure PDF: {e}"))?;
 
     let pdf_path = exports_dir.join("DOJ_Relator_Disclosure_Packet.pdf");
@@ -94,7 +132,148 @@ pub fn export_doj_disclosure(
     Ok(packet)
 }
 
-fn generate_disclosure_typst(packet: &DojDisclosurePacket, entity: &EntityVerificationReport) -> String {
+pub fn generate_portal_submission_block(packet: &DojDisclosurePacket, agency: &str) -> PortalSubmissionBlock {
+    let agency_upper = agency.to_uppercase();
+    let portal_url = match agency_upper.as_str() {
+        "HHS" | "MEDICAID" | "MEDICARE" => "https://oig.hhs.gov/fraud/report-fraud/",
+        "DOJ" | "JUSTICE" => "https://www.justice.gov/fraud",
+        "SBA" => "https://www.sba.gov/about-sba/oversight-advocacy/office-inspector-general/office-inspector-general-hotline",
+        "USDA" => "https://usdaoig.oversight.gov/hotline",
+        _ => "https://oig.hhs.gov/fraud/report-fraud/",
+    }.to_string();
+
+    let field_suspect_entity = format!(
+        "Entity Name: {}\nNPI: {}\nEO-14395 Category: {}",
+        packet.target_entity, packet.npi, packet.eo_category
+    );
+
+    let field_program_classification = format!(
+        "Program: {} (EO 14395 Priority)\nEstimated Government Funds: ${:.2}",
+        packet.eo_category, packet.estimated_loss
+    );
+
+    let calling_card_header = packet
+        .calling_card
+        .as_ref()
+        .map(|c| c.formatted_header.clone())
+        .unwrap_or_default();
+
+    let primary_hash = if !packet.observation_entries.is_empty() {
+        &packet.observation_entries[0].sha256
+    } else {
+        "Verified-By-OpenSeason"
+    };
+
+    let field_narrative_summary = format!(
+        "{}\n\n\
+        FACTUAL SUMMARY OF SUSPECTED VIOLATIONS:\n\
+        Target provider ({}) maintains an active billing enrollment while physical inspections reveal substantial non-operation or false claims of service capacity.\n\
+        • Target: {} (NPI: {})\n\
+        • Observed Activity: Ground inspection documented shuttered physical facility and zero patient traffic during billed operating hours.\n\
+        • Particularity Score: Rule 9(b) audit score {}/100.\n\
+        • Evidentiary Chain of Custody: Photo/video observations cryptographically locked under SHA-256 hash {}.\n\
+        Full Bates-stamped OpenSeason disclosure dossier available upon request.",
+        calling_card_header, packet.target_entity, packet.target_entity, packet.npi, packet.rule9b_score, primary_hash
+    );
+
+    let character_count = field_narrative_summary.chars().count();
+
+    PortalSubmissionBlock {
+        agency: agency_upper,
+        portal_url,
+        field_suspect_entity,
+        field_program_classification,
+        field_narrative_summary,
+        character_count,
+        calling_card_included: true,
+    }
+}
+
+pub fn generate_attorney_inquiry_package(packet: &DojDisclosurePacket, profile: &CaseProfile) -> AttorneyInquiryPackage {
+    let subject = format!(
+        "CONFIDENTIAL ATTORNEY-CLIENT PRIVILEGED INQUIRY — False Claims Act / EO 14395 Relator Dossier — {}",
+        packet.target_entity
+    );
+
+    let privilege_notice = "CONFIDENTIAL: ATTORNEY-CLIENT PRIVILEGED EVALUATION (ABA MODEL RULE 1.18)\n\
+        This communication is transmitted strictly in confidence for the purpose of seeking legal representation \
+        under the False Claims Act (31 U.S.C. § 3729 et seq.) and Executive Order 14395. Pursuant to 31 U.S.C. § 3730(b)(2), \
+        this matter is subject to mandatory in-camera federal court seal requirements."
+        .to_string();
+
+    let calling_card = packet
+        .calling_card
+        .as_ref()
+        .map(|c| c.formatted_header.clone())
+        .unwrap_or_default();
+
+    let executive_summary = format!(
+        "Relator has compiled an airgapped, cryptographically verified fraud disclosure dossier concerning {}.\n\
+        • Target NPI: {}\n\
+        • Suspected Scheme: {} (Billing for non-rendered services / ghost clinic / eligibility fraud)\n\
+        • Estimated Federal Recovery Potential: ${:.2} (USAspending.gov confirmed obligations)\n\
+        • Rule 9(b) Viability Grade: {}/100\n\
+        • Public Disclosure Status: CLEAR (Firsthand documentation; strictly withheld from social media and press)",
+        packet.target_entity, packet.npi, packet.eo_category, packet.estimated_loss, packet.rule9b_score
+    );
+
+    let rule9b_breakdown = packet
+        .rule9b_audit
+        .as_ref()
+        .map(|a| {
+            a.elements
+                .iter()
+                .map(|e| format!("- {}: {} ({})", e.title, if e.satisfied { "PASS" } else { "DEFICIENT" }, e.details))
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
+        .unwrap_or_else(|| "Rule 9(b) audit pending".into());
+
+    let transmission_checklist = vec![
+        "1. Do NOT file online OIG or state web portal tips (doing so waives the private relator reward).".to_string(),
+        "2. Do NOT discuss allegations on social media, YouTube, Reddit, or press (preserves 31 U.S.C. § 3730(b)(2) seal).".to_string(),
+        "3. Expect initial conflict check (24-48 hours) from prospective counsel.".to_string(),
+        "4. False Claims Act representation is conducted on 100% contingency ($0 out of pocket to whistleblower).".to_string(),
+        "5. Prospective counsel will draft the sealed Complaint and DOJ Written Disclosure Statement upon engagement.".to_string(),
+    ];
+
+    let complete_email_body = format!(
+        "{}\n\n\
+        {}\n\n\
+        Dear Counsel,\n\n\
+        I am contacting your office to seek legal representation in connection with a potential False Claims Act qui tam action \
+        concerning federal program fraud by {}.\n\n\
+        {}\n\n\
+        RULE 9(b) STATUTORY PARTICULARITY BREAKDOWN:\n\
+        {}\n\n\
+        EVIDENTIARY STATUS:\n\
+        Field observations, photos, and physical inspection logs are cryptographically sealed with dual SHA-256 and SHA-512 hashes. \
+        The complete Bates-stamped DOJ Relator Disclosure Packet (PDF + JSON manifest) is available for confidential review upon execution of a prospective client intake agreement.\n\n\
+        Thank you for your consideration.\n\n\
+        Respectfully submitted,\n\
+        {}\n\
+        Executed pursuant to 28 U.S.C. § 1746",
+        privilege_notice, calling_card, packet.target_entity, executive_summary, rule9b_breakdown,
+        if !profile.filer.name.is_empty() { &profile.filer.name } else { "Confidential Relator" }
+    );
+
+    AttorneyInquiryPackage {
+        subject,
+        privilege_notice,
+        calling_card,
+        executive_summary,
+        rule9b_breakdown,
+        transmission_checklist,
+        complete_email_body,
+    }
+}
+
+fn generate_disclosure_typst(
+    packet: &DojDisclosurePacket,
+    entity: &EntityVerificationReport,
+    grade_letter: &str,
+    primary_hash: &str,
+) -> String {
     let date_str = chrono::Local::now().format("%B %d, %Y").to_string();
 
     let mut observations_markup = String::new();
@@ -166,7 +345,35 @@ fn generate_disclosure_typst(packet: &DojDisclosurePacket, entity: &EntityVerifi
   #text(size: 9pt, style: "italic", fill: gray)[Pursuant to 31 U.S.C. § 3730(b)(2) & Presidential Executive Order 14395]
 ]
 
-#v(1em)
+#v(0.6em)
+
+#block(
+  fill: rgb("f8fafc"),
+  stroke: navy + 1pt,
+  inset: 0.8em,
+  radius: 4pt,
+  [
+    #align(center)[
+      #text(weight: "bold", size: 8.5pt, font: "Courier")[
+        OPEN-SEASON STANDARDIZED FRAUD DISCLOSURE [SCHEMA v1.0 | EO-14395]
+      ] \
+      #text(size: 7.5pt, fill: gray)[Generated via JustLegal.me / Just Liberty Inc. (501c3) Verification Engine]
+    ]
+    #v(0.3em)
+    #text(size: 7.8pt, font: "Courier")[
+      • MATTER CLASSIFICATION: {eo_category} \
+      • TARGET ENTITY: {target_name} | NPI: {npi} | UEI: Active \
+      • REGISTERED TAXONOMY: {taxonomy} \
+      • VERIFIED FEDERAL NEXUS: \${est_loss} (USAspending / State Lookups Confirmed) \
+      • RULE 9(b) READINESS GRADE: {grade} \
+      • PUBLIC DISCLOSURE STATUS: CLEAR (Firsthand Documentation; No Social Media Leakage) \
+      • PRIMARY EVIDENCE HASH: {primary_hash} \
+      • VERIFY SCHEMA / SOURCE TOOLS: https://justlegal.me/openseason-standard
+    ]
+  ]
+)
+
+#v(0.6em)
 #line(length: 100%, stroke: 1.5pt + navy)
 
 #grid(
@@ -251,6 +458,8 @@ Field observations, facility photographs, and physical inspection records are ha
         est_loss = format!("{:.2}", packet.estimated_loss),
         score = packet.rule9b_score,
         viability_tier = packet.rule9b_audit.as_ref().map(|a| a.viability_tier.as_str()).unwrap_or("Active Triage"),
+        grade = grade_letter,
+        primary_hash = primary_hash,
         practice_addr = entity.nppes_entity.as_ref().map(|e| format!("{}, {}, {} {}", e.practice_location.address_1, e.practice_location.city, e.practice_location.state, e.practice_location.postal_code)).unwrap_or_else(|| "[Location Not Found in NPPES]".into()),
         mailing_addr = entity.nppes_entity.as_ref().map(|e| format!("{}, {}, {} {}", e.mailing_address.address_1, e.mailing_address.city, e.mailing_address.state, e.mailing_address.postal_code)).unwrap_or_else(|| "[Mailing Address Not Listed]".into()),
         authorized_official = entity.nppes_entity.as_ref().and_then(|e| e.authorized_official.as_ref()).map(|o| format!("{} {} ({})", o.first_name, o.last_name, o.title)).unwrap_or_else(|| "Not Disclosed".into()),

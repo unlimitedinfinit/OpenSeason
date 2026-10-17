@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { ipc } from "$lib/ipc";
+  import toast from "svelte-french-toast";
+  import AgencyPortalHelperModal from "./AgencyPortalHelperModal.svelte";
 
   interface Props {
     caseId: string;
@@ -10,7 +12,7 @@
 
   let { caseId, isOpen = $bindable(false), onClose }: Props = $props();
 
-  let activeStep = $state<1 | 2 | 3 | 4>(1);
+  let activeStep = $state<1 | 2 | 3 | 4 | 5>(1);
   let loading = $state(false);
   let error = $state("");
   let successMsg = $state("");
@@ -33,6 +35,12 @@
   let rule9bAudit = $state<any>(null);
   let exportedPacket = $state<any>(null);
   let eoCategory = $state("Provider Enrollments & Ghost Clinics");
+
+  // Step 5: Final Submission & Routing Fork
+  let showPortalHelper = $state(false);
+  let attorneyInquiryPkg = $state<any>(null);
+  let copiedCard = $state(false);
+  let copiedInquiry = $state(false);
 
   onMount(async () => {
     if (caseId && isOpen) {
@@ -131,6 +139,35 @@
     }
   }
 
+  async function handleGenerateInquiryPackage() {
+    loading = true;
+    error = "";
+    try {
+      attorneyInquiryPkg = await ipc("quitam_format_inquiry_cmd", { caseId });
+      navigator.clipboard.writeText(attorneyInquiryPkg.complete_email_body);
+      copiedInquiry = true;
+      toast.success("Copied ABA Rule 1.18 Attorney Inquiry Email to clipboard!");
+      setTimeout(() => (copiedInquiry = false), 3000);
+    } catch (e) {
+      error = String(e);
+      toast.error(`Failed to format attorney inquiry: ${e}`);
+    } finally {
+      loading = false;
+    }
+  }
+
+  function copyCallingCard() {
+    const cardText = exportedPacket?.calling_card?.formatted_header;
+    if (cardText) {
+      navigator.clipboard.writeText(cardText);
+      copiedCard = true;
+      toast.success("Copied OpenSeason Standard Calling Card header!");
+      setTimeout(() => (copiedCard = false), 3000);
+    } else {
+      toast.error("Please export the disclosure packet first in Step 4 to generate the Calling Card.");
+    }
+  }
+
   function handleClose() {
     isOpen = false;
     if (onClose) onClose();
@@ -170,10 +207,10 @@
       </div>
 
       <!-- Step Navigation Tabs -->
-      <div class="grid grid-cols-4 gap-2 pt-4 pb-2 border-b border-border/40 shrink-0">
+      <div class="grid grid-cols-5 gap-2 pt-4 pb-2 border-b border-border/40 shrink-0">
         <button
           onclick={() => (activeStep = 1)}
-          class="px-3 py-2 rounded-xl text-xs font-semibold transition-all text-left flex items-center gap-2 {activeStep === 1 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm' : 'text-muted-foreground hover:bg-secondary/40'}"
+          class="px-2.5 py-2 rounded-xl text-xs font-semibold transition-all text-left flex items-center gap-1.5 {activeStep === 1 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm' : 'text-muted-foreground hover:bg-secondary/40'}"
         >
           <span class="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold {activeStep === 1 ? 'bg-amber-400 text-black' : 'bg-secondary text-muted-foreground'}">1</span>
           <span class="truncate">Identity Lock</span>
@@ -184,7 +221,7 @@
             activeStep = 2;
             if (!recordsPack) handleGenerateRecordsPack();
           }}
-          class="px-3 py-2 rounded-xl text-xs font-semibold transition-all text-left flex items-center gap-2 {activeStep === 2 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm' : 'text-muted-foreground hover:bg-secondary/40'}"
+          class="px-2.5 py-2 rounded-xl text-xs font-semibold transition-all text-left flex items-center gap-1.5 {activeStep === 2 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm' : 'text-muted-foreground hover:bg-secondary/40'}"
         >
           <span class="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold {activeStep === 2 ? 'bg-amber-400 text-black' : 'bg-secondary text-muted-foreground'}">2</span>
           <span class="truncate">Licensing FOIA</span>
@@ -192,10 +229,10 @@
 
         <button
           onclick={() => (activeStep = 3)}
-          class="px-3 py-2 rounded-xl text-xs font-semibold transition-all text-left flex items-center gap-2 {activeStep === 3 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm' : 'text-muted-foreground hover:bg-secondary/40'}"
+          class="px-2.5 py-2 rounded-xl text-xs font-semibold transition-all text-left flex items-center gap-1.5 {activeStep === 3 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm' : 'text-muted-foreground hover:bg-secondary/40'}"
         >
           <span class="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold {activeStep === 3 ? 'bg-amber-400 text-black' : 'bg-secondary text-muted-foreground'}">3</span>
-          <span class="truncate">Observation Log</span>
+          <span class="truncate">Observations</span>
         </button>
 
         <button
@@ -203,10 +240,21 @@
             activeStep = 4;
             loadInitialData();
           }}
-          class="px-3 py-2 rounded-xl text-xs font-semibold transition-all text-left flex items-center gap-2 {activeStep === 4 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm' : 'text-muted-foreground hover:bg-secondary/40'}"
+          class="px-2.5 py-2 rounded-xl text-xs font-semibold transition-all text-left flex items-center gap-1.5 {activeStep === 4 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm' : 'text-muted-foreground hover:bg-secondary/40'}"
         >
           <span class="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold {activeStep === 4 ? 'bg-amber-400 text-black' : 'bg-secondary text-muted-foreground'}">4</span>
-          <span class="truncate">Rule 9(b) & Dossier</span>
+          <span class="truncate">Rule 9(b) Audit</span>
+        </button>
+
+        <button
+          onclick={() => {
+            activeStep = 5;
+            if (!exportedPacket) handleExportDisclosure();
+          }}
+          class="px-2.5 py-2 rounded-xl text-xs font-semibold transition-all text-left flex items-center gap-1.5 {activeStep === 5 ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm' : 'text-muted-foreground hover:bg-secondary/40'}"
+        >
+          <span class="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold {activeStep === 5 ? 'bg-amber-400 text-black' : 'bg-secondary text-muted-foreground'}">5</span>
+          <span class="truncate">Submit & Route</span>
         </button>
       </div>
 
@@ -482,6 +530,135 @@
               {/if}
             </div>
           </div>
+        {:else if activeStep === 5}
+          <!-- Step 5: Final Submission & Routing Fork -->
+          <div class="space-y-4 animate-in fade-in duration-200">
+            <div>
+              <h3 class="text-sm font-bold text-foreground">Step 5: Final Submission & Strategic Routing Fork</h3>
+              <p class="text-xs text-muted-foreground">
+                Under Executive Order 14395 and 31 U.S.C. § 3730, selecting the appropriate route protects statutory relator rewards (15%–30%) and complies with mandatory in camera seal provisions.
+              </p>
+            </div>
+
+            <!-- Standardized Calling Card Preview -->
+            <div class="p-4 rounded-2xl bg-secondary/30 border border-border/80 space-y-2">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-bold text-foreground">Standardized Calling Card</span>
+                  <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold">
+                    OpenSeason v1.0 | EO-14395
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onclick={copyCallingCard}
+                  disabled={!exportedPacket?.calling_card}
+                  class="px-3 py-1 bg-secondary hover:bg-secondary/80 text-foreground rounded-lg text-xs font-medium border border-border transition-colors flex items-center gap-1.5 disabled:opacity-40"
+                >
+                  <span>{copiedCard ? "✓ Copied" : "📋 Copy Header"}</span>
+                </button>
+              </div>
+
+              {#if exportedPacket?.calling_card}
+                <pre class="bg-black/80 text-emerald-400 p-3 rounded-xl font-mono text-[11px] overflow-x-auto whitespace-pre border border-emerald-500/20 leading-relaxed">{exportedPacket.calling_card.formatted_header}</pre>
+                <div class="text-[10px] text-muted-foreground flex items-center justify-between">
+                  <span>Target NPI: <span class="font-mono text-foreground">{exportedPacket.calling_card.target_npi}</span></span>
+                  <span>Evidence Digest: <span class="font-mono text-foreground">{exportedPacket.calling_card.evidence_sha256.slice(0, 16)}...</span></span>
+                  <a href={exportedPacket.calling_card.standard_url} target="_blank" rel="noreferrer" class="text-primary hover:underline">
+                    Verification Standard ↗
+                  </a>
+                </div>
+              {:else}
+                <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between">
+                  <span class="text-xs text-amber-300">Disclosure packet not yet compiled. Compile packet in Step 4 to generate calling card.</span>
+                  <button
+                    type="button"
+                    onclick={handleExportDisclosure}
+                    disabled={loading}
+                    class="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 rounded-lg text-xs font-semibold border border-amber-500/30"
+                  >
+                    Compile Packet
+                  </button>
+                </div>
+              {/if}
+            </div>
+
+            <!-- Dual-Track Submission Fork -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <!-- Track A: Qui Tam Counsel First -->
+              <div class="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col justify-between space-y-3">
+                <div class="space-y-2">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                      <span>⚖️ Track A: Qui Tam Counsel</span>
+                    </span>
+                    <span class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-semibold uppercase">
+                      $1M+ / Firsthand
+                    </span>
+                  </div>
+                  <p class="text-[11px] text-muted-foreground">
+                    For high-dollar fraud with original source evidence. Private qui tam counsel files in federal court under mandatory seal.
+                  </p>
+                  <ul class="text-[11px] space-y-1 text-foreground/90 list-disc list-inside">
+                    <li><strong class="text-amber-300">15%–30% Statutory Relator Bounty</strong> (31 U.S.C. § 3730(d))</li>
+                    <li><strong class="text-foreground">Mandatory In Camera Seal:</strong> Do NOT file via public agency portals.</li>
+                    <li><strong class="text-foreground">$0 Upfront Cost:</strong> Legitimate qui tam firms work on 100% contingency.</li>
+                    <li><strong class="text-foreground">ABA Model Rule 1.18:</strong> Prospective client privileged inquiry.</li>
+                  </ul>
+                </div>
+
+                <div class="pt-2 border-t border-amber-500/20 space-y-2">
+                  <button
+                    type="button"
+                    onclick={handleGenerateInquiryPackage}
+                    disabled={loading}
+                    class="w-full py-2 px-3 bg-amber-500 hover:bg-amber-400 text-black font-semibold rounded-xl text-xs transition-colors flex items-center justify-center gap-2 shadow-sm"
+                  >
+                    <span>{copiedInquiry ? "✓ Copied Inquiry to Clipboard!" : "Copy ABA Rule 1.18 Inquiry Email 📋"}</span>
+                  </button>
+                  <p class="text-[10px] text-muted-foreground text-center">
+                    Just Liberty Inc. (501(c)(3)) receives $0 fee splits (ABA Rule 5.4 compliant).
+                  </p>
+                </div>
+              </div>
+
+              <!-- Track B: Direct Agency Portal Submission -->
+              <div class="p-4 rounded-2xl bg-blue-500/10 border border-blue-500/30 flex flex-col justify-between space-y-3">
+                <div class="space-y-2">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-blue-300 flex items-center gap-1.5">
+                      <span>🏛️ Track B: Agency Portals</span>
+                    </span>
+                    <span class="text-[9px] font-mono px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-semibold uppercase">
+                      Admin Triage / Sub-$1M
+                    </span>
+                  </div>
+                  <p class="text-[11px] text-muted-foreground">
+                    For direct administrative stop-payment action, license revocation, or local community elder/patient protection.
+                  </p>
+                  <ul class="text-[11px] space-y-1 text-foreground/90 list-disc list-inside">
+                    <li><strong class="text-blue-300">Immediate Triage:</strong> Stops ongoing fund disbursement rapidly.</li>
+                    <li><strong class="text-foreground">Character-Limited Auto-Fit:</strong> Pre-trimmed for 1,500–2,000 char portal fields.</li>
+                    <li><strong class="text-foreground">Federal & State Support:</strong> HHS-OIG, DOJ Civil, State MFCU, USDA, SBA.</li>
+                    <li><strong class="text-foreground">Standardized Calling Card:</strong> Alerts OIG intake analysts instantly.</li>
+                  </ul>
+                </div>
+
+                <div class="pt-2 border-t border-blue-500/20 space-y-2">
+                  <button
+                    type="button"
+                    onclick={() => (showPortalHelper = true)}
+                    class="w-full py-2 px-3 bg-blue-500 hover:bg-blue-400 text-black font-semibold rounded-xl text-xs transition-colors flex items-center justify-center gap-2 shadow-sm"
+                  >
+                    <span>Open Guided Agency Portal Helper 🚀</span>
+                  </button>
+                  <p class="text-[10px] text-muted-foreground text-center">
+                    1-click copy fields tailored to official agency web submission forms.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
         {/if}
       </div>
 
@@ -497,13 +674,13 @@
         </button>
 
         <div class="text-xs font-mono text-muted-foreground">
-          Step {activeStep} of 4
+          Step {activeStep} of 5
         </div>
 
-        {#if activeStep < 4}
+        {#if activeStep < 5}
           <button
             type="button"
-            onclick={() => (activeStep = Math.min(4, activeStep + 1) as any)}
+            onclick={() => (activeStep = Math.min(5, activeStep + 1) as any)}
             class="px-4 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:opacity-90 transition-opacity"
           >
             Next →
@@ -520,4 +697,10 @@
       </div>
     </div>
   </div>
+
+  <AgencyPortalHelperModal
+    {caseId}
+    bind:isOpen={showPortalHelper}
+    onClose={() => (showPortalHelper = false)}
+  />
 {/if}

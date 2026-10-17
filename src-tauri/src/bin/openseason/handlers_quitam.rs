@@ -136,5 +136,46 @@ pub fn handle_quitam(cmd: QuiTamCmd, json: bool) -> Result<(), String> {
             }
             Ok(())
         }
+
+        QuiTamCmd::FormatPortal { path, agency } => {
+            let profile = load_case(&path).map_err(|e| format!("Failed to load case: {e}"))?;
+            let packet = export_doj_disclosure(&path, &profile, None, None)?;
+            let portal_block = generate_portal_submission_block(&packet, &agency);
+
+            if !json {
+                println!("=== DIRECT AGENCY PORTAL AUTO-FILL BLOCK [{}] ===", portal_block.agency);
+                println!("Portal URL: {}", portal_block.portal_url);
+                println!("Character Count: {} chars\n", portal_block.character_count);
+                println!("--- FIELD 1: SUSPECT ENTITY ---");
+                println!("{}", portal_block.field_suspect_entity);
+                println!("\n--- FIELD 2: PROGRAM CLASSIFICATION ---");
+                println!("{}", portal_block.field_program_classification);
+                println!("\n--- FIELD 3: NARRATIVE DESCRIPTION ---");
+                println!("{}", portal_block.field_narrative_summary);
+            } else {
+                emit(json, portal_block, Vec::new());
+            }
+            Ok(())
+        }
+
+        QuiTamCmd::FormatInquiry { path } => {
+            let profile = load_case(&path).map_err(|e| format!("Failed to load case: {e}"))?;
+            let packet = export_doj_disclosure(&path, &profile, None, None)?;
+            let inquiry_pkg = generate_attorney_inquiry_package(&packet, &profile);
+
+            if !json {
+                println!("=== ABA RULE 1.18 PRIVILEGED QUI TAM ATTORNEY INQUIRY ===");
+                println!("Subject: {}", inquiry_pkg.subject);
+                println!("\nTransmission Checklist:");
+                for step in &inquiry_pkg.transmission_checklist {
+                    println!("  {}", step);
+                }
+                println!("\n--- COMPLETE COPY-PASTE EMAIL BODY ---\n");
+                println!("{}", inquiry_pkg.complete_email_body);
+            } else {
+                emit(json, inquiry_pkg, Vec::new());
+            }
+            Ok(())
+        }
     }
 }

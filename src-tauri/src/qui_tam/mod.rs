@@ -15,4 +15,8 @@ pub use nppes::{lookup_nppes, verify_entity};
 pub use rule9b::audit_case_rule9b;
 pub use observation::ingest_observation;
 pub use records_pack::generate_records_pack;
-pub use disclosure::export_doj_disclosure;
+pub use disclosure::{
+    export_doj_disclosure,
+    generate_portal_submission_block,
+    generate_attorney_inquiry_package,
+};
