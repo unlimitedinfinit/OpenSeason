@@ -1,22 +1,22 @@
-# Agent interface (first-class)
+# Agent Interface (First-Class Surface)
 
-The Offline Case Builder is driven the same way by a person in the window and by an agent on the command line. Both call the Rust engine in `open_season_lib`. The app never files or serves.
+The **JustLegal OS** engine is driven identically by a person clicking in the desktop window and by an autonomous agent on the command line. Both call the exact same deterministic Rust engine in `open_season_lib`. The application never files or serves.
 
 Read [AGENTS.md](../AGENTS.md) first. Never invent facts, arguments, or citations.
 
-There is no cloud API and no hosted model. Headless use is local: the `openseason` CLI (`--json`) and an optional stdio MCP server (`openseason mcp`).
+There is no remote cloud API and no remote model dependency. Headless agent execution is 100% local: the native `JustLegalOS-CLI.exe` binary (`--json`) and an optional stdio JSON-RPC 2.0 MCP server (`justlegalos-cli mcp`).
 
 ## Contract
 
-`--json` prints one envelope per command:
+`--json` prints one structured envelope per command:
 
 ```json
 {
   "ok": false,
   "never_files": true,
   "never_serves": true,
-  "notice": "...",
-  "issues": [{ "field": "fact.1", "message": "..." }],
+  "notice": "This app never files or serves. Josh (or the user) signs, files, and serves by hand...",
+  "issues": [{ "field": "fact.1", "message": "Fact has no record cite" }],
   "data": {}
 }
 ```
@@ -30,23 +30,19 @@ Rules:
 
 ## CLI
 
-From the repository root (Rust toolchain required):
+From the repository root (using the pre-compiled binary or npm wrapper):
 
 ```bash
-npm run cli -- --json case create --path ./tmp-case --title "Example v. Sample County Clerk" --kind reconsideration --pack nj-app-div
-npm run cli -- --json draft import ./tmp-case --md fixtures/sample-reconsideration.md
-npm run cli -- --json draft preview --md fixtures/sample-reconsideration.md
-npm run cli -- --json export court-md ./tmp-case
-npm run cli -- --json evidence add ./tmp-case --file fixtures/sample-appeal-case/evidence/.gitkeep --description "Dkt. 12 order"
-npm run cli -- --json check fact ./tmp-case
-npm run cli -- --json check authority ./tmp-case
-npm run cli -- --json check deadline ./tmp-case --pack nj-app-div --rule reconsideration-appellate --trigger-date 2026-01-09
-npm run cli -- --json check all ./tmp-case --pack nj-app-div --rule reconsideration-appellate --trigger-date 2026-01-09
-npm run cli -- --json export court-md ./tmp-case
-npm run cli -- --json packs list
+# Using the pre-compiled binary:
+.\JustLegalOS-CLI.exe --json case context ./my-case
+.\JustLegalOS-CLI.exe --json intake scan ./my-case
+.\JustLegalOS-CLI.exe --json export court-md ./my-case
+
+# Or via npm script:
+npm run cli -- --json case context ./my-case
 ```
 
-Equivalent without npm: `cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- --json ...`
+Equivalent via Cargo: `cargo run --manifest-path src-tauri/Cargo.toml --bin justlegalos-cli -- --json ...`
 
 ### Commands
 
@@ -137,8 +133,8 @@ Equivalent without npm: `cargo run --manifest-path src-tauri/Cargo.toml --bin op
 
 ## MCP (stdio)
 
-`openseason mcp` speaks JSON-RPC 2.0 with `Content-Length` framing **or newline-delimited JSON**. Tools include:
-- `agent_manifest`: Tool list, MCP launch, starter prompt.
+`justlegalos-cli mcp` speaks JSON-RPC 2.0 with `Content-Length` framing **or newline-delimited JSON**. Tools include:
+- `agent_manifest`: Tool list, MCP launch config, and starter prompt.
 - `import_folder`: Copy a folder of drafts/notes/orders. Does not auto-commit guesses.
 - `case_context`: One-call consolidated Legal OS context bundle for immediate AI agent orientation.
 - `case_next_steps`: Predictive Procedural State Graph (NJ `pause_remaining` vs. CO/Federal `reset_full` tolling + mail service offset).
@@ -150,7 +146,7 @@ Equivalent without npm: `cargo run --manifest-path src-tauri/Cargo.toml --bin op
 - `accountability_audit`, `accountability_routes`, `accountability_resources`, `accountability_packet`: Multi-track judicial discrepancy audit, *Lawson v. Dewar* routing, ACJC/OAE registry, and objective factual packets.
 - `ada_petition`: Title II ADA reasonable accommodation petition generator with federal confidentiality protections.
 - `doctor_diagnostic`: Real-time system health and airgap integrity diagnostics.
-- `quitam_verify_entity`, `quitam_audit_9b`, `quitam_ingest_observation`, `quitam_records_pack`, `quitam_export_disclosure`: EO 14395 Qui Tam / False Claims Act fraud triage engine.
+- `quitam_verify_entity`, `quitam_audit_9b`, `quitam_ingest_observation`, `quitam_records_pack`, `quitam_export_disclosure`, `quitam_format_portal`, `quitam_format_inquiry`: Full EO 14395 Qui Tam / False Claims Act fraud triage and dual-track engine.
 - `pdf_extract_text`: Page-by-page offline PDF text extraction.
 - `motion_list`, `motion_create`, `motion_export`: Autonomous multi-motion docket drafting & compilation.
 - `service_cert` & `service_order`: Court-mandated proof of service and judge-ready proposed order generation.

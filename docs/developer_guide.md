@@ -23,7 +23,7 @@ npm install --legacy-peer-deps
 ## 2. Build, Test & Release Commands
 
 ```bash
-# 1. Run all 102+ Rust unit and integration tests
+# 1. Run all 163+ Rust unit and integration tests
 cargo test --manifest-path src-tauri/Cargo.toml --lib
 
 # 2. Run Svelte 5 + TypeScript typecheck and Vite static build

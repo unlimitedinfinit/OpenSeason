@@ -164,11 +164,16 @@ Every generated disclosure packet, attorney inquiry, and portal submission block
 
 ```text
 ======================================================================
-[OPEN-SEASON STANDARDIZED FRAUD DISCLOSURE v1.0 | EO-14395 COMPLIANT]
-Target: North Star Healthcare LLC | NPI: 1234567890 | Taxonomy: MATCH
-Federal Program: HHS Medicaid/Medicare | Verified Draw: $2,450,000.00
-Rule 9(b) Readiness: Grade A (88/100) | Evidence Hash: SHA-256:e3b0c44298fc1c14...
-Triage Standard: https://justlegal.me/openseason-standard
+JUSTLEGAL OS | OPEN-SEASON STANDARDIZED FRAUD DISCLOSURE [SCHEMA v1.0 | EO-14395]
+Generated via JustLegal.me / Just Liberty Inc. (501c3) Verification Engine
+======================================================================
+• MATTER CLASSIFICATION: HEALTHCARE_BILLING_DISPATCH_MISMATCH
+• TARGET ENTITY: North Star Healthcare LLC | NPI: 1234567890 | UEI: ABCD1234EFGH
+• REGISTERED TAXONOMY: 251J00000X vs. Observed Status: Empty Storefront
+• VERIFIED FEDERAL OBLIGATIONS: $2,450,000.00 (USAspending Confirmed)
+• FRCP RULE 9(b) READINESS SCORE: 88/100 (GRADE: A-)
+• EVIDENCE MANIFEST HASH (SHA-256): e3b0c44298fc1c149afbf4c8996fb92427ae41e4...
+• VERIFICATION SPECIFICATION: https://justlegal.me/openseason-standard
 ======================================================================
 ```
 
