@@ -1,8 +1,8 @@
 # AGENTS.md
 
-Read this file first before creating, editing, or exporting any OpenSeason case.
+Read this file first before creating, editing, or exporting any case in **JustLegal OS**.
 
-OpenSeason is a **formatting and assembly engine**, not a research engine. It turns a person's own draft into a court-shaped Word or PDF file. It does not practice law.
+**JustLegal OS** is a legal operating system and court formatting engine developed by Just Liberty Inc. (501(c)(3)). It includes the **OpenSeason** engine for offline court document assembly and False Claims Act / Qui Tam fraud triage (EO 14395). It turns a person's own draft into a court-shaped Word or PDF file. It does not practice law.
 
 ## Hard rules
 

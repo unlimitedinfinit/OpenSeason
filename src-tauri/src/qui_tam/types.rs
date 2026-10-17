@@ -146,7 +146,7 @@ impl StandardizedCallingCard {
         let verification_url = "https://justlegal.me/openseason-standard".to_string();
         let formatted = format!(
 "======================================================================\n\
-OPEN-SEASON STANDARDIZED FRAUD DISCLOSURE [SCHEMA v1.0 | EO-14395]\n\
+JUSTLEGAL OS | OPEN-SEASON STANDARDIZED FRAUD DISCLOSURE [SCHEMA v1.0 | EO-14395]\n\
 Generated via JustLegal.me / Just Liberty Inc. (501c3) Verification Engine\n\
 ======================================================================\n\
 • MATTER CLASSIFICATION: {}\n\

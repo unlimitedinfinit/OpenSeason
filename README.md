@@ -1,16 +1,18 @@
-# OpenSeason
+# JustLegal OS
 
-A free, privacy-first, offline-capable **Document Builder** (Offline Case Builder) for people who are representing themselves. It formats the user's own draft into a court-shaped Word or PDF file, then runs a check stage (record cites, authority status, deadline math, sign-off). It does not research the law, invent facts, file, or serve.
+A free, privacy-first, offline-capable **Legal Operating System & Document Builder** for people who are representing themselves, developed by **Just Liberty Inc.** (501(c)(3)). It is powered by the **OpenSeason** pure-Rust formatting core and False Claims Act / Qui Tam fraud triage engine (Executive Order 14395).
 
-The older Open Season whistleblower vault is still here. It is **one Confidential case type** inside the same app, not the whole product.
+JustLegal OS formats a user's own draft into a court-ready Word or PDF file, then runs a deterministic pre-flight check stage (record citations, authority verification, court deadline math, and sign-off compliance). It does not practice law, research the law, invent facts, file, or serve.
 
-Agents drive the same engine through `openseason --json` or `openseason mcp`. See [docs/AGENT-INTERFACE.md](docs/AGENT-INTERFACE.md).
+The confidential whistleblower vault is built directly into the operating system as **one Confidential case type**, backed by local encryption, airgapped storage, and zero telemetry.
+
+Agents and external LLMs interface with the engine via the `openseason` CLI (`openseason-cli.exe --json`) or stdio MCP server (`openseason mcp`). See [docs/AGENT-INTERFACE.md](docs/AGENT-INTERFACE.md).
 
 ---
 
 ## 3-Tier Legal Operating System Architecture
 
-OpenSeason operates across three seamless tiers:
+**JustLegal OS** operates across three seamless tiers:
 
 - **Level 1 — JustLegal GrokBot (x.ai Marketplace Blueprint)**: Public conversational legal navigator (Civil + Fraud/Whistleblower personas) with heavy standalone capabilities, zero local installation required.
 - **Level 2 — JustLegal.me Resource Hub**: Public cloud education center, verified AcroForm directory, and `/fraud-triage` hub for whistleblower orientation.

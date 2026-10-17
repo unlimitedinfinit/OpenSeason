@@ -1,7 +1,7 @@
 # Architecture & Module Map
 
-OpenSeason is a deterministic local **Legal Operating System** with two equal front doors:
-1. **Desktop GUI (`OpenSeason.exe`):** Svelte 5 + Tauri v2 window.
+**JustLegal OS** is a deterministic, local-first **Legal Operating System** powered by the **OpenSeason** pure-Rust formatting and Qui Tam fraud triage engine. It provides two equal front doors:
+1. **Desktop GUI (`JustLegal Desktop` / `OpenSeason.exe`):** Svelte 5 + Tauri v2 window.
 2. **Headless Agent CLI & MCP Server (`openseason-cli.exe`):** `--json` command-line interface and JSON-RPC 2.0 stdio MCP server.
 
 Both doors call the exact same Rust library (`open_season_lib` in `src-tauri/src/`). Neither ever invents facts, hallucinates citations, or files/serves papers.
