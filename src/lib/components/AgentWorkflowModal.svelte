@@ -70,9 +70,9 @@
   }
 </script>
 
-<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
-  <div class="bg-white dark:bg-stone-900 rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col border border-stone-200 dark:border-stone-800">
-    <div class="px-6 py-4 border-b border-stone-200 dark:border-stone-800 flex items-center justify-between">
+<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto animate-fade-in">
+  <div class="bg-card rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col border border-border">
+    <div class="px-6 py-4 border-b border-border flex items-center justify-between bg-secondary/30">
       <div>
         <div class="flex items-center gap-2">
           <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-primary/10 text-primary border border-primary/20">

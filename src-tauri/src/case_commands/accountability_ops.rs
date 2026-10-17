@@ -105,6 +105,13 @@ pub fn order_decode_cmd(pdf_path: String) -> Result<crate::order::DecodedOrder, 
 }
 
 #[tauri::command]
+pub fn order_ingest_cmd(case_id: String, pdf_path: String) -> Result<crate::order::types::IngestedOrderReport, String> {
+    let dir = case_dir_from_id(&case_id)?;
+    let path = std::path::PathBuf::from(&pdf_path);
+    crate::order::decoder::ingest_order_into_case(&dir, &path)
+}
+
+#[tauri::command]
 pub fn timeline_audit_mail_cmd(
     case_id: String,
     order_entry_date: String,

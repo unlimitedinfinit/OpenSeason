@@ -5,8 +5,8 @@
   let { children } = $props();
 </script>
 
-<div class="dark min-h-screen bg-background text-foreground font-sans antialiased">
-  <header class="border-b border-border px-6 py-3 flex items-center justify-between gap-4">
+<div class="dark min-h-screen bg-background text-foreground font-sans antialiased bg-[radial-gradient(ellipse_100%_70%_at_50%_-15%,rgba(20,184,166,0.07),transparent_70%)]">
+  <header class="border-b border-border/80 bg-card/60 backdrop-blur-md px-6 py-3 flex items-center justify-between gap-4 sticky top-0 z-40">
     <nav class="flex flex-wrap items-center gap-5 text-sm" aria-label="Main">
       <button onclick={() => goto("/")} class="flex items-center gap-2 font-semibold text-foreground tracking-tight hover:opacity-90" aria-label="Home">
         <span class="w-2.5 h-2.5 rounded-full bg-primary inline-block"></span>

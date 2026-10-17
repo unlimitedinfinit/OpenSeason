@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", content = "detail")]
 pub enum OrderSigner {
-    ByTheCourt { division: String },
+    ByTheCourt { division: Option<String> },
     NamedJudge { name: String, title: Option<String> },
     Clerk { name: Option<String> },
     Unknown,
@@ -20,7 +20,10 @@ impl Default for OrderSigner {
 impl OrderSigner {
     pub fn label(&self) -> String {
         match self {
-            OrderSigner::ByTheCourt { division } => format!("BY THE COURT ({division})"),
+            OrderSigner::ByTheCourt { division } => match division {
+                Some(div) => format!("BY THE COURT ({div})"),
+                None => "BY THE COURT".into(),
+            },
             OrderSigner::NamedJudge { name, title } => match title {
                 Some(t) => format!("{name}, {t}"),
                 None => name.clone(),
@@ -33,8 +36,12 @@ impl OrderSigner {
         }
     }
 
-    pub fn is_screening_division(&self) -> bool {
+    pub fn is_by_the_court(&self) -> bool {
         matches!(self, OrderSigner::ByTheCourt { .. })
+    }
+
+    pub fn is_screening_division(&self) -> bool {
+        self.is_by_the_court()
     }
 }
 
@@ -112,4 +119,17 @@ pub struct BootstrapResult {
     #[serde(default)]
     pub pending_obligations: Vec<String>,
     pub summary: String,
+}
+
+/// Result of an end-to-end court order ingestion into an active case folder.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct IngestedOrderReport {
+    pub decoded_order: DecodedOrder,
+    pub saved_order_path: String,
+    pub sha256: String,
+    pub timeline_event_id: String,
+    pub sourced_deadline: Option<crate::deadlines::SourcedDeadline>,
+    pub workflow_plan: Option<crate::workflow::types::WorkflowPlan>,
+    pub receipt_id: String,
+    pub status: String,
 }

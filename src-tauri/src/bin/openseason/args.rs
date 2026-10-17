@@ -713,10 +713,12 @@ pub enum AdaCmd {
 
 #[derive(Subcommand)]
 pub enum OrderCmd {
-    /// Decode a court order or notice from a PDF file
+    /// Decode a court order or notice from a PDF file, optionally ingesting it directly into a case folder
     Decode {
         #[arg(long)]
         pdf: PathBuf,
+        #[arg(long)]
+        case: Option<PathBuf>,
     },
 }
 

@@ -27,25 +27,25 @@
   }
 
   .dark {
-    --background: 24 10% 6%; /* #11100F Deep Ink Charcoal */
-    --foreground: 60 12% 98%; /* #FBFBF9 Warm Paper */
-    --card: 24 8% 10%; /* #1A1816 Dark warm stone */
-    --card-foreground: 60 12% 98%;
-    --popover: 24 8% 10%;
-    --popover-foreground: 60 12% 98%;
-    --primary: 173 80% 36%; /* #0D9488 Vibrant Teal */
+    --background: 222 18% 11%; /* #121722 Executive Midnight Slate (Rich, Not Pitch Black) */
+    --foreground: 210 24% 96%; /* #F1F5F9 Crisp High-Contrast Slate White */
+    --card: 222 16% 16%; /* #1A2130 Elevated Slate Card Surface */
+    --card-foreground: 210 24% 96%;
+    --popover: 222 16% 18%; /* #20283A Elevated Popover */
+    --popover-foreground: 210 24% 96%;
+    --primary: 173 80% 40%; /* #14B8A6 Sovereign Teal Accent */
     --primary-foreground: 0 0% 100%;
-    --secondary: 24 6% 15%;
-    --secondary-foreground: 60 12% 95%;
-    --muted: 24 6% 14%;
-    --muted-foreground: 25 6% 62%;
-    --accent: 24 6% 16%;
-    --accent-foreground: 60 12% 98%;
+    --secondary: 222 14% 20%; /* #273144 Secondary Button / Tag Surface */
+    --secondary-foreground: 210 20% 92%;
+    --muted: 222 14% 18%; /* #222B3C Muted Surface */
+    --muted-foreground: 215 16% 65%; /* #94A3B8 Refined Slate Gray */
+    --accent: 222 14% 22%; /* #2B364B Interactive Focus Accent */
+    --accent-foreground: 210 24% 96%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
-    --border: 24 6% 18%; /* Warm stone border */
-    --input: 24 6% 18%;
-    --ring: 173 80% 36%;
+    --border: 222 13% 25%; /* #333F56 High-Definition Hairline Border */
+    --input: 222 14% 22%; /* #2B364B Crisp Input Surface */
+    --ring: 173 80% 40%;
   }
 }
 
@@ -55,7 +55,7 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: "Segoe UI", "Liberation Sans", Arial, Helvetica, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   }
 }
 
@@ -85,7 +85,7 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: inherit;
   box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.2), 0 4px 12px rgba(0, 0, 0, 0.4);
-  background: rgba(9, 10, 15, 0.4); /* Backdrop base */
+  background: rgba(18, 23, 34, 0.5); /* Backdrop base */
   backdrop-filter: blur(16px);
   z-index: -1;
 }

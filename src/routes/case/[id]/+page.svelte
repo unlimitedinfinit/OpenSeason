@@ -439,6 +439,10 @@
         activeOrderAlert = res.order;
         activeMailAudit = res.mailAudit;
         status = `Decoded order: ${res.order.title}`;
+        if (res.ingested) {
+          status = `Ingested & preserved order in record: ${res.order.title}`;
+          await load();
+        }
       }
     } catch (e) {
       error = String(e);

@@ -128,3 +128,71 @@ fn test_case_bootstrap_organizes_folder_without_moving_originals() {
     let _ = std::fs::remove_dir_all(&temp_src);
     let _ = std::fs::remove_dir_all(&temp_dest);
 }
+
+#[test]
+fn test_end_to_end_order_ingestion_and_workflow_generation() {
+    let temp_case = std::env::temp_dir().join(format!("case-order-e2e-{}", uuid::Uuid::new_v4()));
+    let (_created_dir, _profile) = crate::case_profile::create_case_folder(
+        &temp_case,
+        "Jordan Example v. Sample Agency",
+        crate::case_profile::CaseMode::Standard,
+        "motion",
+    ).unwrap();
+
+    // Create a real valid PDF with show cause language using Typst
+    let order_pdf_path = std::env::temp_dir().join(format!("order-show-cause-{}.pdf", uuid::Uuid::new_v4()));
+    let typst_markup = r#"
+#set page(paper: "us-letter", margin: 1in)
+#set text(font: "Liberation Serif", size: 12pt)
+
+#align(center)[
+  *COLORADO COURT OF APPEALS* \
+  2 East 14th Avenue, Denver, CO 80203 \
+  \
+  Court of Appeals Case No. 2026CA765 \
+  \
+  *ORDER TO SHOW CAUSE*
+]
+
+Upon consideration of the notice of appeal filed herein, it appears that final judgment was entered on December 19, 2025.
+
+IT IS HEREBY ORDERED that appellant shall show cause within 21 days why appeal should not be dismissed for lack of jurisdiction.
+
+Dated: October 6, 2026.
+
+BY THE COURT
+"#;
+    let pdf_bytes = crate::pdf::compile_typst(typst_markup.to_string()).unwrap();
+    std::fs::write(&order_pdf_path, pdf_bytes).unwrap();
+
+    // Ingest the order into the case folder
+    let report = ingest_order_into_case(&temp_case, &order_pdf_path).unwrap();
+
+    // Verify preservation
+    assert!(temp_case.join(&report.saved_order_path).exists());
+    assert!(!report.sha256.is_empty());
+
+    // Verify order decoding
+    assert_eq!(report.decoded_order.title, "Order to Show Cause");
+    assert_eq!(report.decoded_order.court_name.as_deref(), Some("Colorado Court of Appeals"));
+    assert_eq!(report.decoded_order.docket_number.as_deref(), Some("2026CA765"));
+    assert!(report.decoded_order.signer.is_by_the_court());
+
+    // Verify timeline update in case.json
+    let updated_profile = crate::case_profile::load_case(&temp_case).unwrap();
+    assert!(updated_profile.timeline.iter().any(|ev| ev.title == "Order to Show Cause"));
+    assert_eq!(updated_profile.docket_number, "2026CA765");
+    assert_eq!(updated_profile.court.name, "Colorado Court of Appeals");
+
+    // Verify receipt logged
+    assert!(updated_profile.receipts.iter().any(|r| r.operation == "order.ingest_and_classify"));
+
+    // Verify workflow plan was formulated & saved
+    let plan = report.workflow_plan.expect("workflow plan should be formulated");
+    assert!(!plan.steps.is_empty());
+    assert!(temp_case.join("workflow_plan.json").exists());
+
+    // Clean up
+    let _ = std::fs::remove_file(&order_pdf_path);
+    let _ = std::fs::remove_dir_all(&temp_case);
+}

@@ -211,6 +211,34 @@ pub fn cloud_login_cmd(email: String, password: String) -> Result<crate::sync::C
 }
 
 #[tauri::command]
+pub fn cloud_set_session_cmd(
+    id_token: String,
+    email: String,
+    uid: String,
+    refresh_token: Option<String>,
+) -> Result<crate::sync::CloudSession, String> {
+    let clean_token = id_token.trim().to_string();
+    if clean_token.is_empty() {
+        return Err("Auth token or session key cannot be empty.".to_string());
+    }
+    let expires_at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+        + (3600 * 24 * 7);
+
+    let session = crate::sync::CloudSession {
+        id_token: clean_token,
+        refresh_token: refresh_token.unwrap_or_default(),
+        uid: if uid.trim().is_empty() { "google-user".to_string() } else { uid.trim().to_string() },
+        email: if email.trim().is_empty() { "google-auth@justlegal.me".to_string() } else { email.trim().to_string() },
+        expires_at,
+    };
+    crate::sync::save_cloud_session(&session)?;
+    Ok(session)
+}
+
+#[tauri::command]
 pub fn cloud_status_cmd() -> Result<Option<crate::sync::CloudSession>, String> {
     Ok(crate::sync::load_cloud_session())
 }

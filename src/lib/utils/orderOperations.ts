@@ -1,9 +1,10 @@
 import { ipc } from "$lib/ipc";
-import type { CaseArtifact, CaseProfile, DecodedOrder, MailAuditReport } from "$lib/types/case";
+import type { CaseArtifact, CaseProfile, DecodedOrder, IngestedOrderReport, MailAuditReport } from "$lib/types/case";
 
 export interface DecodeOrderResult {
   order: DecodedOrder;
   mailAudit: MailAuditReport | null;
+  ingested?: IngestedOrderReport | null;
 }
 
 export async function decodeOrderForCaseHelper(
@@ -32,7 +33,15 @@ export async function decodeOrderForCaseHelper(
     return null;
   }
 
-  const order = await ipc<DecodedOrder>("order_decode_cmd", { pdfPath: targetPath });
+  let ingested: IngestedOrderReport | null = null;
+  let order: DecodedOrder;
+
+  try {
+    ingested = await ipc<IngestedOrderReport>("order_ingest_cmd", { caseId, pdfPath: targetPath });
+    order = ingested.decoded_order;
+  } catch {
+    order = await ipc<DecodedOrder>("order_decode_cmd", { pdfPath: targetPath });
+  }
 
   let mailAudit: MailAuditReport | null = null;
   if (profile) {
@@ -54,5 +63,5 @@ export async function decodeOrderForCaseHelper(
     }).catch(() => null);
   }
 
-  return { order, mailAudit };
+  return { order, mailAudit, ingested };
 }

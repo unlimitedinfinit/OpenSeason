@@ -1,3 +1,5 @@
+import type { WorkflowPlan } from "./workflow";
+
 export type CaseMode = "standard" | "confidential";
 
 export interface Party {
@@ -146,10 +148,34 @@ export interface OperationReceipt {
 }
 
 export type OrderSigner =
-  | { kind: "ByTheCourt"; detail: { division: string } }
+  | { kind: "ByTheCourt"; detail?: { division?: string | null } }
   | { kind: "NamedJudge"; detail: { name: string; title?: string } }
   | { kind: "Clerk"; detail: { name?: string } }
   | { kind: "Unknown" };
+
+export type DeadlineVerificationStatus = "verified" | "provisional" | "disputed";
+
+export interface SourcedDeadline {
+  pack_id: string;
+  rule_id: string;
+  governing_rule: string;
+  governing_rule_citation: string;
+  trigger_event: string;
+  trigger_date: string;
+  trigger_source: string;
+  day_count: number;
+  raw_due_date: string;
+  due_date: string;
+  days_remaining: number;
+  status: DeadlineVerificationStatus;
+  calculation_basis: string;
+  filing_method: string;
+  extensions_verified: string;
+  rolled_over_weekend_or_holiday: boolean;
+  enlargeable_under?: string | null;
+  tolls_appeal_under?: string | null;
+  verification_checklist: string[];
+}
 
 export interface DecodedOrder {
   title: string;
@@ -166,6 +192,17 @@ export interface DecodedOrder {
   uncertainty_notes: string[];
   source_page: number;
   suggested_actions: string[];
+}
+
+export interface IngestedOrderReport {
+  decoded_order: DecodedOrder;
+  saved_order_path: string;
+  sha256: string;
+  timeline_event_id: string;
+  sourced_deadline?: SourcedDeadline | null;
+  workflow_plan?: WorkflowPlan | null;
+  receipt_id: string;
+  status: string;
 }
 
 export interface MailAuditReport {

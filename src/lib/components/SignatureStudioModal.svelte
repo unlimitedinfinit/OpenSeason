@@ -182,8 +182,8 @@
 </script>
 
 {#if open}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 overflow-y-auto animate-fade-in">
-    <div class="w-full max-w-3xl rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl overflow-hidden my-6">
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto animate-fade-in">
+    <div class="w-full max-w-3xl rounded-2xl border border-border bg-card shadow-2xl overflow-hidden my-6">
       <!-- Modal Header -->
       <div class="bg-card p-5 border-b border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div class="flex items-center gap-3">

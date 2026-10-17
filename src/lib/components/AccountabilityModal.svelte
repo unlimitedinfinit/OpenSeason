@@ -60,10 +60,10 @@
 </script>
 
 {#if open}
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/60 backdrop-blur-xs overflow-y-auto">
-    <div class="relative w-full max-w-3xl my-8 rounded-2xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto animate-fade-in">
+    <div class="relative w-full max-w-3xl my-8 rounded-2xl border border-border bg-card shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
       <!-- Modal Header -->
-      <div class="p-5 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between gap-3 bg-stone-50/70 dark:bg-stone-950/40">
+      <div class="p-5 border-b border-border flex items-center justify-between gap-3 bg-secondary/30">
         <div>
           <div class="flex items-center gap-2">
             <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-teal-500/10 text-teal-600 dark:text-teal-400 font-bold text-xs">

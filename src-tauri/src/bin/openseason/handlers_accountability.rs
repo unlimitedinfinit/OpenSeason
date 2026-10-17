@@ -333,40 +333,74 @@ pub fn handle_ada(cmd: AdaCmd, json: bool) -> Result<(), Box<dyn Error>> {
 
 pub fn handle_order(cmd: OrderCmd, json: bool) -> Result<(), Box<dyn Error>> {
     match cmd {
-        OrderCmd::Decode { pdf } => {
-            let decoded = open_season_lib::order::decoder::decode_order_pdf(&pdf)?;
-            if json {
-                println!("{}", serde_json::to_string_pretty(&json!({
-                    "ok": true,
-                    "never_files": true,
-                    "never_serves": true,
-                    "data": decoded
-                }))?);
-            } else {
-                println!("=== Court Order Decoded: {} ===", decoded.title);
-                if let Some(c) = &decoded.court_name { println!("Court: {c}"); }
-                if let Some(d) = &decoded.docket_number { println!("Docket: {d}"); }
-                println!("Signer: {}", decoded.signer.label());
-                println!("Notice Type: {}", if decoded.is_boilerplate_notice { "Boilerplate Administrative Notice" } else { "Operative Court Order" });
-                if let Some(w) = decoded.candidate_response_window_days {
-                    println!("Candidate Response Window: {w} days");
-                }
-                if let Some(cd) = &decoded.candidate_deadline {
-                    println!("Candidate Deadline: {cd} ({})", decoded.status);
-                }
-                if !decoded.governing_rules_cited.is_empty() {
-                    println!("Rules Cited: {}", decoded.governing_rules_cited.join(", "));
-                }
-                if !decoded.operative_clauses.is_empty() {
-                    println!("\nOperative Clauses:");
-                    for clause in &decoded.operative_clauses {
-                        println!("  - {clause}");
+        OrderCmd::Decode { pdf, case } => {
+            if let Some(case_path) = case {
+                let ingested = open_season_lib::order::decoder::ingest_order_into_case(&case_path, &pdf)?;
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&json!({
+                        "ok": true,
+                        "never_files": true,
+                        "never_serves": true,
+                        "data": ingested
+                    }))?);
+                } else {
+                    println!("=== Court Order Ingested & Classified ===");
+                    println!("Order Title: {}", ingested.decoded_order.title);
+                    println!("Preserved Path: {}", ingested.saved_order_path);
+                    println!("SHA-256 Hash: {}", ingested.sha256);
+                    println!("Signer: {}", ingested.decoded_order.signer.label());
+                    println!("Timeline Event: Registered ({})", ingested.timeline_event_id);
+                    if let Some(dl) = &ingested.sourced_deadline {
+                        println!("\n--- Sourced Response Deadline ---");
+                        println!("Due Date: {} ({:?} - {} days remaining)", dl.due_date, dl.status, dl.days_remaining);
+                        println!("Trigger: {} ({})", dl.trigger_event, dl.trigger_source);
+                        println!("Governing Rule: {}", dl.governing_rule_citation);
+                        println!("Calculation: {}", dl.calculation_basis);
+                        println!("Filing Method: {}", dl.filing_method);
                     }
+                    if let Some(plan) = &ingested.workflow_plan {
+                        println!("\n--- Formulated Workflow Plan ({}) ---", plan.steps.len());
+                        for (i, step) in plan.steps.iter().enumerate() {
+                            println!("  {}. {} (Tool: {})", i + 1, step.title, step.tool_command);
+                        }
+                    }
+                    println!("\nOperation Receipt: {} logged to case.json", ingested.receipt_id);
                 }
-                if !decoded.uncertainty_notes.is_empty() {
-                    println!("\nUncertainties & Warnings:");
-                    for note in &decoded.uncertainty_notes {
-                        println!("  [!] {note}");
+            } else {
+                let decoded = open_season_lib::order::decoder::decode_order_pdf(&pdf)?;
+                if json {
+                    println!("{}", serde_json::to_string_pretty(&json!({
+                        "ok": true,
+                        "never_files": true,
+                        "never_serves": true,
+                        "data": decoded
+                    }))?);
+                } else {
+                    println!("=== Court Order Decoded: {} ===", decoded.title);
+                    if let Some(c) = &decoded.court_name { println!("Court: {c}"); }
+                    if let Some(d) = &decoded.docket_number { println!("Docket: {d}"); }
+                    println!("Signer: {}", decoded.signer.label());
+                    println!("Notice Type: {}", if decoded.is_boilerplate_notice { "Boilerplate Administrative Notice" } else { "Operative Court Order" });
+                    if let Some(w) = decoded.candidate_response_window_days {
+                        println!("Candidate Response Window: {w} days");
+                    }
+                    if let Some(cd) = &decoded.candidate_deadline {
+                        println!("Candidate Deadline: {cd} ({})", decoded.status);
+                    }
+                    if !decoded.governing_rules_cited.is_empty() {
+                        println!("Rules Cited: {}", decoded.governing_rules_cited.join(", "));
+                    }
+                    if !decoded.operative_clauses.is_empty() {
+                        println!("\nOperative Clauses:");
+                        for clause in &decoded.operative_clauses {
+                            println!("  - {clause}");
+                        }
+                    }
+                    if !decoded.uncertainty_notes.is_empty() {
+                        println!("\nUncertainties & Warnings:");
+                        for note in &decoded.uncertainty_notes {
+                            println!("  [!] {note}");
+                        }
                     }
                 }
             }

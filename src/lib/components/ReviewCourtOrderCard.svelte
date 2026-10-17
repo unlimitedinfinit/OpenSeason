@@ -60,7 +60,15 @@
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 text-[11px]">
         <div class="bg-zinc-800/50 p-2 rounded border border-zinc-700/40">
           <span class="text-zinc-400 block">Signer Provenance:</span>
-          <span class="font-medium text-zinc-200">{order.signer.kind === "ByTheCourt" ? "BY THE COURT (Screening Division)" : order.signer.detail?.name || order.signer.kind}</span>
+          <span class="font-medium text-zinc-200">
+            {#if order.signer.kind === "ByTheCourt"}
+              {order.signer.detail?.division ? `BY THE COURT (${order.signer.detail.division})` : "BY THE COURT"}
+            {:else if order.signer.detail?.name}
+              {order.signer.detail.name}{order.signer.detail.title ? `, ${order.signer.detail.title}` : ""}
+            {:else}
+              {order.signer.kind}
+            {/if}
+          </span>
         </div>
         <div class="bg-zinc-800/50 p-2 rounded border border-zinc-700/40">
           <span class="text-zinc-400 block">Source Location:</span>

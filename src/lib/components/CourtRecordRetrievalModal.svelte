@@ -70,8 +70,8 @@
 </script>
 
 {#if open}
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
-    <div class="relative w-full max-w-3xl rounded-xl border border-zinc-700 bg-zinc-900 text-zinc-100 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+    <div class="relative w-full max-w-3xl rounded-xl border border-border bg-card text-foreground shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
       <!-- Modal Header -->
       <div class="flex items-center justify-between border-b border-zinc-800 p-5 bg-zinc-900/90">
         <div class="space-y-1">

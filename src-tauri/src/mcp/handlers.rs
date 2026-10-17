@@ -527,8 +527,14 @@ pub fn call_tool(name: &str, args: &Value) -> Result<Value, String> {
         }
         "order_decode" => {
             let pdf = std::path::PathBuf::from(s("pdf"));
-            let report = crate::order::decoder::decode_order_pdf(&pdf)?;
-            Ok(serde_json::to_value(report).unwrap())
+            let p_str = s("path");
+            if !p_str.is_empty() {
+                let report = crate::order::decoder::ingest_order_into_case(std::path::Path::new(&p_str), &pdf)?;
+                Ok(serde_json::to_value(report).unwrap())
+            } else {
+                let report = crate::order::decoder::decode_order_pdf(&pdf)?;
+                Ok(serde_json::to_value(report).unwrap())
+            }
         }
         "timeline_audit_mail" => {
             let p_str = s("path");

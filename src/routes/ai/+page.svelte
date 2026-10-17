@@ -8,6 +8,7 @@
   import type { BaselineExtensionAssessment } from "$lib/types/consultation";
   import PillarsWorkflowRunner from "$lib/components/ai/PillarsWorkflowRunner.svelte";
   import McpDeveloperTab from "$lib/components/ai/McpDeveloperTab.svelte";
+  import MasterAgentBriefingCard from "$lib/components/ai/MasterAgentBriefingCard.svelte";
 
   interface FormRecommendation {
     form_id: string;
@@ -222,6 +223,14 @@
         </button>
       </div>
     </div>
+
+    <!-- 1. Master Agent Acclimation & Dense Briefing Card -->
+    <MasterAgentBriefingCard
+      {cases}
+      {selectedCaseId}
+      {caseContext}
+      {extensionAssessment}
+    />
 
     <!-- Hero Interactive Command Bar -->
     <div class="rounded-3xl border border-primary/40 bg-gradient-to-b from-card/90 to-card/60 backdrop-blur-2xl p-6 space-y-4 shadow-xl">

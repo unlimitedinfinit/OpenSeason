@@ -4,12 +4,19 @@
 //! ("BY THE COURT" screening staff vs named judge), extracts operative clauses,
 //! and determines candidate response windows without inventing facts.
 
+use std::fs;
 use std::path::Path;
 use chrono::NaiveDate;
 use regex::Regex;
+use sha2::{Digest, Sha256};
 
-use super::types::{DecodedOrder, OrderSigner};
+use super::types::{DecodedOrder, IngestedOrderReport, OrderSigner};
+use crate::case_profile::{load_case, save_case, IssueItem, OperationReceipt, TimelineEvent};
+use crate::deadlines::{compute_sourced_deadline, DeadlineVerificationStatus};
 use crate::pdf_tools::extract_pdf_text;
+use crate::rule_pack::RulePack;
+use crate::workflow::coordinator::save_workflow_plan;
+use crate::workflow::planner::plan_workflow;
 
 /// Decodes plain text from an order or notice.
 pub fn decode_order_text(text: &str, file_name: Option<&str>) -> DecodedOrder {
@@ -36,9 +43,14 @@ pub fn decode_order_text(text: &str, file_name: Option<&str>) -> DecodedOrder {
 
     // 3. Classify Signer
     let signer = if lower.contains("by the court") {
-        OrderSigner::ByTheCourt {
-            division: "Screening / Motions Division".into(),
-        }
+        let division = if lower.contains("en banc") {
+            Some("En Banc".into())
+        } else if lower.contains("motions division") {
+            Some("Motions Division".into())
+        } else {
+            None
+        };
+        OrderSigner::ByTheCourt { division }
     } else if let Some(judge_cap) = Regex::new(r"(?i)(?:honorable|judge|justice)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})").unwrap().captures(text) {
         OrderSigner::NamedJudge {
             name: judge_cap[1].to_string(),
@@ -144,8 +156,8 @@ pub fn decode_order_text(text: &str, file_name: Option<&str>) -> DecodedOrder {
 
     // 11. Uncertainty Notes & Status
     let mut uncertainty_notes = Vec::new();
-    if signer.is_screening_division() {
-        uncertainty_notes.push("Order signed 'BY THE COURT': Originated from staff attorneys/screening division, not a single named judge.".to_string());
+    if signer.is_by_the_court() {
+        uncertainty_notes.push("Order signed 'BY THE COURT': Issued as an institutional order of the court without naming an individual judge.".to_string());
     }
     if is_boilerplate_notice {
         uncertainty_notes.push("Standard boilerplate docketing notice: do not confuse oral argument reference with a scheduling order.".to_string());
@@ -222,4 +234,166 @@ fn parse_loose_date(s: &str) -> Option<NaiveDate> {
         }
     }
     None
+}
+
+/// Ingests a court order PDF into an active case folder:
+/// 1. Verifies and copies original PDF into orders/ (logs SHA-256).
+/// 2. Decodes order title, court, docket, signer (verbatim), and operative instructions.
+/// 3. Updates case profile: adds TimelineEvent, updates docket/court, registers IssueItem if show-cause.
+/// 4. Generates an OperationReceipt in case.json.
+/// 5. Evaluates SourcedDeadline with calculation basis and proof checklist.
+/// 6. Formulates an actionable 3-5 step WorkflowPlan in workflow_plan.json.
+pub fn ingest_order_into_case(
+    case_dir: &Path,
+    order_pdf_path: &Path,
+) -> Result<IngestedOrderReport, String> {
+    if !case_dir.exists() {
+        return Err(format!("Case directory does not exist: {}", case_dir.display()));
+    }
+    if !order_pdf_path.exists() {
+        return Err(format!("Order PDF file not found: {}", order_pdf_path.display()));
+    }
+
+    let mut profile = load_case(case_dir)?;
+
+    // 1. Compute SHA-256 hash and read bytes
+    let bytes = fs::read(order_pdf_path).map_err(|e| format!("Could not read order PDF: {e}"))?;
+    let mut hasher = Sha256::new();
+    hasher.update(&bytes);
+    let hash_hex = format!("{:x}", hasher.finalize());
+
+    // 2. Decode order text and operative clauses
+    let decoded = decode_order_pdf(order_pdf_path)?;
+
+    // 3. Preserve original file safely in <case_dir>/orders/
+    let orders_dir = case_dir.join("orders");
+    fs::create_dir_all(&orders_dir).map_err(|e| format!("Could not create orders directory: {e}"))?;
+    let orig_fname = order_pdf_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("court-order.pdf");
+    let target_dest = orders_dir.join(orig_fname);
+    let final_dest = if target_dest.exists() {
+        orders_dir.join(format!(
+            "{}-{}",
+            uuid::Uuid::new_v4().to_string().chars().take(8).collect::<String>(),
+            orig_fname
+        ))
+    } else {
+        target_dest
+    };
+    fs::copy(order_pdf_path, &final_dest).map_err(|e| format!("Could not copy order to orders/: {e}"))?;
+
+    // 4. Update Case Profile: Timeline, Dockets, Issues, and Operation Receipt
+    let event_id = format!("ev-order-{}", uuid::Uuid::new_v4().to_string().chars().take(8).collect::<String>());
+    let order_date_str = decoded.order_date.clone().unwrap_or_else(|| {
+        chrono::Local::now().format("%Y-%m-%d").to_string()
+    });
+
+    let rel_order_path = format!("orders/{}", final_dest.file_name().unwrap().to_string_lossy());
+    let timeline_notes = format!(
+        "Signer: {}. Operative clauses: {}. Source: {}#page={}.",
+        decoded.signer.label(),
+        if decoded.operative_clauses.is_empty() {
+            "None isolated".into()
+        } else {
+            decoded.operative_clauses.join("; ")
+        },
+        rel_order_path,
+        decoded.source_page
+    );
+
+    profile.timeline.push(TimelineEvent {
+        id: event_id.clone(),
+        title: decoded.title.clone(),
+        date: order_date_str.clone(),
+        notes: timeline_notes,
+    });
+
+    // Backfill court or docket if not yet assigned
+    if profile.docket_number.trim().is_empty() {
+        if let Some(ref d) = decoded.docket_number {
+            profile.docket_number = d.clone();
+        }
+    }
+    if profile.court.name.trim().is_empty() {
+        if let Some(ref c) = decoded.court_name {
+            profile.court.name = c.clone();
+        }
+    }
+
+    // Flag unresolved procedural issue if show cause or dismissal
+    let is_show_cause = decoded.title.to_ascii_lowercase().contains("show cause")
+        || decoded.operative_clauses.iter().any(|c| c.to_ascii_lowercase().contains("show cause"));
+    if is_show_cause {
+        let issue_id = format!("issue-{}", uuid::Uuid::new_v4().to_string().chars().take(8).collect::<String>());
+        profile.issues.push(IssueItem {
+            id: issue_id,
+            title: format!("Response required to {}", decoded.title),
+            category: "jurisdictional".into(),
+            asserted_by: "court".into(),
+            record_citations: vec![format!("{}#page={}", rel_order_path, decoded.source_page)],
+            contrary_authorities: vec![],
+            status: "unresolved".into(),
+            notes: format!("Candidate response window: {:?} days.", decoded.candidate_response_window_days),
+        });
+    }
+
+    // 5. Operation Receipt in Case Profile
+    let receipt_id = format!("rcpt-order-{}", uuid::Uuid::new_v4().to_string().chars().take(8).collect::<String>());
+    let now = chrono::Utc::now().to_rfc3339();
+    profile.receipts.push(OperationReceipt {
+        id: receipt_id.clone(),
+        timestamp: now,
+        operation: "order.ingest_and_classify".into(),
+        invoked_by: "system_or_agent".into(),
+        status: "success".into(),
+        files_modified: vec![rel_order_path.clone(), "case.json".into()],
+        notes: format!("Order '{}' ingested. SHA-256: {}.", decoded.title, hash_hex),
+    });
+
+    save_case(case_dir, &profile)?;
+
+    // 6. Compute Sourced Deadline
+    let sourced_deadline = if let Some(order_date_naive) = parse_loose_date(&order_date_str) {
+        let pack = RulePack::builtin(&profile.rule_pack_id).unwrap_or_else(|_| RulePack::generic());
+        let maybe_rule = pack.find_deadline("reconsideration-appellate")
+            .ok()
+            .or_else(|| pack.find_deadline("reconsideration-trial").ok())
+            .or_else(|| pack.deadlines.first());
+        if let Some(rule) = maybe_rule {
+            let src_ref = format!("{}#page={}", rel_order_path, decoded.source_page);
+            Some(compute_sourced_deadline(
+                &pack,
+                rule,
+                order_date_naive,
+                Some(&src_ref),
+                Some(DeadlineVerificationStatus::Provisional),
+                Some("Court electronic filing portal / Clerk counter"),
+            ))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    // 7. Formulate and persist Workflow Plan
+    let plan = plan_workflow(
+        case_dir,
+        &profile,
+        &format!("Respond to court order: {}", decoded.title),
+    );
+    let _ = save_workflow_plan(case_dir, &plan);
+
+    Ok(IngestedOrderReport {
+        decoded_order: decoded,
+        saved_order_path: rel_order_path,
+        sha256: hash_hex,
+        timeline_event_id: event_id,
+        sourced_deadline,
+        workflow_plan: Some(plan),
+        receipt_id,
+        status: "order_preserved_and_workflow_formulated".into(),
+    })
 }
