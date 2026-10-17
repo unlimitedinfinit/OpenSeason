@@ -1,6 +1,6 @@
 # Troubleshooting & Diagnostic Runbook
 
-Use this runbook to quickly diagnose and fix any issue across the Desktop UI (`OpenSeason.exe`), the Agent CLI/MCP (`openseason-cli.exe`), PDF compilation, Venue Validation, or JustLegal Cloud Sync.
+Use this runbook to quickly diagnose and fix any issue across the Desktop UI (`JustLegalOS.exe` / `OpenSeason.exe`), the Agent CLI/MCP (`JustLegalOS-CLI.exe` / `justlegalos-cli`), PDF compilation, Venue Validation, or JustLegal Cloud Sync.
 
 ---
 
@@ -10,19 +10,19 @@ Run these from PowerShell in `c:\Users\Deus\Documents\DocumentBuilder`:
 
 ```powershell
 # 1. Inspect full Legal OS context for a case folder (1-call diagnostic)
-.\openseason-cli.exe --json case context "C:\Users\Deus\Documents\JustLegal\Cases\<case-slug>"
+.\JustLegalOS-CLI.exe --json case context "C:\Users\Deus\Documents\JustLegal\Cases\<case-slug>"
 
 # 2. Check Guided Intake Wizard status & see what question/field is missing
-.\openseason-cli.exe --json intake status "C:\Users\Deus\Documents\JustLegal\Cases\<case-slug>"
+.\JustLegalOS-CLI.exe --json intake status "C:\Users\Deus\Documents\JustLegal\Cases\<case-slug>"
 
 # 3. Check Multi-Venue Competence Matrix (NJ R. 1:4-4(b), CO Rule 121 conferral, Will witnesses, etc.)
-.\openseason-cli.exe --json check venue "C:\Users\Deus\Documents\JustLegal\Cases\<case-slug>"
+.\JustLegalOS-CLI.exe --json check venue "C:\Users\Deus\Documents\JustLegal\Cases\<case-slug>"
 
 # 4. Run Court Pre-Flight Readiness Audit
-.\openseason-cli.exe --json check preflight "C:\Users\Deus\Documents\JustLegal\Cases\<case-slug>"
+.\JustLegalOS-CLI.exe --json check preflight "C:\Users\Deus\Documents\JustLegal\Cases\<case-slug>"
 
 # 5. View Portfolio Radar across all cases
-.\openseason-cli.exe --json portfolio status
+.\JustLegalOS-CLI.exe --json portfolio status
 ```
 
 ---
@@ -50,7 +50,7 @@ Run these from PowerShell in `c:\Users\Deus\Documents\DocumentBuilder`:
 - **Cause:** Trial-court civil motions in Colorado often use **C.R.C.P. 121 § 1-15(8)** conferral. That label is `needs_verification`. Papers in the Colorado Court of Appeals may be governed by **C.A.R.** instead, so the checker does not assert Rule 121 there.
 - **Fix:** Confirm the rule that governs the paper. For a trial-court motion, open the **Wizard** and answer the Conferral question, or run:
   ```powershell
-  .\openseason-cli.exe --json intake answer <case-dir> --id conferral_status --value "Conferred with opposing party on YYYY-MM-DD; motion is opposed."
+  .\JustLegalOS-CLI.exe --json intake answer <case-dir> --id conferral_status --value "Conferred with opposing party on YYYY-MM-DD; motion is opposed."
   ```
 
 ---
@@ -61,11 +61,13 @@ Run these from PowerShell in `c:\Users\Deus\Documents\DocumentBuilder`:
 
 ---
 
-### Issue E: `OpenSeason.exe` Fails to Copy During Build (`os error 32: process cannot access the file`)
-- **Cause:** `OpenSeason.exe` is currently running in the background, locking the executable on Windows.
-- **Fix:** Close the `OpenSeason` window or stop the process before copying the new binary:
+### Issue E: `JustLegalOS.exe` Fails to Copy During Build (`os error 32: process cannot access the file`)
+- **Cause:** `JustLegalOS.exe` (or `OpenSeason.exe`) is currently running in the background, locking the executable on Windows.
+- **Fix:** Close the application window or stop the process before copying the new binary:
   ```powershell
+  Stop-Process -Name "JustLegalOS" -Force -ErrorAction SilentlyContinue
   Stop-Process -Name "OpenSeason" -Force -ErrorAction SilentlyContinue
+  Copy-Item -Force "src-tauri\target\release\open-season.exe" ".\JustLegalOS.exe"
   Copy-Item -Force "src-tauri\target\release\open-season.exe" ".\OpenSeason.exe"
   ```
 

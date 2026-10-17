@@ -32,7 +32,7 @@ From the repository root (Rust toolchain required):
 
 ```bash
 # Create a case folder (NJ reconsideration)
-cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- --json case create \
+cargo run --manifest-path src-tauri/Cargo.toml --bin justlegalos-cli -- --json case create \
   --path ./my-case \
   --title "Example v. Sample County Clerk" \
   --mode standard \
@@ -40,62 +40,62 @@ cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- --json case c
   --pack nj-app-div
 
 # Import a Markdown draft (md2court subset)
-cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- --json draft import ./my-case --md fixtures/sample-reconsideration.md
-cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- --json draft preview --md fixtures/sample-reconsideration.md
+cargo run --manifest-path src-tauri/Cargo.toml --bin justlegalos-cli -- --json draft import ./my-case --md fixtures/sample-reconsideration.md
+cargo run --manifest-path src-tauri/Cargo.toml --bin justlegalos-cli -- --json draft preview --md fixtures/sample-reconsideration.md
 
 # Checks (never invent cites; never file)
-cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- --json check all ./my-case \
+cargo run --manifest-path src-tauri/Cargo.toml --bin justlegalos-cli -- --json check all ./my-case \
   --pack nj-app-div --rule reconsideration-appellate --trigger-date 2026-01-09
 
 # Export court-formatted Word + PDF
-cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- --json export court-md ./my-case
+cargo run --manifest-path src-tauri/Cargo.toml --bin justlegalos-cli -- --json export court-md ./my-case
 
 # Legal OS 1-Call Context Bundle, Guided Intake Wizard, Predictive Next Steps & Venue Check
-.\openseason-cli.exe --json case context ./my-case
-.\openseason-cli.exe --json intake scan ./my-case
-.\openseason-cli.exe --json intake status ./my-case
-.\openseason-cli.exe --json intake answer ./my-case --id <question_id> --value "<user answer>"
-.\openseason-cli.exe --json case next-steps ./my-case
-.\openseason-cli.exe --json check venue ./my-case
-.\openseason-cli.exe --json case escalate ./my-case --target appellate_appeal
-.\openseason-cli.exe --json portfolio status
+.\JustLegalOS-CLI.exe --json case context ./my-case
+.\JustLegalOS-CLI.exe --json intake scan ./my-case
+.\JustLegalOS-CLI.exe --json intake status ./my-case
+.\JustLegalOS-CLI.exe --json intake answer ./my-case --id <question_id> --value "<user answer>"
+.\JustLegalOS-CLI.exe --json case next-steps ./my-case
+.\JustLegalOS-CLI.exe --json check venue ./my-case
+.\JustLegalOS-CLI.exe --json case escalate ./my-case --target appellate_appeal
+.\JustLegalOS-CLI.exe --json portfolio status
 
 # Court Record Reconstruction & Evidentiary Tiers
-.\openseason-cli.exe --json record inventory ./my-case
-.\openseason-cli.exe --json record reconcile ./my-case --docket "02/15/2026 ORDER GRANTING DISMISSAL..."
-.\openseason-cli.exe --json record missing ./my-case
-.\openseason-cli.exe --json record request-form ./my-case --state NJ
+.\JustLegalOS-CLI.exe --json record inventory ./my-case
+.\JustLegalOS-CLI.exe --json record reconcile ./my-case --docket "02/15/2026 ORDER GRANTING DISMISSAL..."
+.\JustLegalOS-CLI.exe --json record missing ./my-case
+.\JustLegalOS-CLI.exe --json record request-form ./my-case --state NJ
 
 # Judicial Findings Audit, Accountability Routes & Factual Packets
-.\openseason-cli.exe --json review record ./my-case
-.\openseason-cli.exe --json accountability routes ./my-case
-.\openseason-cli.exe --json accountability resources --state NJ --category judicial
-.\openseason-cli.exe --json accountability packet ./my-case --issue <issue_id>
+.\JustLegalOS-CLI.exe --json review record ./my-case
+.\JustLegalOS-CLI.exe --json accountability routes ./my-case
+.\JustLegalOS-CLI.exe --json accountability resources --state NJ --category judicial
+.\JustLegalOS-CLI.exe --json accountability packet ./my-case --issue <issue_id>
 
 # ADA Title II Reasonable Accommodation Petition Generator
-.\openseason-cli.exe --json ada petition ./my-case --name "Jordan Example" --accommodations "remote,reading_time"
+.\JustLegalOS-CLI.exe --json ada petition ./my-case --name "Jordan Example" --accommodations "remote,reading_time"
 
 # Qui Tam / False Claims Act Triage Engine (EO 14395) & Dual-Track Routing
-.\openseason-cli.exe --json qui-tam verify-entity --name "Jordan Health LLC" --state MN
-.\openseason-cli.exe --json qui-tam audit-9b ./my-case
-.\openseason-cli.exe --json qui-tam ingest-observation ./my-case --file "photo.jpg" --notes "Clinic dark during posted hours"
-.\openseason-cli.exe --json qui-tam records-pack ./my-case --state MN
-.\openseason-cli.exe --json qui-tam export-disclosure ./my-case
-.\openseason-cli.exe --json qui-tam format-portal ./my-case --agency HHS
-.\openseason-cli.exe --json qui-tam format-inquiry ./my-case
+.\JustLegalOS-CLI.exe --json qui-tam verify-entity --name "Jordan Health LLC" --state MN
+.\JustLegalOS-CLI.exe --json qui-tam audit-9b ./my-case
+.\JustLegalOS-CLI.exe --json qui-tam ingest-observation ./my-case --file "photo.jpg" --notes "Clinic dark during posted hours"
+.\JustLegalOS-CLI.exe --json qui-tam records-pack ./my-case --state MN
+.\JustLegalOS-CLI.exe --json qui-tam export-disclosure ./my-case
+.\JustLegalOS-CLI.exe --json qui-tam format-portal ./my-case --agency HHS
+.\JustLegalOS-CLI.exe --json qui-tam format-inquiry ./my-case
 
 # Optional local MCP stdio server (same engine)
-cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- mcp
+cargo run --manifest-path src-tauri/Cargo.toml --bin justlegalos-cli -- mcp
 
 # Seal a standard case (writes .sealed; cannot be undone by editing case.json)
 # CLI seal does not encrypt files. Use the desktop vault path for encryption.
-cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- case seal ./my-case
+cargo run --manifest-path src-tauri/Cargo.toml --bin justlegalos-cli -- case seal ./my-case
 
 # Sync stub: standard cases return "not implemented"; confidential cases are refused
-cargo run --manifest-path src-tauri/Cargo.toml --bin openseason -- sync ./my-case --action backup
+cargo run --manifest-path src-tauri/Cargo.toml --bin justlegalos-cli -- sync ./my-case --action backup
 ```
 
-There is also `npm run cli -- ...` or the pre-built `.\openseason-cli.exe` binary in the repo root.
+There is also `npm run cli -- ...` or the pre-built `.\JustLegalOS-CLI.exe` (or `.\justlegalos-cli.exe`) binary in the repo root.
 
 ## Case folder layout
 

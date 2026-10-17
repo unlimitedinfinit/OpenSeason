@@ -71,16 +71,16 @@
     }
   ],
   "desktop_offline_capabilities": {
-    "application": "JustLegal Desktop / OpenSeason Local OS",
+    "application": "JustLegal OS / JustLegal Desktop",
     "airgap_guarantee": "Local vault only; zero telemetry; sealed dossiers strictly isolated from external networks.",
     "cli_tools": [
-      "openseason-cli.exe qui-tam verify-entity --name \"<target>\"",
-      "openseason-cli.exe qui-tam audit-9b <case-folder>",
-      "openseason-cli.exe qui-tam ingest-observation <case-folder> --file <photo>",
-      "openseason-cli.exe qui-tam records-pack <case-folder> --state <STATE>",
-      "openseason-cli.exe qui-tam format-portal <case-folder> --agency HHS",
-      "openseason-cli.exe qui-tam format-inquiry <case-folder>",
-      "openseason-cli.exe qui-tam export-disclosure <case-folder>"
+      "JustLegalOS-CLI.exe qui-tam verify-entity --name \"<target>\"",
+      "JustLegalOS-CLI.exe qui-tam audit-9b <case-folder>",
+      "JustLegalOS-CLI.exe qui-tam ingest-observation <case-folder> --file <photo>",
+      "JustLegalOS-CLI.exe qui-tam records-pack <case-folder> --state <STATE>",
+      "JustLegalOS-CLI.exe qui-tam format-portal <case-folder> --agency HHS",
+      "JustLegalOS-CLI.exe qui-tam format-inquiry <case-folder>",
+      "JustLegalOS-CLI.exe qui-tam export-disclosure <case-folder>"
     ]
   }
 }

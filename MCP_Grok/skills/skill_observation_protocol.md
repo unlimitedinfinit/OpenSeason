@@ -29,7 +29,7 @@ Digital photos taken on smartphones contain embedded EXIF metadata (exact GPS co
 
 When the user ingests a photo into OpenSeason Desktop:
 ```bash
-.\openseason-cli.exe --json qui-tam ingest-observation ./my-case --file "C:/Photos/clinic_tuesday_1400.jpg" --notes "Doors locked, no staff visible at 2:00 PM on Tuesday."
+.\JustLegalOS-CLI.exe --json qui-tam ingest-observation ./my-case --file "C:/Photos/clinic_tuesday_1400.jpg" --notes "Doors locked, no staff visible at 2:00 PM on Tuesday."
 ```
 
 ### What the Engine Does:

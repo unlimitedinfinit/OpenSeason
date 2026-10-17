@@ -64,17 +64,17 @@ After generating this score, invoke `skill_submission_router.md` to guide the us
 ## 4. Recommended CLI Commands (When Desktop Is Connected)
 ```bash
 # 1. Verify entity identity and federal awards
-.\openseason-cli.exe --json qui-tam verify-entity --name "Target Name"
+.\JustLegalOS-CLI.exe --json qui-tam verify-entity --name "Target Name"
 
 # 2. Audit workspace against the 6 Rule 9(b) elements
-.\openseason-cli.exe --json qui-tam audit-9b ./my-case
+.\JustLegalOS-CLI.exe --json qui-tam audit-9b ./my-case
 
 # 3. Format direct agency portal auto-fill blocks
-.\openseason-cli.exe --json qui-tam format-portal ./my-case --agency HHS
+.\JustLegalOS-CLI.exe --json qui-tam format-portal ./my-case --agency HHS
 
 # 4. Format attorney inquiry package
-.\openseason-cli.exe --json qui-tam format-inquiry ./my-case
+.\JustLegalOS-CLI.exe --json qui-tam format-inquiry ./my-case
 
 # 5. Export formal DOJ 60-Day Triage & Relator Disclosure Packet
-.\openseason-cli.exe --json qui-tam export-disclosure ./my-case
+.\JustLegalOS-CLI.exe --json qui-tam export-disclosure ./my-case
 ```

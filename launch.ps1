@@ -42,22 +42,28 @@ function Show-Menu {
 }
 
 function Start-Exe {
-    $exePath = Join-Path $RootDir "OpenSeason.exe"
+    $exePath = Join-Path $RootDir "JustLegalOS.exe"
+    if (-not (Test-Path $exePath)) {
+        $exePath = Join-Path $RootDir "OpenSeason.exe"
+    }
     if (-not (Test-Path $exePath)) {
         $relExe = Join-Path $RootDir "src-tauri\target\release\open-season.exe"
         if (Test-Path $relExe) {
-            Copy-Item $relExe $exePath -Force
+            Copy-Item $relExe (Join-Path $RootDir "JustLegalOS.exe") -Force
+            Copy-Item $relExe (Join-Path $RootDir "OpenSeason.exe") -Force
+            $exePath = Join-Path $RootDir "JustLegalOS.exe"
         } else {
-            Write-Host "`n[WARN] OpenSeason.exe not found. Building release binary first..." -ForegroundColor Yellow
+            Write-Host "`n[WARN] JustLegalOS.exe not found. Building release binary first..." -ForegroundColor Yellow
             Start-Build
+            $exePath = Join-Path $RootDir "JustLegalOS.exe"
         }
     }
-    Write-Host "`n[INFO] Launching standalone OpenSeason.exe..." -ForegroundColor Green
+    Write-Host "`n[INFO] Launching standalone $exePath..." -ForegroundColor Green
     Start-Process -FilePath $exePath
 }
 
 function Start-Dev {
-    Write-Host "`n[INFO] Starting OpenSeason in dev mode (Vite + Tauri)..." -ForegroundColor Cyan
+    Write-Host "`n[INFO] Starting JustLegal OS in dev mode (Vite + Tauri)..." -ForegroundColor Cyan
     Write-Host "[INFO] Press Ctrl+C in this terminal when finished to stop.`n" -ForegroundColor DarkGray
     npm run tauri dev
 }
@@ -76,9 +82,18 @@ function Start-Build {
     Write-Host "`n[INFO] Building production desktop bundles with Tauri..." -ForegroundColor Cyan
     npm run tauri build -- --no-bundle
     if (Test-Path "src-tauri\target\release\open-season.exe") {
+        Copy-Item "src-tauri\target\release\open-season.exe" "JustLegalOS.exe" -Force
         Copy-Item "src-tauri\target\release\open-season.exe" "OpenSeason.exe" -Force
-        Copy-Item "src-tauri\target\release\openseason.exe" "openseason-cli.exe" -Force
-        Write-Host "`n[SUCCESS] Production build complete: OpenSeason.exe in root folder." -ForegroundColor Green
+        if (Test-Path "src-tauri\target\release\justlegalos-cli.exe") {
+            Copy-Item "src-tauri\target\release\justlegalos-cli.exe" "JustLegalOS-CLI.exe" -Force
+            Copy-Item "src-tauri\target\release\justlegalos-cli.exe" "justlegalos-cli.exe" -Force
+            Copy-Item "src-tauri\target\release\justlegalos-cli.exe" "openseason-cli.exe" -Force
+        } else {
+            Copy-Item "src-tauri\target\release\openseason.exe" "JustLegalOS-CLI.exe" -Force
+            Copy-Item "src-tauri\target\release\openseason.exe" "justlegalos-cli.exe" -Force
+            Copy-Item "src-tauri\target\release\openseason.exe" "openseason-cli.exe" -Force
+        }
+        Write-Host "`n[SUCCESS] Production build complete: JustLegalOS.exe and JustLegalOS-CLI.exe ready." -ForegroundColor Green
     }
 }
 

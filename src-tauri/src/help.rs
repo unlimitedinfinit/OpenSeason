@@ -32,12 +32,12 @@ If a tool returns ok=false, read issues[].message. It says how to fix the field.
 
 ## Fast Onboarding for an Existing Folder (Legal OS)
 
-1. `case_context` (`openseason --json case context <dir>`): One call returns the complete case profile, 3-tier classification (`transactional`, `administrative`, `litigation`), governing venue rules (`NJ`, `CO`, `FEDERAL`, `SCOTUS`), timeline events, indexed exhibits, filings, Guided Intake Wizard status, and Predictive Next Steps.
-2. `intake_scan` (`openseason --json intake scan <dir>`): Extracts text offline from PDFs in `orders/` and `evidence/` and surfaces candidate docket numbers, dates, and courts with provenance.
-3. `intake_status` / `intake_answer` (`openseason --json intake status <dir>`): Drives a 1-question-at-a-time wizard (`next_question`). Supports filing-scoped sections (`--filing-id <id>`) so multiple motions never overwrite each other.
-4. `case_next_steps` (`openseason --json case next-steps <dir>`): Computes downstream procedural branches from logged events/orders, including **NJ Pause/Toll (`pause_remaining` under R. 2:4-3(e))** vs. **CO/Federal Full Clock Reset (`reset_full` under FRAP 4(a)(4) / C.R.C.P. 59)** and **Mail Service Offset (+3 days)**.
-5. `check_venue` (`openseason --json check venue <dir>`): Audits venue-specific rules (e.g. NJ R. 1:4-4(b) mandatory certification oath rejecting `"to the best of my knowledge"`, CO conferral/declaration labels marked `needs_verification` because C.A.R. may apply on appeal and a UUDA declaration may need date and place, SCOTUS Rule 14.1 Questions Presented, or Will 2-witness self-proving requirements).
-6. `case_escalate` (`openseason --json case escalate <dir> --target trial_lawsuit|appellate_appeal|mandamus|scotus_cert`): Graduates a Pre-Suit matter to a Lawsuit or escalates a Trial case to Appeal/Mandamus/SCOTUS while copying lower-court orders/filings into the new case's `evidence/` appendix.
+1. `case_context` (`justlegalos-cli --json case context <dir>`): One call returns the complete case profile, 3-tier classification (`transactional`, `administrative`, `litigation`), governing venue rules (`NJ`, `CO`, `FEDERAL`, `SCOTUS`), timeline events, indexed exhibits, filings, Guided Intake Wizard status, and Predictive Next Steps.
+2. `intake_scan` (`justlegalos-cli --json intake scan <dir>`): Extracts text offline from PDFs in `orders/` and `evidence/` and surfaces candidate docket numbers, dates, and courts with provenance.
+3. `intake_status` / `intake_answer` (`justlegalos-cli --json intake status <dir>`): Drives a 1-question-at-a-time wizard (`next_question`). Supports filing-scoped sections (`--filing-id <id>`) so multiple motions never overwrite each other.
+4. `case_next_steps` (`justlegalos-cli --json case next-steps <dir>`): Computes downstream procedural branches from logged events/orders, including **NJ Pause/Toll (`pause_remaining` under R. 2:4-3(e))** vs. **CO/Federal Full Clock Reset (`reset_full` under FRAP 4(a)(4) / C.R.C.P. 59)** and **Mail Service Offset (+3 days)**.
+5. `check_venue` (`justlegalos-cli --json check venue <dir>`): Audits venue-specific rules (e.g. NJ R. 1:4-4(b) mandatory certification oath rejecting `"to the best of my knowledge"`, CO conferral/declaration labels marked `needs_verification` because C.A.R. may apply on appeal and a UUDA declaration may need date and place, SCOTUS Rule 14.1 Questions Presented, or Will 2-witness self-proving requirements).
+6. `case_escalate` (`justlegalos-cli --json case escalate <dir> --target trial_lawsuit|appellate_appeal|mandamus|scotus_cert`): Graduates a Pre-Suit matter to a Lawsuit or escalates a Trial case to Appeal/Mandamus/SCOTUS while copying lower-court orders/filings into the new case's `evidence/` appendix.
 
 ## What do I need to file?
 
@@ -90,12 +90,12 @@ pub fn agent_manifest() -> Value {
         "notice": NEVER_FILE_NOTICE,
         "case_folder": "Documents/JustLegal/Cases/{caseId}/",
         "mcp_launch": {
-            "command": "openseason",
+            "command": "justlegalos-cli",
             "args": ["mcp"],
-            "cwd": "(repository root or the folder that contains openseason-cli)"
+            "cwd": "(repository root or the folder that contains JustLegalOS-CLI)"
         },
         "tools": tools,
-        "starter_prompt": "You are helping with OpenSeason, an offline formatting engine. Read AGENTS.md. Never invent facts, citations, or deadlines. Never file or serve. Call `openseason --json docs playbook` (or MCP playbook) first. If a tool returns ok:false, stop and ask the user. Use only values from the case folder the user points you at."
+        "starter_prompt": "You are helping with JustLegal OS, an offline legal operating system. Read AGENTS.md. Never invent facts, citations, or deadlines. Never file or serve. Call `justlegalos-cli --json docs playbook` (or MCP playbook) first. If a tool returns ok:false, stop and ask the user. Use only values from the case folder the user points you at."
     })
 }
 

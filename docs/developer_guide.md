@@ -32,8 +32,11 @@ npm run build
 
 # 3. Compile standalone release binaries and copy to repo root
 cargo build --release --manifest-path src-tauri/Cargo.toml
+Copy-Item -Force "src-tauri\target\release\open-season.exe" ".\JustLegalOS.exe"
 Copy-Item -Force "src-tauri\target\release\open-season.exe" ".\OpenSeason.exe"
-Copy-Item -Force "src-tauri\target\release\openseason.exe" ".\openseason-cli.exe"
+Copy-Item -Force "src-tauri\target\release\justlegalos-cli.exe" ".\JustLegalOS-CLI.exe"
+Copy-Item -Force "src-tauri\target\release\justlegalos-cli.exe" ".\justlegalos-cli.exe"
+Copy-Item -Force "src-tauri\target\release\justlegalos-cli.exe" ".\openseason-cli.exe"
 ```
 
 ---
@@ -43,7 +46,7 @@ Copy-Item -Force "src-tauri\target\release\openseason.exe" ".\openseason-cli.exe
 ### A. Adding a New State Venue (e.g., NY, CA, TX, PA)
 1. **Rule Pack Data (`templates/rule-packs/{state}.json`):** Create a JSON rule pack defining the state's court holidays and deadline rules (`days`, `count`, `weekend_holiday_roll`). Validate it with:
    ```bash
-   .\openseason-cli.exe --json packs validate templates/rule-packs/{state}.json
+   .\JustLegalOS-CLI.exe --json packs validate templates/rule-packs/{state}.json
    ```
 2. **Venue Competence Profile (`src-tauri/src/legal_os.rs`):**
    - Add the state's sworn statement statute and verbatim oath string in `resolve_venue(profile: &CaseProfile)`.

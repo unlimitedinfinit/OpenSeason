@@ -40,13 +40,13 @@ This directory contains the public templates, system prompts, skills, and bridge
 
 ## How GrokBot Interacts with JustLegal Desktop
 
-When a user has **JustLegal Desktop** (`OpenSeason.exe` / `openseason-cli.exe`) installed on Windows or macOS:
+When a user has **JustLegal Desktop** (`JustLegalOS.exe` / `JustLegalOS-CLI.exe`) installed on Windows or macOS:
 1. GrokBot can request authorization to execute read-only diagnostic commands:
    ```bash
-   .\openseason-cli.exe --json doctor
-   .\openseason-cli.exe --json case context <path>
-   .\openseason-cli.exe --json qui-tam verify-entity --name "<target>"
-   .\openseason-cli.exe --json qui-tam audit-9b <path>
+   .\JustLegalOS-CLI.exe --json doctor
+   .\JustLegalOS-CLI.exe --json case context <path>
+   .\JustLegalOS-CLI.exe --json qui-tam verify-entity --name "<target>"
+   .\JustLegalOS-CLI.exe --json qui-tam audit-9b <path>
    ```
 2. **Explicit User Approval:** Grok requires the user to approve local command execution on their machine.
 3. **Airgap Enforcement:** The local engine strictly forbids remote inspection of `.sealed` or confidential case folders, preserving total protection for sensitive qui tam dossiers.

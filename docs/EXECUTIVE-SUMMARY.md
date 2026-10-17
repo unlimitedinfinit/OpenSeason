@@ -3,17 +3,17 @@
 **Document Version:** 1.0.0  
 **Project:** OpenSeason Offline Case Manager & Court Document Assembly Engine  
 **Target Environments:** Windows 10/11, macOS, Linux  
-**Binaries:** `OpenSeason.exe` (Desktop GUI), `openseason-cli.exe` (Headless CLI & MCP Server)
+**Binaries:** `JustLegalOS.exe` (Desktop GUI), `JustLegalOS-CLI.exe` (Headless CLI & MCP Server)
 
 ---
 
 ## 1. High-Level Vision & Purpose
 
-OpenSeason is a privacy-first, local case management platform and deterministic court document assembly engine. It turns a pro se litigant or attorney's own words, drafts, and evidence into court-shaped Word (`.docx`) and publication-grade PDF documents without practicing law, without hallucinating citations, and without ever filing or serving court papers.
+JustLegal OS is a privacy-first, local case management platform and deterministic court document assembly engine powered by the OpenSeason core. It turns a pro se litigant or attorney's own words, drafts, and evidence into court-shaped Word (`.docx`) and publication-grade PDF documents without practicing law, without hallucinating citations, and without ever filing or serving court papers.
 
-The foundational design of OpenSeason treats the local Rust engine (`open_season_lib`) as a **shared deterministic legal compiler** accessed identically through:
-1. **The Desktop Window (`OpenSeason.exe`):** A responsive Svelte 5 desktop interface built on Tauri 2.
-2. **The Agent CLI & MCP Server (`openseason-cli.exe`):** A headless command-line interface and Model Context Protocol stdio server that enables autonomous AI assistants to manage cases and assemble filings with zero improvisation.
+The foundational design of JustLegal OS treats the local Rust engine (`open_season_lib`) as a **shared deterministic legal compiler** accessed identically through:
+1. **The Desktop Window (`JustLegalOS.exe`):** A responsive Svelte 5 desktop interface built on Tauri 2.
+2. **The Agent CLI & MCP Server (`JustLegalOS-CLI.exe`):** A headless command-line interface and Model Context Protocol stdio server that enables autonomous AI assistants to manage cases and assemble filings with zero improvisation.
 
 ---
 
@@ -80,8 +80,8 @@ The implementation has passed all system verification gates:
 - **TypeScript & Svelte Check:** `npm run check` completed with 0 errors.
 - **Production Build:** `npm run build` completed cleanly in 9.96s.
 - **Standalone Binaries:** 
-  - `OpenSeason.exe` (Desktop application GUI, 45.1 MB)
-  - `openseason-cli.exe` (Command line interface and MCP server, 35.7 MB)
+  - `JustLegalOS.exe` (Desktop application GUI, 45.1 MB)
+  - `JustLegalOS-CLI.exe` (Command line interface and MCP server, 35.7 MB)
 - **Convenience Launchers:**
   - `launch.ps1` (PowerShell launch script with interactive menu)
   - `launch.bat` (Double-click batch launcher with options)
@@ -105,17 +105,17 @@ Documents/JustLegal/Cases/{caseId}/
 
 ### Key Diagnostic Commands
 - **Check case readiness:**  
-  `.\openseason-cli.exe --json check preflight Documents/JustLegal/Cases/{caseId}`
+  `.\JustLegalOS-CLI.exe --json check preflight Documents/JustLegal/Cases/{caseId}`
 - **Check transcripts:**  
-  `.\openseason-cli.exe --json check transcripts Documents/JustLegal/Cases/{caseId}`
+  `.\JustLegalOS-CLI.exe --json check transcripts Documents/JustLegal/Cases/{caseId}`
 - **Assemble exhibit packet:**  
-  `.\openseason-cli.exe --json export exhibit-packet Documents/JustLegal/Cases/{caseId} --prefix {PREFIX}`
+  `.\JustLegalOS-CLI.exe --json export exhibit-packet Documents/JustLegal/Cases/{caseId} --prefix {PREFIX}`
 - **Inspect court form:**  
-  `.\openseason-cli.exe --json form inspect path/to/form.pdf`
+  `.\JustLegalOS-CLI.exe --json form inspect path/to/form.pdf`
 - **Fill court form:**  
-  `.\openseason-cli.exe --json form fill --case Documents/JustLegal/Cases/{caseId} path/to/form.pdf`
+  `.\JustLegalOS-CLI.exe --json form fill --case Documents/JustLegal/Cases/{caseId} path/to/form.pdf`
 - **Verify cloud status:**  
-  `.\openseason-cli.exe --json cloud status`
+  `.\JustLegalOS-CLI.exe --json cloud status`
 
 ### Scalability Principles
 1. **Preserve Determinism:** Never introduce LLM calls into the core Rust compilation path. All layout math, Typst typesetting, and AcroForm parsing must remain deterministic and reproducible.

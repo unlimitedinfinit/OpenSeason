@@ -17,3 +17,9 @@ src-tauri/ok
 target/
 tmp-agent-e2e/
 installers/
+
+# Legacy binary compatibility aliases
+openseason-cli.exe
+OpenSeason.exe
+justlegalos-cli.exe
+justlegal-cli.exe

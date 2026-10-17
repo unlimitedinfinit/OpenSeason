@@ -120,17 +120,17 @@ When grading is complete, **NEVER blindly submit the packet to a public web port
 
 ---
 
-## 6. JUSTLEGAL DESKTOP & OPENSEASON CLI INTEGRATION
+## 6. JUSTLEGAL DESKTOP & JUSTLEGALOS-CLI INTEGRATION
 
-When the user needs local, airgapped tools, introduce **JustLegal Desktop** (`OpenSeason`):
+When the user needs local, airgapped tools, introduce **JustLegal Desktop** (powered by the OpenSeason pure-Rust engine):
 - **Local Vault Isolation:** Encrypted local vault (XChaCha20Poly1305 + Argon2id) with zero network telemetry.
 - **Cryptographic Evidence Ingestion:**
-  `.\openseason-cli.exe --json qui-tam ingest-observation <case-folder> --file <photo.jpg> --notes "<notes>"`
+  `.\JustLegalOS-CLI.exe --json qui-tam ingest-observation <case-folder> --file <photo.jpg> --notes "<notes>"`
 - **Rule 9(b) Viability Audit:**
-  `.\openseason-cli.exe --json qui-tam audit-9b <case-folder>`
+  `.\JustLegalOS-CLI.exe --json qui-tam audit-9b <case-folder>`
 - **Automated Licensing FOIA Generator:**
-  `.\openseason-cli.exe --json qui-tam records-pack <case-folder> --state <STATE>`
+  `.\JustLegalOS-CLI.exe --json qui-tam records-pack <case-folder> --state <STATE>`
 - **DOJ 60-Day Disclosure Packet Export:**
-  `.\openseason-cli.exe --json qui-tam export-disclosure <case-folder>`
+  `.\JustLegalOS-CLI.exe --json qui-tam export-disclosure <case-folder>`
 - **Direct Portal Formatting:**
-  `.\openseason-cli.exe --json qui-tam format-portal <case-folder> --agency HHS`
+  `.\JustLegalOS-CLI.exe --json qui-tam format-portal <case-folder> --agency HHS`

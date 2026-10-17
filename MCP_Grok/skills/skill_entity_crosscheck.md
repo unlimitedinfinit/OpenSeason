@@ -41,5 +41,5 @@ The federal government publishes all contract obligations, assistance grants, an
 - **Web Browser (Zero-Install):** Direct the user to [justlegal.me/fraud-triage](https://justlegal.me/fraud-triage) to search NPPES and USAspending simultaneously.
 - **Desktop CLI:**
   ```bash
-  .\openseason-cli.exe --json qui-tam verify-entity --name "ABC Care Center" --state MN
+  .\JustLegalOS-CLI.exe --json qui-tam verify-entity --name "ABC Care Center" --state MN
   ```

@@ -16,7 +16,7 @@ Agents and external LLMs interface with the engine via the `openseason` CLI (`op
 
 - **Level 1 — JustLegal GrokBot (x.ai Marketplace Blueprint)**: Public conversational legal navigator (Civil + Fraud/Whistleblower personas) with heavy standalone capabilities, zero local installation required.
 - **Level 2 — JustLegal.me Resource Hub**: Public cloud education center, verified AcroForm directory, and `/fraud-triage` hub for whistleblower orientation.
-- **Level 3 — JustLegal Desktop (`.exe` / `.msi`) & Pure-Rust CLI (`openseason-cli.exe`)**: Local, offline legal OS with an encrypted, airgapped vault for Qui Tam/False Claims Act dossiers, CMS NPI/USAspending cross-checking, Rule 9(b) viability audits, and cryptographic evidence hashing.
+- **Level 3 — JustLegal Desktop (`.exe` / `.msi`) & Pure-Rust CLI (`JustLegalOS-CLI.exe`)**: Local, offline legal OS with an encrypted, airgapped vault for Qui Tam/False Claims Act dossiers, CMS NPI/USAspending cross-checking, Rule 9(b) viability audits, and cryptographic evidence hashing.
 
 ---
 
@@ -68,7 +68,7 @@ Built specifically to support **Executive Order 14395** (*Preserving the Integri
 - **Court Record Reconstruction & Evidentiary Tiers (`record inventory`, `record reconcile`, `record missing`)**: 4-tier evidentiary separation (Tier 1: Official Clerk-stamped record, Tier 2: Certified hearing transcripts, Tier 3: Personal case archive, Tier 4: Potential unsubmitted evidence), automated text-docket reconciliation, and 1-click Court Records Request Form (NJ Form CN 10200 @ 5¢/7¢ per page and PACER fee waiver notices).
 - **Multi-Track Records & Accountability Engine (`review record`, `accountability routes`, `accountability packet`)**: Detects judicial findings unsupported by or contradicted by the verified docket record. Distinguishes court merits remedies (Interlocutory *Lawson v. Dewar* R. 4:42-2 review vs. Final R. 4:49-2) from judicial conduct (NJ ACJC Form CN 11166, CO CJD) and attorney ethics (OAE), enforcing strict non-tolling warnings. Assembles objective, hash-grounded factual discrepancy packets without emotional rhetoric.
 - **Title II ADA Equal Access & Accommodation Petition Generator (`ada petition`)**: Generates formal, confidential administrative petitions under 42 U.S.C. § 12132, 28 C.F.R. Part 35, NJ Directive #01-19, and CO CJD 06-01 for remote appearances, hearing breaks, assistive listening (CART), mobility access, and support persons, routed directly to the Trial Court Administrator.
-- **Ready-to-Run Standalone Binaries & Installers**: Pre-compiled `OpenSeason.exe` (desktop GUI) and `openseason-cli.exe` (CLI/MCP server) in the root repository, plus production Windows installers in `installers/` (`OpenSeason_0.1.0_x64-setup.exe` and `OpenSeason_0.1.0_x64_en-US.msi`).
+- **Ready-to-Run Standalone Binaries & Installers**: Pre-compiled `JustLegalOS.exe` (desktop GUI) and `JustLegalOS-CLI.exe` (CLI/MCP server) in the root repository, plus production Windows installers in `installers/` (`OpenSeason_0.1.0_x64-setup.exe` and `OpenSeason_0.1.0_x64_en-US.msi`).
 - **One-Click Launch Scripts**: `launch.ps1` (PowerShell) and `launch.bat` (batch file) for immediate menu or direct launching.
 
 ## Documentation
@@ -89,8 +89,8 @@ This software is a formatting engine, not a lawyer. Every export tells the user 
 
 ## Technology
 
-- Desktop: Tauri v2 (`OpenSeason.exe`)
-- CLI & MCP: Rust native binary (`openseason-cli.exe`)
+- Desktop: Tauri v2 (`JustLegalOS.exe` / `OpenSeason.exe`)
+- CLI & MCP: Rust native binary (`JustLegalOS-CLI.exe` / `justlegalos-cli`)
 - UI: Svelte 5, TypeScript, Tailwind CSS
 - Backend: Rust, SQLite per confidential hunt, XChaCha20Poly1305 + Argon2id
 - Documents: Typst for PDF, Office Open XML for Word, `pdf-forms` for AcroForms
@@ -126,11 +126,11 @@ npm run check
 npm run build
 ```
 
-Pre-built Windows installers are provided in `installers/` (`OpenSeason_0.1.0_x64-setup.exe` and `OpenSeason_0.1.0_x64_en-US.msi`) alongside the pre-compiled `OpenSeason.exe` and `openseason-cli.exe` binaries in the root directory. To rebuild platform installers from source, run `npm run tauri build`.
+Pre-built Windows installers are provided in `installers/` (`OpenSeason_0.1.0_x64-setup.exe` and `OpenSeason_0.1.0_x64_en-US.msi`) alongside the pre-compiled `JustLegalOS.exe` and `JustLegalOS-CLI.exe` binaries in the root directory. To rebuild platform installers from source, run `npm run tauri build`.
 
 ### Command line (for a local AI agent)
 
-The CLI is a first-class surface, equal to the window. Read [AGENTS.md](AGENTS.md) and [docs/AGENT-INTERFACE.md](docs/AGENT-INTERFACE.md). `--json` returns `{ ok, never_files, never_serves, issues, data }`. `openseason mcp` is the same engine over stdio.
+The CLI (`JustLegalOS-CLI.exe`) is a first-class surface, equal to the window. Read [AGENTS.md](AGENTS.md) and [docs/AGENT-INTERFACE.md](docs/AGENT-INTERFACE.md). `--json` returns `{ ok, never_files, never_serves, issues, data }`. `justlegalos-cli mcp` is the same engine over stdio.
 
 ```bash
 bash examples/agent-e2e.sh
@@ -148,7 +148,7 @@ A fake sample case lives at `fixtures/sample-appeal-case/` (Jordan Example v. Sa
 
 ```
 src/                 Svelte 5 UI (home, wizard, unified case dashboard)
-src-tauri/           Rust backend, CLI binary `openseason`
+src-tauri/           Rust backend, CLI binary `justlegalos-cli`
 templates/           Court formatting rules and rule packs
 fixtures/            Fake sample case and sample Markdown
 examples/            Headless agent end-to-end script

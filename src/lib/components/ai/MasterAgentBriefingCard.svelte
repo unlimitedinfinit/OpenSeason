@@ -65,65 +65,65 @@ ALL DETECTED MATTERS IN USER WORKSPACE:
 ${allMattersList}
 
 =============================================================================
-JUSTLEGAL DESKTOP & OPENSEASON CLI TOOLKIT (PURE-RUST ENGINE):
-You can execute and recommend the following deterministic commands via powershell / terminal (using \`openseason\` or \`.\\openseason-cli.exe\`):
+JUSTLEGAL OS CLI TOOLKIT (JUSTLEGALOS-CLI PURE-RUST ENGINE):
+You can execute and recommend the following deterministic commands via powershell / terminal (using \`justlegalos-cli\` or \`.\\JustLegalOS-CLI.exe\`):
 
 1. CONTEXT & 360-DEGREE AUDIT:
-   openseason --json case context <path-to-case-folder>
+   justlegalos-cli --json case context <path-to-case-folder>
    (Returns full Legal OS 1-call bundle: profile, events, rule checks, gaps, and next actions)
 
 2. GUIDED INTAKE WIZARD & TIER-1 WILL SCAN:
-   openseason --json intake scan <path-to-case-folder>
-   openseason --json intake answer <path-to-case-folder> --id <question_id> --value "<user_answer>"
+   justlegalos-cli --json intake scan <path-to-case-folder>
+   justlegalos-cli --json intake answer <path-to-case-folder> --id <question_id> --value "<user_answer>"
 
 3. PREDICTIVE NEXT STEPS & SAFEGUARDS:
-   openseason --json case next-steps <path-to-case-folder>
-   openseason --json check venue <path-to-case-folder>
+   justlegalos-cli --json case next-steps <path-to-case-folder>
+   justlegalos-cli --json check venue <path-to-case-folder>
 
 4. 30-DAY BASELINE EXTENSION SAFEGUARD (PROCEDURAL LIFE-LINE):
-   openseason --json motion new <path-to-case-folder> --title "Motion for 30-Day Extension of Time" --kind enlarge --enlarge-days 30 --enlarge-target "Brief / Notice"
+   justlegalos-cli --json motion new <path-to-case-folder> --title "Motion for 30-Day Extension of Time" --kind enlarge --enlarge-days 30 --enlarge-target "Brief / Notice"
    (When a user installs the software without full case records or timeline, standard practice is to request a 30-day baseline extension under local court rules. Generates motion + opposing counsel conferral email).
 
 5. COURT RECORD RECONSTRUCTION & TRANSCRIPT AUDIT:
-   openseason --json record inventory <path-to-case-folder>
-   openseason --json record reconcile <path-to-case-folder> --docket "<raw-court-docket-text>"
-   openseason --json record missing <path-to-case-folder>
-   openseason --json record request-form <path-to-case-folder> --state <NJ|CO|CA|FED>
+   justlegalos-cli --json record inventory <path-to-case-folder>
+   justlegalos-cli --json record reconcile <path-to-case-folder> --docket "<raw-court-docket-text>"
+   justlegalos-cli --json record missing <path-to-case-folder>
+   justlegalos-cli --json record request-form <path-to-case-folder> --state <NJ|CO|CA|FED>
 
 6. JUDICIAL FINDINGS AUDIT & DISCREPANCY TESTING:
-   openseason --json review record <path-to-case-folder>
+   justlegalos-cli --json review record <path-to-case-folder>
    (Compares court order findings against actual record exhibits to flag unsupported assertions).
 
 7. JUDICIAL ACCOUNTABILITY & ETHICS PACKETS:
-   openseason --json accountability routes <path-to-case-folder>
-   openseason --json accountability packet <path-to-case-folder> --issue <issue_id>
+   justlegalos-cli --json accountability routes <path-to-case-folder>
+   justlegalos-cli --json accountability packet <path-to-case-folder> --issue <issue_id>
 
 8. ADA TITLE II REASONABLE ACCOMMODATION PETITION:
-   openseason --json ada petition <path-to-case-folder> --name "<Litigant Name>" --accommodations "remote,reading_time,breaks"
+   justlegalos-cli --json ada petition <path-to-case-folder> --name "<Litigant Name>" --accommodations "remote,reading_time,breaks"
 
 9. SERVICE PROOF & PROPOSED ORDERS:
-   openseason --json service cert <path-to-case-folder> --doc-title "<Filing Title>" --servee "<Opposing Counsel>"
-   openseason --json service order <path-to-case-folder> --motion-title "<Motion Title>" --relief "<Operative Clauses>"
+   justlegalos-cli --json service cert <path-to-case-folder> --doc-title "<Filing Title>" --servee "<Opposing Counsel>"
+   justlegalos-cli --json service order <path-to-case-folder> --motion-title "<Motion Title>" --relief "<Operative Clauses>"
 
 10. DETERMINISTIC COURT EXPORTS (DOCX & PDF):
-    openseason --json export court-md <path-to-case-folder>
+    justlegalos-cli --json export court-md <path-to-case-folder>
     (Generates clean, court-compliant Word DOCX and 28-line numbered PDF).
 
 11. OFFLINE AIRGAPPED PDF POWER STATION:
-    openseason --json pdf merge --inputs <file1.pdf>,<file2.pdf> --output <merged.pdf>
-    openseason --json pdf split --input <source.pdf> --pages "1-5,8"
-    openseason --json pdf rotate --input <source.pdf> --degrees 90
-    openseason --json pdf redact --input <source.pdf> --patterns "SSN,DOB"
+    justlegalos-cli --json pdf merge --inputs <file1.pdf>,<file2.pdf> --output <merged.pdf>
+    justlegalos-cli --json pdf split --input <source.pdf> --pages "1-5,8"
+    justlegalos-cli --json pdf rotate --input <source.pdf> --degrees 90
+    justlegalos-cli --json pdf redact --input <source.pdf> --patterns "SSN,DOB"
 
 12. QUI TAM / FALSE CLAIMS ACT & EO 14395 TRIAGE (CALLING CARD & DUAL-TRACK ROUTING):
-    openseason --json qui-tam verify-entity --name "<Entity Name>" --state <State>
-    openseason --json qui-tam audit-9b <path-to-case-folder>
-    openseason --json qui-tam ingest-observation <path-to-case-folder> --file <photo.jpg> --notes "<Observed details>"
-    openseason --json qui-tam records-pack <path-to-case-folder> --state <State>
-    openseason --json qui-tam export-disclosure <path-to-case-folder>
-    openseason --json qui-tam format-portal <path-to-case-folder> --agency <HHS|DOJ|STATE>
-    openseason --json qui-tam format-inquiry <path-to-case-folder>
-    (Automates preliminary federal OIG fraud triage: CMS NPPES checks, Rule 9(b) A-F readiness grade, SHA-256 evidence hashing, and dual-track routing between Track A Qui Tam Counsel on 100% contingency under statutory seal vs Track B <2,000 char portal auto-fills carrying the standardized [OPEN-SEASON v1.0 | EO-14395] Calling Card).
+    justlegalos-cli --json qui-tam verify-entity --name "<Entity Name>" --state <State>
+    justlegalos-cli --json qui-tam audit-9b <path-to-case-folder>
+    justlegalos-cli --json qui-tam ingest-observation <path-to-case-folder> --file <photo.jpg> --notes "<Observed details>"
+    justlegalos-cli --json qui-tam records-pack <path-to-case-folder> --state <State>
+    justlegalos-cli --json qui-tam export-disclosure <path-to-case-folder>
+    justlegalos-cli --json qui-tam format-portal <path-to-case-folder> --agency <HHS|DOJ|STATE>
+    justlegalos-cli --json qui-tam format-inquiry <path-to-case-folder>
+    (Automates preliminary federal OIG fraud triage: CMS NPPES checks, Rule 9(b) A-F readiness grade, SHA-256 evidence hashing, and dual-track routing between Track A Qui Tam Counsel on 100% contingency under statutory seal vs Track B <2,000 char portal auto-fills carrying the standardized [JUSTLEGAL OS | OPEN-SEASON v1.0 | EO-14395] Calling Card).
 
 =============================================================================
 CASE FOLDER ARCHITECTURE & REPOSITORY LAYOUT:

@@ -85,21 +85,26 @@ goto :menu
 
 :run_exe
 cls
-if not exist "OpenSeason.exe" (
+if not exist "JustLegalOS.exe" if not exist "OpenSeason.exe" (
     if exist "src-tauri\target\release\open-season.exe" (
+        copy /y "src-tauri\target\release\open-season.exe" "JustLegalOS.exe" >nul
         copy /y "src-tauri\target\release\open-season.exe" "OpenSeason.exe" >nul
     ) else (
-        echo [WARN] OpenSeason.exe not found. Building release binary first...
+        echo [WARN] JustLegalOS.exe not found. Building release binary first...
         call :run_build
     )
 )
-echo [INFO] Launching standalone OpenSeason.exe...
-start "" "OpenSeason.exe"
+echo [INFO] Launching standalone JustLegalOS.exe...
+if exist "JustLegalOS.exe" (
+    start "" "JustLegalOS.exe"
+) else (
+    start "" "OpenSeason.exe"
+)
 exit /b 0
 
 :run_dev
 cls
-echo [INFO] Starting OpenSeason in dev mode (Vite + Tauri)...
+echo [INFO] Starting JustLegal OS in dev mode (Vite + Tauri)...
 echo [INFO] Press Ctrl+C in this terminal when finished to stop the server.
 echo.
 call npm run tauri dev
@@ -136,10 +141,19 @@ if errorlevel 1 (
     echo.
     echo [ERROR] Build failed.
 ) else (
+    copy /y "src-tauri\target\release\open-season.exe" "JustLegalOS.exe" >nul
     copy /y "src-tauri\target\release\open-season.exe" "OpenSeason.exe" >nul
-    copy /y "src-tauri\target\release\openseason.exe" "openseason-cli.exe" >nul
+    if exist "src-tauri\target\release\justlegalos-cli.exe" (
+        copy /y "src-tauri\target\release\justlegalos-cli.exe" "JustLegalOS-CLI.exe" >nul
+        copy /y "src-tauri\target\release\justlegalos-cli.exe" "justlegalos-cli.exe" >nul
+        copy /y "src-tauri\target\release\justlegalos-cli.exe" "openseason-cli.exe" >nul
+    ) else (
+        copy /y "src-tauri\target\release\openseason.exe" "JustLegalOS-CLI.exe" >nul
+        copy /y "src-tauri\target\release\openseason.exe" "justlegalos-cli.exe" >nul
+        copy /y "src-tauri\target\release\openseason.exe" "openseason-cli.exe" >nul
+    )
     echo.
-    echo [SUCCESS] Production build complete: OpenSeason.exe in root folder.
+    echo [SUCCESS] Production build complete: JustLegalOS.exe and JustLegalOS-CLI.exe ready.
 )
 exit /b %ERRORLEVEL%
 

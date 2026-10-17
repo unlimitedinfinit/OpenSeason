@@ -48,5 +48,14 @@ flate2 = "1"
 lopdf = "0.34"
 
 [[bin]]
+name = "justlegalos-cli"
+path = "src/bin/openseason/main.rs"
+
+[[bin]]
+name = "justlegal-cli"
+path = "src/bin/openseason/main.rs"
+
+[[bin]]
 name = "openseason"
 path = "src/bin/openseason/main.rs"
+

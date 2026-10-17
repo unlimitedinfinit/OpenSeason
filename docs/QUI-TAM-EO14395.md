@@ -65,7 +65,7 @@ Federal qui tam complaints and disclosure packets must remain **strictly confide
 │                        Local Relator Workstation                       │
 │                                                                        │
 │  ┌─────────────────────────┐           ┌────────────────────────────┐  │
-│  │   JustLegal Desktop     │           │    openseason-cli.exe      │  │
+│  │   JustLegal Desktop     │           │    JustLegalOS-CLI.exe     │  │
 │  │   (Tauri GUI / Svelte)  │           │    (Pure Rust Engine)      │  │
 │  └────────────┬────────────┘           └─────────────┬──────────────┘  │
 │               │                                      │                 │
@@ -109,23 +109,23 @@ The qui tam subsystem consists of five modular Rust components:
 
 ### 5. CLI Command Specification
 
-All capabilities are available to both human operators and autonomous local AI agents via `openseason-cli.exe --json qui-tam <subcommand>`:
+All capabilities are available to both human operators and autonomous local AI agents via `JustLegalOS-CLI.exe --json qui-tam <subcommand>`:
 
 #### 1. Entity Cross-Check (`qui-tam verify-entity`)
 ```bash
-.\openseason-cli.exe --json qui-tam verify-entity --name "North Star Health" --state MN
+.\JustLegalOS-CLI.exe --json qui-tam verify-entity --name "North Star Health" --state MN
 ```
 *Queries CMS NPPES v2.1 for active/deactivated NPIs, provider taxonomy, practice location, and checks USAspending for prime award history.*
 
 #### 2. Rule 9(b) Viability Audit (`qui-tam audit-9b`)
 ```bash
-.\openseason-cli.exe --json qui-tam audit-9b ./my-case
+.\JustLegalOS-CLI.exe --json qui-tam audit-9b ./my-case
 ```
 *Audits `case.json` against the 6 Rule 9(b) elements (Who, What, When, Where, How, Scienter) and outputs a deterministic score with missing element warnings.*
 
 #### 3. Field Observation Ingestion (`qui-tam ingest-observation`)
 ```bash
-.\openseason-cli.exe --json qui-tam ingest-observation ./my-case \
+.\JustLegalOS-CLI.exe --json qui-tam ingest-observation ./my-case \
   --file "C:\Photos\facility_exterior.jpg" \
   --notes "Building dark during posted clinical hours; no patient traffic." \
   --observer "Jordan Example"
@@ -134,25 +134,25 @@ All capabilities are available to both human operators and autonomous local AI a
 
 #### 4. Licensing & Records Request Pack (`qui-tam records-pack`)
 ```bash
-.\openseason-cli.exe --json qui-tam records-pack ./my-case --state MN --agency "Department of Human Services"
+.\JustLegalOS-CLI.exe --json qui-tam records-pack ./my-case --state MN --agency "Department of Human Services"
 ```
 *Generates statutory records request under Minnesota Government Data Practices Act (M.S. § 13.01 et seq.) or state equivalent.*
 
 #### 5. DOJ Written Disclosure Packet Export (`qui-tam export-disclosure`)
 ```bash
-.\openseason-cli.exe --json qui-tam export-disclosure ./my-case
+.\JustLegalOS-CLI.exe --json qui-tam export-disclosure ./my-case
 ```
 *Compiles the formal Relator Written Disclosure Statement required by 31 U.S.C. § 3730(b)(2), producing `openseason-disclosure-v1.json` and `DOJ_Relator_Disclosure_Packet.pdf` in `exports/`.*
 
 #### 6. Agency Portal Auto-Fill Formatter (`qui-tam format-portal`)
 ```bash
-.\openseason-cli.exe --json qui-tam format-portal ./my-case --agency HHS
+.\JustLegalOS-CLI.exe --json qui-tam format-portal ./my-case --agency HHS
 ```
 *Formats an administrative submission payload pre-trimmed to character limits (<2,000 characters) for official government web forms (HHS-OIG, DOJ Civil Fraud, State MFCU, USDA, SBA) with the standardized ASCII Calling Card.*
 
 #### 7. ABA Rule 1.18 Attorney Inquiry Package (`qui-tam format-inquiry`)
 ```bash
-.\openseason-cli.exe --json qui-tam format-inquiry ./my-case
+.\JustLegalOS-CLI.exe --json qui-tam format-inquiry ./my-case
 ```
 *Generates a prospective-client privileged inquiry package under ABA Model Rule 1.18 for transmission to private qui tam counsel on 100% contingency, protecting statutory relator bounties (15%–30%) and in camera court seals.*
 

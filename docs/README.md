@@ -2,7 +2,7 @@
 
 OpenSeason is a local, privacy-first **Legal Operating System & Court Document Compiler** for self-represented filers, paralegals, and AI coding/legal assistants. It supports everyday legal instruments (**Tier 1 Transactional**: Wills, Leases, Contractor Agreements, Powers of Attorney), pre-suit administrative demands (**Tier 2 Administrative**: Cure Notices, Security Deposit Demands, OPRA/CORA/FOIA Requests), and full court litigation & appeals (**Tier 3 Litigation**: Motions, Pre-Filing Complaints, Reconsideration, Notices of Appeal, Appellate Briefs, Mandamus, and SCOTUS Certiorari), plus an airgapped **Confidential Vault** (encrypted False Claims / whistleblower vault).
 
-Both the desktop window (`OpenSeason.exe`) and the headless CLI/MCP server (`openseason-cli.exe`) call the exact same deterministic Rust engine (`src-tauri/src/`). Neither ever invents facts/citations, practices law, or files/serves documents.
+Both the desktop window (`JustLegalOS.exe` / `OpenSeason.exe`) and the headless CLI/MCP server (`JustLegalOS-CLI.exe` / `justlegalos-cli`) call the exact same deterministic Rust engine (`src-tauri/src/`). Neither ever invents facts/citations, practices law, or files/serves documents.
 
 ---
 
